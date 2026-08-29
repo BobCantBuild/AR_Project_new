@@ -10,12 +10,23 @@ pattern Shopify and Amazon use (GLB for web/Android, auto-USDZ for iPhone Quick 
 
 ## What's here
 ```
-index.html            The whole app (HTML + CSS + JS, self-contained)
-models/IFB_WM.glb      The 3D washing-machine model
+index.html            Product 3D/AR viewer (model-viewer, pinned 4.3.1)
+fit.html               "Will it fit?" AR — 8th Wall SLAM, place at real scale
+models/IFB_WM.glb      The 3D washing-machine model (real scale: 85×59×62 cm)
 assets/qr.png          QR code to the live site (shown to desktop users)
 .nojekyll              Tells GitHub Pages to serve files as-is
 AR-Washing-Machine-Viewer-Plan.pdf   Project plan & tech guide
 ```
+
+## fit.html — "Will it fit?" (AR, browser-only)
+Live camera + 8th Wall in-browser SLAM (works in stock Safari on iPhone and Chrome on
+Android, no app). Aim at the floor → a reticle appears → tap **Place** and the machine is
+**anchored at real 85 cm scale**; drag to rotate, or use **Move / Reset**. Measurement +
+"fits / too tight" verdict are the next milestones.
+
+> **8th Wall license:** the SLAM engine binary is free for commercial use under a limited-use
+> license and requires the **"Powered by 8th Wall"** credit (kept in `fit.html`). IFB should
+> review the terms before a full commercial launch. Loaded from jsDelivr, pinned to `1.0.0`.
 
 ## Features
 - Live 3D preview (rotate / zoom) on every device.

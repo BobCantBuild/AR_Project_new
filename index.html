@@ -6,10 +6,14 @@
 <title>IFB Washing Machine — View in Your Room (AR)</title>
 <meta name="description" content="View an IFB washing machine in 3D and place it in your own room at real size — right from your browser, no app." />
 <meta name="theme-color" content="#0f1220" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23e11d2a'/%3E%3Ctext x='32' y='43' font-size='24' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EIFB%3C/text%3E%3C/svg%3E" />
+<!-- Social/link preview -->
+<meta property="og:title" content="IFB Washing Machine — View in Your Room (AR)" />
+<meta property="og:description" content="See an IFB washing machine in 3D and place it in your room at real size — no app." />
+<meta property="og:type" content="website" />
 
-<!-- Google <model-viewer>. Resolves to the latest release.
-     To pin for production, replace with e.g. @google/model-viewer@3.5.0 -->
-<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer/dist/model-viewer.min.js"></script>
+<!-- Google <model-viewer>, pinned for stability. -->
+<script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js"></script>
 
 <style>
   :root{
@@ -112,11 +116,16 @@
         shadow-intensity="1"
         shadow-softness="0.8"
         exposure="1.05"
+        tone-mapping="neutral"
         environment-image="neutral"
+        camera-orbit="-25deg 76deg auto"
+        min-camera-orbit="auto 25deg auto"
+        max-camera-orbit="auto 92deg auto"
         auto-rotate
         auto-rotate-delay="2500"
         interaction-prompt="none"
-        loading="eager">
+        loading="eager"
+        reveal="auto">
       <button id="ar-btn" slot="ar-button"><span class="cube"></span> View in your space</button>
       <div class="hint" id="hint">Loading model…</div>
     </model-viewer>
@@ -189,6 +198,11 @@
   mv.addEventListener('progress', (e) => {
     const p = Math.round((e.detail.totalProgress || 0) * 100);
     if (p < 100) hint.textContent = 'Loading model… ' + p + '%';
+  });
+
+  mv.addEventListener('error', () => {
+    hint.style.display = 'block';
+    hint.textContent = 'Could not load the 3D model — check your connection and reload.';
   });
 
   // Route the CTA button to launch AR (same as the in-viewer button)
