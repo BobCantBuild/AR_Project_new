@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>IFB Washing Machine — Will it fit? (AR)</title>
+
+<!-- Three.js (global build used by 8th Wall's XR8.Threejs) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.172.0/build/three.module.min.js",
+    "three/addons/": "https://unpkg.com/three@0.172.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+  window.THREE = { ...THREE };
+  window.THREE.GLTFLoader = GLTFLoader;
+  window.THREE.RoomEnvironment = RoomEnvironment;
+</script>
+
+<!-- 8th Wall helpers (MIT, open-source): loading screen, iOS motion permission, error UI -->
+<script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1/dist/xrextras.js"></script>
+<!-- 8th Wall engine binary (open-source, free commercial use, NO app key). SLAM preloaded. -->
+<script async crossorigin="anonymous" data-preload-chunks="slam"
+        src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1/dist/xr.js"></script>
+
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-user-select:none;user-select:none;touch-action:none}
+  #camerafeed{position:absolute;inset:0;width:100%;height:100%}
+  .top{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;align-items:center;gap:10px;
+    padding:calc(env(safe-area-inset-top,0) + 10px) 14px 10px;
+    background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,0))}
+  .back{color:#fff;text-decoration:none;font-weight:700;font-size:15px;background:rgba(0,0,0,.35);
+    border:1px solid rgba(255,255,255,.25);border-radius:10px;padding:7px 11px}
+  .brand{font-weight:800;color:#fff;background:#e11d2a;padding:4px 8px;border-radius:7px;font-size:14px}
+  .title{color:#fff;font-size:13px;opacity:.9}
+  .hintbar{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0) + 22px);transform:translateX(-50%);
+    z-index:10;color:#fff;font-size:14px;font-weight:600;text-align:center;line-height:1.4;
+    background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.2);border-radius:14px;
+    padding:11px 16px;max-width:88vw;backdrop-filter:blur(6px)}
+  .hintbar small{display:block;font-weight:400;opacity:.8;margin-top:3px}
+  .credit{position:fixed;right:10px;bottom:calc(env(safe-area-inset-bottom,0) + 6px);z-index:10;
+    color:rgba(255,255,255,.7);font-size:10px}
+  .dimchip{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0) + 54px);transform:translateX(-50%);
+    z-index:10;display:none;color:#fff;font-size:12px;font-weight:700;background:rgba(0,0,0,.45);
+    border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:6px 12px}
+</style>
+</head>
+<body>
+  <canvas id="camerafeed"></canvas>
+
+  <div class="top">
+    <a class="back" href="index.html">&larr;</a>
+    <span class="brand">IFB</span>
+    <span class="title">Will it fit? — point at the floor, then tap to place</span>
+  </div>
+  <div class="dimchip" id="dimchip">Washing machine · 85 × 59 × 62 cm</div>
+  <div class="hintbar" id="hintbar">Move your phone to scan the floor
+    <small>Then tap the floor to place the washing machine · two-finger tap to re-center</small>
+  </div>
+  <div class="credit">Powered by 8th Wall</div>
+
+<script>
+/* globals XR8 XRExtras THREE */
+const fitPipelineModule = () => {
+  const MODEL_URL = 'models/IFB_WM.glb';
+  const loader = new THREE.GLTFLoader();
+  const raycaster = new THREE.Raycaster();
+  const tap = new THREE.Vector2();
+
+  let surface;        // invisible ground plane for raycasting
+  let washer;         // the placed model (a Group), base-anchored & centered
+  let placed = false;
+
+  const initXrScene = ({scene, camera, renderer}) => {
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Neutral studio lighting so PBR materials (metal drum, glass door) read well.
+    try {
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+    } catch (e) { /* env optional */ }
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x444455, 1.0));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
+    sun.position.set(2, 5, 3);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 30;
+    scene.add(sun);
+
+    // Invisible floor that catches a soft shadow, grounding the machine.
+    surface = new THREE.Mesh(
+      new THREE.PlaneGeometry(100, 100),
+      new THREE.ShadowMaterial({opacity: 0.35})
+    );
+    surface.rotateX(-Math.PI / 2);
+    surface.receiveShadow = true;
+    scene.add(surface);
+
+    camera.position.set(0, 2, 0);
+
+    // Preload the washer, base-anchored (feet on y=0) and centered on x/z.
+    loader.load(MODEL_URL, (gltf) => {
+      const group = new THREE.Group();
+      group.add(gltf.scene);
+      gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = false; } });
+      const box = new THREE.Box3().setFromObject(gltf.scene);
+      const c = box.getCenter(new THREE.Vector3());
+      gltf.scene.position.x -= c.x;                 // center horizontally
+      gltf.scene.position.z -= c.z;
+      gltf.scene.position.y -= box.min.y;           // drop base to y=0 (no sink/float)
+      group.visible = false;
+      washer = group;
+      scene.add(group);
+    });
+  };
+
+  const onTap = (e) => {
+    if (!washer) return;
+    if (e.touches.length === 2) { XR8.XrController.recenter(); return; }
+    if (e.touches.length > 2) return;
+
+    const {camera} = XR8.Threejs.xrScene();
+    tap.x = (e.touches[0].clientX / window.innerWidth) * 2 - 1;
+    tap.y = -(e.touches[0].clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(tap, camera);
+    const hits = raycaster.intersectObject(surface);
+    if (hits.length) {
+      washer.position.set(hits[0].point.x, 0, hits[0].point.z);
+      washer.visible = true;
+      if (!placed) {
+        placed = true;
+        document.getElementById('hintbar').innerHTML =
+          'Placed · walk around it to check the fit<small>Tap elsewhere to move it · two-finger tap to re-center</small>';
+        document.getElementById('dimchip').style.display = 'block';
+      }
+    }
+  };
+
+  return {
+    name: 'ifb-fit',
+    onStart: ({canvas}) => {
+      const {scene, camera, renderer} = XR8.Threejs.xrScene();
+      initXrScene({scene, camera, renderer});
+      canvas.addEventListener('touchstart', onTap, true);
+      canvas.addEventListener('touchmove', (ev) => ev.preventDefault(), {passive: false});
+      XR8.XrController.updateCameraProjectionMatrix({origin: camera.position, facing: camera.quaternion});
+    },
+  };
+};
+
+const onxrloaded = () => {
+  XR8.addCameraPipelineModules([
+    XR8.GlTextureRenderer.pipelineModule(),      // draw camera feed
+    XR8.Threejs.pipelineModule(),                // three.js AR scene
+    XR8.XrController.pipelineModule(),           // SLAM world tracking (absolute scale)
+    XRExtras.AlmostThere.pipelineModule(),       // unsupported-browser hints
+    XRExtras.FullWindowCanvas.pipelineModule(),  // fill the screen
+    XRExtras.Loading.pipelineModule(),           // loading screen
+    XRExtras.RuntimeError.pipelineModule(),      // error screen
+    fitPipelineModule(),                         // our scene + placement
+  ]);
+  XR8.run({canvas: document.getElementById('camerafeed')});
+};
+
+const boot = () => { XRExtras.Loading.showLoading({onxrloaded}); };
+window.onload = () => { window.XRExtras ? boot() : window.addEventListener('xrextrasloaded', boot); };
+</script>
+</body>
+</html>
