@@ -11,7 +11,8 @@ pattern Shopify and Amazon use (GLB for web/Android, auto-USDZ for iPhone Quick 
 ## What's here
 ```
 index.html            Product 3D/AR viewer (model-viewer, pinned 4.3.1)
-fit.html               "Will it fit?" AR — 8th Wall SLAM, place at real scale
+fit.html               "Will it fit?" live AR — 8th Wall SLAM, place at real scale
+photo.html             "Add to a photo" — drop the machine into a still photo, save/share
 models/IFB_WM.glb      The 3D washing-machine model (real scale: 85×59×62 cm)
 assets/qr.png          QR code to the live site (shown to desktop users)
 .nojekyll              Tells GitHub Pages to serve files as-is
@@ -27,6 +28,14 @@ Android, no app). Aim at the floor → a reticle appears → tap **Place** and t
 > **8th Wall license:** the SLAM engine binary is free for commercial use under a limited-use
 > license and requires the **"Powered by 8th Wall"** credit (kept in `fit.html`). IFB should
 > review the terms before a full commercial launch. Loaded from jsDelivr, pinned to `1.0.0`.
+
+## photo.html — "Add it to a photo" (browser-only, works everywhere)
+Take or upload a photo of the room, then the real 3D machine is composited on top (three.js +
+PBR lighting + a soft contact shadow). Drag to position, and **Size / Rotate / Angle** sliders
+to match the room; then **Save picture** (Web Share on mobile, download on desktop). Rock-stable
+(a still image — no drift), works on laptops too, and preserves the exact product look.
+Phase 2 (later) adds client-side AI auto-placement. Note: a photo can't truly *measure* — use
+`fit.html` for fit-checking.
 
 ## Features
 - Live 3D preview (rotate / zoom) on every device.
