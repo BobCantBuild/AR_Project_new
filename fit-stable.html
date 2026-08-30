@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>IFB Washing Machine — Will it fit? (AR)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23e11d2a'/%3E%3Ctext x='32' y='43' font-size='24' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EIFB%3C/text%3E%3C/svg%3E" />
+
+<!-- Three.js r172 (global build used by 8th Wall's XR8.Threejs) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.172.0/build/three.module.min.js",
+    "three/addons/": "https://unpkg.com/three@0.172.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+  window.THREE = { ...THREE };
+  window.THREE.GLTFLoader = GLTFLoader;
+  window.THREE.RoomEnvironment = RoomEnvironment;
+</script>
+
+<!-- 8th Wall helpers (MIT): loading screen, iOS motion permission, unsupported/error UI -->
+<script src="https://cdn.jsdelivr.net/npm/@8thwall/xrextras@1.0.0/dist/xrextras.js"></script>
+<!-- 8th Wall engine binary (open-source, free commercial use, NO app key). SLAM preloaded. -->
+<script async crossorigin="anonymous" data-preload-chunks="slam"
+        src="https://cdn.jsdelivr.net/npm/@8thwall/engine-binary@1.0.0/dist/xr.js"></script>
+
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-user-select:none;user-select:none;touch-action:none;
+    -webkit-tap-highlight-color:transparent}
+  #camerafeed{position:absolute;inset:0;width:100%;height:100%}
+
+  /* All overlay UI hidden until the camera actually starts (keeps it off the desktop "use your phone" screen) */
+  .ui{opacity:0;transition:opacity .25s;pointer-events:none}
+  .ui.show{opacity:1;pointer-events:auto}
+
+  .top{position:fixed;top:0;left:0;right:0;z-index:10;display:flex;align-items:center;gap:10px;
+    padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 12px;
+    background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,0))}
+  .back{color:#fff;text-decoration:none;font-weight:800;font-size:17px;background:rgba(0,0,0,.4);
+    border:1px solid rgba(255,255,255,.28);border-radius:10px;width:34px;height:34px;
+    display:flex;align-items:center;justify-content:center;pointer-events:auto}
+  .brand{font-weight:800;color:#fff;background:#e11d2a;padding:4px 8px;border-radius:7px;font-size:14px}
+  .title{color:#fff;font-size:12.5px;opacity:.92;line-height:1.25}
+
+  .dimchip{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 56px);transform:translateX(-50%);
+    z-index:10;display:none;color:#fff;font-size:12px;font-weight:700;background:rgba(0,0,0,.5);
+    border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:6px 13px;white-space:nowrap}
+
+  .dock{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;flex-direction:column;align-items:center;
+    gap:12px;padding:16px 14px calc(env(safe-area-inset-bottom,0px) + 16px);
+    background:linear-gradient(0deg,rgba(0,0,0,.5),rgba(0,0,0,0))}
+  .status{color:#fff;font-size:14px;font-weight:600;text-align:center;line-height:1.4;
+    background:rgba(0,0,0,.42);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:9px 14px;
+    max-width:90vw;backdrop-filter:blur(6px)}
+  .row{display:flex;gap:10px}
+  .btn{appearance:none;border:0;cursor:pointer;font-weight:800;font-size:15px;color:#fff;border-radius:14px;
+    padding:14px 20px;background:linear-gradient(180deg,#ff4d57,#e11d2a);box-shadow:0 8px 22px rgba(225,29,42,.4)}
+  .btn[disabled]{opacity:.45;box-shadow:none;filter:grayscale(.3)}
+  .btn.sec{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);box-shadow:none;
+    font-size:14px;padding:12px 16px}
+  .credit{position:fixed;right:8px;bottom:2px;z-index:11;color:rgba(255,255,255,.6);font-size:9.5px}
+</style>
+</head>
+<body>
+  <canvas id="camerafeed"></canvas>
+
+  <div class="ui" id="ui">
+    <div class="top">
+      <a class="back" href="index.html" aria-label="Back">&larr;</a>
+      <span class="brand">IFB</span>
+      <span class="title">Will it fit? · washing&nbsp;machine in&nbsp;AR</span>
+    </div>
+    <div class="dimchip" id="dimchip">Washing machine · 85 × 59 × 62 cm</div>
+
+    <div class="dock">
+      <div class="status" id="status">Move your phone slowly to scan the floor…</div>
+      <div class="row" id="rowPlace">
+        <button class="btn" id="placeBtn" disabled>Place washing machine</button>
+      </div>
+      <div class="row" id="rowPlaced" style="display:none">
+        <button class="btn sec" id="moveBtn">↺ Move</button>
+        <button class="btn sec" id="rotBtn">⟳ Rotate 45°</button>
+        <button class="btn sec" id="resetBtn">Reset</button>
+      </div>
+    </div>
+  </div>
+  <div class="credit">Powered by 8th Wall</div>
+
+<script>
+/* globals XR8 XRExtras THREE */
+(() => {
+  const MODEL_URL = 'models/IFB_WM.glb';
+
+  // shared refs
+  let scene, camera, renderer, surface, reticle, washer;
+  let ready = false;         // model loaded
+  let floorPoint = null;     // latest raycast hit on floor (THREE.Vector3) or null
+  let placed = false;
+  let rotationY = 0;
+  let raycaster, centerNDC;   // created in buildScene() — THREE isn't ready at parse time
+
+  // ---- DOM ----
+  const ui       = document.getElementById('ui');
+  const statusEl = document.getElementById('status');
+  const placeBtn = document.getElementById('placeBtn');
+  const rowPlace = document.getElementById('rowPlace');
+  const rowPlaced= document.getElementById('rowPlaced');
+  const moveBtn  = document.getElementById('moveBtn');
+  const rotBtn   = document.getElementById('rotBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const dimchip  = document.getElementById('dimchip');
+
+  const setStatus = (t) => { statusEl.textContent = t; };
+
+  const buildScene = () => {
+    raycaster = new THREE.Raycaster();
+    centerNDC = new THREE.Vector2(0, 0);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    try {
+      const pmrem = new THREE.PMREMGenerator(renderer);
+      scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+    } catch (e) {}
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x445, 0.9));
+    const sun = new THREE.DirectionalLight(0xffffff, 2.1);
+    sun.position.set(2.5, 6, 3);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 40;
+    sun.shadow.bias = -0.0005;
+    scene.add(sun);
+
+    // invisible shadow-catcher floor for raycasting + grounding
+    surface = new THREE.Mesh(
+      new THREE.PlaneGeometry(100, 100),
+      new THREE.ShadowMaterial({opacity: 0.32})
+    );
+    surface.rotateX(-Math.PI / 2);
+    surface.receiveShadow = true;
+    scene.add(surface);
+
+    // placement reticle (flat ring + dot)
+    reticle = new THREE.Group();
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.16, 0.20, 40),
+      new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.9, side: THREE.DoubleSide})
+    );
+    const dot = new THREE.Mesh(
+      new THREE.CircleGeometry(0.03, 24),
+      new THREE.MeshBasicMaterial({color: 0xe11d2a})
+    );
+    ring.rotateX(-Math.PI / 2); dot.rotateX(-Math.PI / 2);
+    reticle.add(ring); reticle.add(dot);
+    reticle.visible = false;
+    scene.add(reticle);
+
+    camera.position.set(0, 2, 0);
+
+    // preload washer: base-anchored (feet on y=0), centered on x/z, wrapped in a group
+    new THREE.GLTFLoader().load(MODEL_URL, (gltf) => {
+      const g = new THREE.Group();
+      gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+      const box = new THREE.Box3().setFromObject(gltf.scene);
+      const c = box.getCenter(new THREE.Vector3());
+      gltf.scene.position.x -= c.x;
+      gltf.scene.position.z -= c.z;
+      gltf.scene.position.y -= box.min.y;   // drop base to floor level
+      g.add(gltf.scene);
+      g.visible = false;
+      washer = g;
+      scene.add(g);
+      ready = true;
+    }, undefined, () => setStatus('Could not load the 3D model. Check your connection and reload.'));
+  };
+
+  const doPlace = () => {
+    if (!ready || !floorPoint) return;
+    washer.position.set(floorPoint.x, 0, floorPoint.z);
+    washer.rotation.y = rotationY;
+    washer.visible = true;
+    placed = true;
+    reticle.visible = false;
+    rowPlace.style.display = 'none';
+    rowPlaced.style.display = 'flex';
+    dimchip.style.display = 'block';
+    setStatus('Placed. Walk around it to check the fit. Drag to rotate.');
+  };
+
+  const enterMove = () => {
+    placed = false;
+    rowPlaced.style.display = 'none';
+    rowPlace.style.display = 'flex';
+    dimchip.style.display = 'none';
+    setStatus('Aim at a new spot on the floor, then tap “Place”.');
+  };
+
+  // one-finger drag on the camera (only when placed) => rotate the machine
+  let dragX = null, dragBase = 0;
+  const onCanvasStart = (e) => {
+    if (!placed || e.touches.length !== 1) return;
+    dragX = e.touches[0].clientX; dragBase = rotationY;
+  };
+  const onCanvasMove = (e) => {
+    if (dragX === null || !placed || e.touches.length !== 1) return;
+    e.preventDefault();
+    const dx = e.touches[0].clientX - dragX;
+    rotationY = dragBase + (dx / window.innerWidth) * Math.PI * 2;
+    if (washer) washer.rotation.y = rotationY;
+  };
+  const onCanvasEnd = () => { dragX = null; };
+
+  const pipeline = () => ({
+    name: 'ifb-fit',
+    onStart: ({canvas}) => {
+      const s = XR8.Threejs.xrScene();
+      scene = s.scene; camera = s.camera; renderer = s.renderer;
+      buildScene();
+      XR8.XrController.updateCameraProjectionMatrix({origin: camera.position, facing: camera.quaternion});
+
+      canvas.addEventListener('touchstart', onCanvasStart, {passive: true});
+      canvas.addEventListener('touchmove', onCanvasMove, {passive: false});
+      canvas.addEventListener('touchend', onCanvasEnd, {passive: true});
+
+      ui.classList.add('show');            // reveal controls now that camera is live
+      setStatus('Move your phone slowly to scan the floor…');
+    },
+    // runs each frame after the camera pose is updated — keep the reticle on the floor under screen-centre
+    onUpdate: () => {
+      if (placed || !surface) return;
+      raycaster.setFromCamera(centerNDC, camera);
+      const hit = raycaster.intersectObject(surface)[0];
+      if (hit) {
+        floorPoint = hit.point;
+        reticle.position.set(hit.point.x, 0.002, hit.point.z);
+        reticle.visible = true;
+        if (ready && placeBtn.disabled) { placeBtn.disabled = false; setStatus('Floor found — aim, then tap “Place”.'); }
+      } else {
+        floorPoint = null;
+        reticle.visible = false;
+      }
+    },
+  });
+
+  // ---- buttons ----
+  placeBtn.addEventListener('click', doPlace);
+  moveBtn.addEventListener('click', enterMove);
+  rotBtn.addEventListener('click', () => { rotationY += Math.PI / 4; if (washer) washer.rotation.y = rotationY; });
+  resetBtn.addEventListener('click', () => { try { XR8.XrController.recenter(); } catch (e) {} });
+
+  // ---- boot ----
+  const onxrloaded = () => {
+    XR8.addCameraPipelineModules([
+      XR8.GlTextureRenderer.pipelineModule(),
+      XR8.Threejs.pipelineModule(),
+      XR8.XrController.pipelineModule(),
+      XRExtras.AlmostThere.pipelineModule(),
+      XRExtras.FullWindowCanvas.pipelineModule(),
+      XRExtras.Loading.pipelineModule(),
+      XRExtras.RuntimeError.pipelineModule(),
+      pipeline(),
+    ]);
+    XR8.run({canvas: document.getElementById('camerafeed')});
+  };
+  const boot = () => XRExtras.Loading.showLoading({onxrloaded});
+  window.onload = () => { window.XRExtras ? boot() : window.addEventListener('xrextrasloaded', boot); };
+})();
+</script>
+</body>
+</html>
