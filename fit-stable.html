@@ -269,6 +269,9 @@
       XRExtras.RuntimeError.pipelineModule(),
       pipeline(),
     ]);
+    // Real-world scale: 1 three.js unit = 1 metre, so the 0.85 m model shows at TRUE size.
+    // (8th Wall defaults to "responsive", which sizes by camera distance and looks too small.)
+    XR8.XrController.configure({ scale: 'absolute' });
     XR8.run({canvas: document.getElementById('camerafeed')});
   };
   const boot = () => XRExtras.Loading.showLoading({onxrloaded});
