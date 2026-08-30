@@ -90,6 +90,11 @@
         <button class="btn sec" id="rotBtn">⟳ Rotate 45°</button>
         <button class="btn sec" id="resetBtn">Reset</button>
       </div>
+      <div class="row" id="rowSize" style="display:none;align-items:center;justify-content:center;gap:14px">
+        <button class="btn sec" id="sizeMinus" aria-label="Smaller">−</button>
+        <span id="sizeLbl" style="min-width:120px;text-align:center;color:#fff;font-weight:700">≈ 85 cm tall</span>
+        <button class="btn sec" id="sizePlus" aria-label="Bigger">+</button>
+      </div>
     </div>
   </div>
   <div class="credit">Powered by 8th Wall</div>
@@ -105,6 +110,7 @@
   let floorPoint = null;     // latest raycast hit on floor (THREE.Vector3) or null
   let placed = false;
   let rotationY = 0;
+  let sizeScale = 1;          // 1.0 = true 85 cm; fine-tune to match the real machine
   let raycaster, centerNDC;   // created in buildScene() — THREE isn't ready at parse time
 
   // ---- DOM ----
@@ -116,6 +122,10 @@
   const moveBtn  = document.getElementById('moveBtn');
   const rotBtn   = document.getElementById('rotBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const rowSize  = document.getElementById('rowSize');
+  const sizeMinus= document.getElementById('sizeMinus');
+  const sizePlus = document.getElementById('sizePlus');
+  const sizeLbl  = document.getElementById('sizeLbl');
   const dimchip  = document.getElementById('dimchip');
 
   const setStatus = (t) => { statusEl.textContent = t; };
@@ -183,22 +193,33 @@
     }, undefined, () => setStatus('Could not load the 3D model. Check your connection and reload.'));
   };
 
+  const applySize = () => {
+    if (washer) washer.scale.setScalar(sizeScale);
+    const h = Math.round(85 * sizeScale), w = Math.round(59 * sizeScale), d = Math.round(62 * sizeScale);
+    if (sizeLbl) sizeLbl.textContent = '≈ ' + h + ' cm tall';
+    if (dimchip) dimchip.textContent = 'Washing machine · ' + h + ' × ' + w + ' × ' + d + ' cm';
+  };
+
   const doPlace = () => {
     if (!ready || !floorPoint) return;
     washer.position.set(floorPoint.x, 0, floorPoint.z);
     washer.rotation.y = rotationY;
+    washer.scale.setScalar(sizeScale);
     washer.visible = true;
     placed = true;
     reticle.visible = false;
     rowPlace.style.display = 'none';
     rowPlaced.style.display = 'flex';
+    rowSize.style.display = 'flex';
     dimchip.style.display = 'block';
-    setStatus('Placed. Walk around it to check the fit. Drag to rotate.');
+    applySize();
+    setStatus('Placed. Stand where the real machine goes to judge size · − / + to match · drag to rotate.');
   };
 
   const enterMove = () => {
     placed = false;
     rowPlaced.style.display = 'none';
+    rowSize.style.display = 'none';
     rowPlace.style.display = 'flex';
     dimchip.style.display = 'none';
     setStatus('Aim at a new spot on the floor, then tap “Place”.');
@@ -256,6 +277,9 @@
   moveBtn.addEventListener('click', enterMove);
   rotBtn.addEventListener('click', () => { rotationY += Math.PI / 4; if (washer) washer.rotation.y = rotationY; });
   resetBtn.addEventListener('click', () => { try { XR8.XrController.recenter(); } catch (e) {} });
+  const stepSize = (d) => { sizeScale = Math.min(1.4, Math.max(0.7, +(sizeScale + d).toFixed(3))); applySize(); };
+  sizeMinus.addEventListener('click', () => stepSize(-0.02));
+  sizePlus.addEventListener('click', () => stepSize(+0.02));
 
   // ---- boot ----
   const onxrloaded = () => {
