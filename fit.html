@@ -92,7 +92,7 @@
       </div>
       <div class="row" id="rowSize" style="display:none;align-items:center;justify-content:center;gap:14px">
         <button class="btn sec" id="sizeMinus" aria-label="Smaller">−</button>
-        <span id="sizeLbl" style="min-width:120px;text-align:center;color:#fff;font-weight:700">≈ 68 cm tall</span>
+        <span id="sizeLbl" style="min-width:120px;text-align:center;color:#fff;font-weight:700">≈ 80 cm tall</span>
         <button class="btn sec" id="sizePlus" aria-label="Bigger">+</button>
       </div>
     </div>
@@ -110,7 +110,10 @@
   let floorPoint = null;     // latest raycast hit on floor (THREE.Vector3) or null
   let placed = false;
   let rotationY = 0;
-  let sizeScale = 0.8;        // starts smaller (≈68 cm nominal); fine-tune −/+ to match the real machine
+  // The GLB bakes 0.4245 onto its root node, so at scale 1 the machine is 0.85 m tall
+  // (2.0023 × 0.4245). 0.941 therefore shows it at ≈80 cm; − / + fine-tunes from there.
+  const DEFAULT_SIZE_SCALE = 0.941;
+  let sizeScale = DEFAULT_SIZE_SCALE;
   let raycaster, centerNDC;   // created in buildScene() — THREE isn't ready at parse time
 
   // ---- DOM ----
@@ -225,6 +228,27 @@
     setStatus('Aim at a new spot on the floor, then tap “Place”.');
   };
 
+  // Reset: clear the placement entirely and go back to aiming. Setting `placed = false` is
+  // what brings the reticle back — onUpdate resumes raycasting the floor on the next frame
+  // and shows it again. Unlike Move, this also restores the default size and rotation, so
+  // the user starts from a known ≈80 cm machine rather than whatever they had tuned to.
+  const doReset = () => {
+    if (washer) {
+      washer.visible = false;
+      washer.rotation.y = 0;
+    }
+    placed = false;
+    rotationY = 0;
+    sizeScale = DEFAULT_SIZE_SCALE;
+    applySize();
+
+    rowPlaced.style.display = 'none';
+    rowSize.style.display = 'none';
+    rowPlace.style.display = 'flex';
+    dimchip.style.display = 'none';
+    setStatus('Reset. Aim at the floor, then tap “Place”.');
+  };
+
   // one-finger drag on the camera (only when placed) => rotate the machine
   let dragX = null, dragBase = 0;
   const onCanvasStart = (e) => {
@@ -276,7 +300,9 @@
   placeBtn.addEventListener('click', doPlace);
   moveBtn.addEventListener('click', enterMove);
   rotBtn.addEventListener('click', () => { rotationY += Math.PI / 4; if (washer) washer.rotation.y = rotationY; });
-  resetBtn.addEventListener('click', () => { try { XR8.XrController.recenter(); } catch (e) {} });
+  // Previously this only called XR8.XrController.recenter(), which shifts the world origin
+  // but leaves the machine placed and the reticle hidden — so Reset appeared to do nothing.
+  resetBtn.addEventListener('click', doReset);
   const stepSize = (d) => { sizeScale = Math.min(1.4, Math.max(0.35, +(sizeScale + d).toFixed(3))); applySize(); };
   sizeMinus.addEventListener('click', () => stepSize(-0.02));
   sizePlus.addEventListener('click', () => stepSize(+0.02));
