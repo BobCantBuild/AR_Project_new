@@ -122,7 +122,7 @@
   const SPEC = { H: 85, W: 59, D: 62 };
   let modelSize = null;       // GLB real size (metres) — used to lay out the dimension lines
   let dimGroup = null;        // the H/W/D lines + labels, parented to the machine
-  let dims = [];              // per-dimension { line, label, pts } for occlusion testing
+  let dimSets = [];          // [{name, cands:[{line,label,pts,mid}]}] — show the best-facing candidate
   let occluder = null;        // invisible bounding box — hides a dimension that's behind the machine
   let dimsOn = true;          // dimension labels visible?
 
@@ -261,52 +261,79 @@
   const buildDims = () => {
     if (!washer || !modelSize) return;
     disposeDims();
-    dims = [];
+    dimSets = [];
     dimGroup = new THREE.Group();
     const hw = modelSize.x / 2, H = modelSize.y, hd = modelSize.z / 2, off = 0.05, t = 0.007;
     const cd = curDims();
-    // Each dimension carries `pts` (sample points along its line) so we can test occlusion.
-    const add = (geo, linePos, text, labelPos, pts) => {
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    // One candidate edge = a line + a label + the sample points used to test if it's visible.
+    const cand = (geo, linePos, text, labelPos, pts) => {
       const line = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 }));
       line.position.copy(linePos);
       const label = makeLabel(text); label.position.copy(labelPos);
       dimGroup.add(line); dimGroup.add(label);
-      dims.push({ line, label, pts });
+      return { line, label, pts, mid: linePos.clone() };
     };
-    // Height — front-right vertical edge
-    add(new THREE.BoxGeometry(t, H, t), new THREE.Vector3(hw + off, H / 2, hd + off),
-        'H ' + cd.H + ' cm', new THREE.Vector3(hw + off + 0.03, H / 2, hd + off),
-        [new THREE.Vector3(hw + off, 0.05, hd + off), new THREE.Vector3(hw + off, H / 2, hd + off), new THREE.Vector3(hw + off, H - 0.05, hd + off)]);
-    // Width — front-bottom edge
-    add(new THREE.BoxGeometry(modelSize.x, t, t), new THREE.Vector3(0, 0.002, hd + off),
-        'W ' + cd.W + ' cm', new THREE.Vector3(0, 0.06, hd + off + 0.03),
-        [new THREE.Vector3(-hw + 0.05, 0.05, hd + off), new THREE.Vector3(0, 0.05, hd + off), new THREE.Vector3(hw - 0.05, 0.05, hd + off)]);
-    // Depth — right-bottom edge
-    add(new THREE.BoxGeometry(t, t, modelSize.z), new THREE.Vector3(hw + off, 0.002, 0),
-        'D ' + cd.D + ' cm', new THREE.Vector3(hw + off + 0.03, 0.06, 0),
-        [new THREE.Vector3(hw + off, 0.05, -hd + 0.05), new THREE.Vector3(hw + off, 0.05, 0), new THREE.Vector3(hw + off, 0.05, hd - 0.05)]);
+
+    // HEIGHT — all 4 vertical corners (front-right, front-left, back-right, back-left)
+    const hGeo = () => new THREE.BoxGeometry(t, H, t);
+    const hSamp = (x, z) => [V(x, 0.05, z), V(x, H / 2, z), V(x, H - 0.05, z)];
+    const hLabel = 'H ' + cd.H + ' cm';
+    dimSets.push({ name: 'H', cands: [
+      cand(hGeo(), V(hw + off, H / 2, hd + off),  hLabel, V(hw + off + 0.03, H / 2, hd + off),  hSamp(hw + off, hd + off)),
+      cand(hGeo(), V(-hw - off, H / 2, hd + off), hLabel, V(-hw - off - 0.03, H / 2, hd + off), hSamp(-hw - off, hd + off)),
+      cand(hGeo(), V(hw + off, H / 2, -hd - off), hLabel, V(hw + off + 0.03, H / 2, -hd - off), hSamp(hw + off, -hd - off)),
+      cand(hGeo(), V(-hw - off, H / 2, -hd - off),hLabel, V(-hw - off - 0.03, H / 2, -hd - off),hSamp(-hw - off, -hd - off)),
+    ]});
+
+    // WIDTH — front and back bottom edges (span x)
+    const wGeo = () => new THREE.BoxGeometry(modelSize.x, t, t);
+    const wSamp = (z) => [V(-hw + 0.05, 0.05, z), V(0, 0.05, z), V(hw - 0.05, 0.05, z)];
+    const wLabel = 'W ' + cd.W + ' cm';
+    dimSets.push({ name: 'W', cands: [
+      cand(wGeo(), V(0, 0.002, hd + off),  wLabel, V(0, 0.06, hd + off + 0.03),  wSamp(hd + off)),
+      cand(wGeo(), V(0, 0.002, -hd - off), wLabel, V(0, 0.06, -hd - off - 0.03), wSamp(-hd - off)),
+    ]});
+
+    // DEPTH — right and left bottom edges (span z)
+    const dGeo = () => new THREE.BoxGeometry(t, t, modelSize.z);
+    const dSamp = (x) => [V(x, 0.05, -hd + 0.05), V(x, 0.05, 0), V(x, 0.05, hd - 0.05)];
+    const dLabel = 'D ' + cd.D + ' cm';
+    dimSets.push({ name: 'D', cands: [
+      cand(dGeo(), V(hw + off, 0.002, 0),  dLabel, V(hw + off + 0.03, 0.06, 0),  dSamp(hw + off)),
+      cand(dGeo(), V(-hw - off, 0.002, 0), dLabel, V(-hw - off - 0.03, 0.06, 0), dSamp(-hw - off)),
+    ]});
+
     dimGroup.visible = dimsOn;
     washer.add(dimGroup);
   };
 
   // Hide any dimension whose line is COMPLETELY behind the machine from the current view.
   let _wp, _cam, _dir;   // THREE vectors — created in buildScene() (THREE isn't ready at parse time)
+  const clearPt = (localPt) => {                 // is this sample point un-occluded by the machine?
+    _wp.copy(localPt); washer.localToWorld(_wp);
+    _dir.copy(_wp).sub(_cam);
+    const dist = _dir.length();
+    raycaster.set(_cam, _dir.normalize());
+    const hit = raycaster.intersectObject(occluder, false);
+    return !(hit.length && hit[0].distance < dist - 0.02);
+  };
   const updateDimOcclusion = () => {
-    if (!dims.length || !occluder || !camera || !washer) return;
-    washer.updateWorldMatrix(true, true);        // refresh washer + occluder + dimGroup matrices
+    if (!dimSets.length || !occluder || !camera || !washer) return;
+    washer.updateWorldMatrix(true, true);        // refresh washer + occluder + dim matrices
     camera.getWorldPosition(_cam);
-    for (const dim of dims) {
-      let visible = false;
-      for (const p of dim.pts) {
-        _wp.copy(p); washer.localToWorld(_wp);    // sample point → world
-        _dir.copy(_wp).sub(_cam);
-        const dist = _dir.length();
-        raycaster.set(_cam, _dir.normalize());
-        const hit = raycaster.intersectObject(occluder, false);
-        if (!(hit.length && hit[0].distance < dist - 0.02)) { visible = true; break; }  // this point is clear
+    for (const set of dimSets) {
+      // pick the candidate edge with the most visible sample points; tie-break by nearest to camera
+      let best = null, bestVis = -1, bestDist = Infinity;
+      for (const c of set.cands) {
+        c.line.visible = false; c.label.visible = false;      // hide all, re-show the winner
+        let vis = 0;
+        for (const p of c.pts) if (clearPt(p)) vis++;
+        _wp.copy(c.mid); washer.localToWorld(_wp);
+        const md = _wp.distanceTo(_cam);
+        if (vis > bestVis || (vis === bestVis && md < bestDist)) { best = c; bestVis = vis; bestDist = md; }
       }
-      dim.line.visible = visible;
-      dim.label.visible = visible;
+      if (best && bestVis > 0) { best.line.visible = true; best.label.visible = true; }  // one label, best-facing side
     }
   };
 
