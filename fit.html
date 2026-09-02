@@ -96,6 +96,10 @@
         <span id="sizeLbl" style="min-width:120px;text-align:center;color:#fff;font-weight:700">≈ 80 cm tall</span>
         <button class="btn sec" id="sizePlus" aria-label="Bigger">+</button>
       </div>
+      <div class="row" id="rowAI" style="display:none;flex-direction:column;align-items:center;gap:6px">
+        <button class="btn sec" id="aiBtn">✨ Auto-fix size with AI (beta)</button>
+        <span id="aiStatus" style="font-size:11px;color:#cbd0e6;max-width:88vw;text-align:center;line-height:1.35"></span>
+      </div>
     </div>
   </div>
   <div class="credit">Powered by 8th Wall</div>
@@ -141,6 +145,15 @@
   const sizePlus = document.getElementById('sizePlus');
   const sizeLbl  = document.getElementById('sizeLbl');
   const dimchip  = document.getElementById('dimchip');
+  const rowAI    = document.getElementById('rowAI');
+  const aiBtn    = document.getElementById('aiBtn');
+  const aiStatus = document.getElementById('aiStatus');
+
+  // ---- Experimental depth-model auto-calibration (opt-in; never blocks the AR) ----
+  const DEPTH_MODEL = 'onnx-community/DepthPro-ONNX';   // metric metres + estimates focal length
+  const AI = { estimator: null, loading: false };
+  let lastFrame = null;      // latest camera pixels {rows, cols, pixels, rowBytes} from XR8.CameraPixelArray
+  const setAI = (t) => { if (aiStatus) aiStatus.textContent = t; };
 
   const setStatus = (t) => { statusEl.textContent = t; };
 
@@ -337,6 +350,59 @@
     }
   };
 
+  // ---- Depth-model auto-calibration (experimental, opt-in) ----
+  const frameToCanvas = (f) => {                     // 8th Wall camera pixels → canvas (gray/RGB/RGBA + stride)
+    const { rows, cols, pixels } = f;
+    const stride = f.rowBytes || Math.round(pixels.length / rows);
+    const ch = Math.max(1, Math.round(stride / cols));
+    const cv = document.createElement('canvas'); cv.width = cols; cv.height = rows;
+    const ctx = cv.getContext('2d'); const img = ctx.createImageData(cols, rows);
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      const s = y * stride + x * ch, d = (y * cols + x) * 4;
+      const r = pixels[s], g = ch >= 3 ? pixels[s + 1] : r, b = ch >= 3 ? pixels[s + 2] : r;
+      img.data[d] = r; img.data[d + 1] = g; img.data[d + 2] = b; img.data[d + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0); return cv;
+  };
+  const captureFrame = () => {
+    if (lastFrame && lastFrame.pixels) { try { return frameToCanvas(lastFrame); } catch (e) {} }
+    try { const gl = document.getElementById('camerafeed');   // fallback: copy the GL canvas
+      const cv = document.createElement('canvas'); cv.width = gl.width; cv.height = gl.height;
+      cv.getContext('2d').drawImage(gl, 0, 0); return cv; } catch (e) { return null; }
+  };
+  const centerDepthMeters = (pd) => {
+    const dims = pd.dims, W = dims[dims.length - 1], H = dims[dims.length - 2];
+    return pd.data[Math.floor(H / 2) * W + Math.floor(W / 2)];
+  };
+  const loadDepthModel = async () => {
+    if (AI.estimator) return AI.estimator;
+    AI.loading = true; setAI('Downloading AI model (one-time, large)…');
+    const tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm');
+    tf.env.allowLocalModels = false;
+    const device = (typeof navigator !== 'undefined' && navigator.gpu) ? 'webgpu' : 'wasm';
+    AI.estimator = await tf.pipeline('depth-estimation', DEPTH_MODEL, {
+      device, dtype: 'q8',
+      progress_callback: (p) => { if (p && p.status === 'progress' && p.progress != null) setAI('Downloading AI model… ' + Math.round(p.progress) + '%'); },
+    });
+    AI.loading = false; return AI.estimator;
+  };
+  const runDepthCalibration = async () => {
+    if (!placed) { setAI('Place the machine first, then tap AI.'); return; }
+    const frame = captureFrame();
+    if (!frame) { setAI('Couldn’t read the camera frame — manual − / + still works.'); return; }
+    setAI('Analysing the room…');
+    let res;
+    try { res = await AI.estimator(frame); } catch (e) { setAI('AI inference failed — manual − / + still works.'); return; }
+    const dTrue = centerDepthMeters(res.predicted_depth);
+    if (!(dTrue > 0.2 && dTrue < 15)) { setAI('Unclear depth reading — manual − / + still works.'); return; }
+    camera.getWorldPosition(_cam);
+    const dSlam = _cam.distanceTo(washer.position);
+    let corr = Math.min(2.0, Math.max(0.5, dSlam / dTrue));
+    sizeScale = Math.min(1.6, Math.max(0.3, +(sizeScale * corr).toFixed(3)));
+    applySize(); buildDims();
+    setAI('AI-calibrated ✓ — now ≈ ' + curDims().H + ' cm (fine-tune with − / +).');
+  };
+
   const applySize = () => {
     if (washer) washer.scale.setScalar(sizeScale);
     const d = curDims();
@@ -355,6 +421,8 @@
     rowPlace.style.display = 'none';
     rowPlaced.style.display = 'flex';
     rowSize.style.display = 'flex';
+    rowAI.style.display = 'flex';
+    setAI('Optional: auto-fix the size with AI (downloads a model the first time).');
     dimchip.style.display = 'block';
     applySize();
     buildDims();          // draw the H×W×D lines + labels around it (IKEA-style)
@@ -365,6 +433,7 @@
     placed = false;
     rowPlaced.style.display = 'none';
     rowSize.style.display = 'none';
+    rowAI.style.display = 'none';
     rowPlace.style.display = 'flex';
     dimchip.style.display = 'none';
     setStatus('Aim at a new spot on the floor, then tap “Place”.');
@@ -386,6 +455,7 @@
 
     rowPlaced.style.display = 'none';
     rowSize.style.display = 'none';
+    rowAI.style.display = 'none';
     rowPlace.style.display = 'flex';
     dimchip.style.display = 'none';
     setStatus('Reset. Aim at the floor, then tap “Place”.');
@@ -422,7 +492,9 @@
       setStatus('Move your phone slowly to scan the floor…');
     },
     // runs each frame after the camera pose is updated — keep the reticle on the floor under screen-centre
-    onUpdate: () => {
+    onUpdate: ({ processCpuResult } = {}) => {
+      const cpa = processCpuResult && processCpuResult.camerapixelarray;
+      if (cpa && cpa.pixels) lastFrame = cpa;         // keep the latest camera frame for AI calibration
       if (placed) { updateDimOcclusion(); return; }   // hide dims that are behind the machine
       if (!surface) return;
       raycaster.setFromCamera(centerNDC, camera);
@@ -458,10 +530,17 @@
     if (dimGroup) dimGroup.visible = dimsOn;
     dimBtn.style.opacity = dimsOn ? '1' : '0.5';
   });
+  aiBtn.addEventListener('click', async () => {
+    if (AI.loading) return;
+    aiBtn.disabled = true;
+    try { await loadDepthModel(); await runDepthCalibration(); }
+    catch (e) { setAI('AI calibration unavailable on this device — manual − / + still works.'); }
+    finally { aiBtn.disabled = false; }
+  });
 
   // ---- boot ----
   const onxrloaded = () => {
-    XR8.addCameraPipelineModules([
+    const mods = [
       XR8.GlTextureRenderer.pipelineModule(),
       XR8.Threejs.pipelineModule(),
       XR8.XrController.pipelineModule(),
@@ -470,7 +549,10 @@
       XRExtras.Loading.pipelineModule(),
       XRExtras.RuntimeError.pipelineModule(),
       pipeline(),
-    ]);
+    ];
+    // Provide camera pixels for the (opt-in) AI depth calibration, if this build has the module.
+    if (XR8.CameraPixelArray) mods.splice(3, 0, XR8.CameraPixelArray.pipelineModule({ luminance: false }));
+    XR8.addCameraPipelineModules(mods);
     // Real-world scale: 1 three.js unit = 1 metre, so the 0.85 m model shows at TRUE size.
     // (8th Wall defaults to "responsive", which sizes by camera distance and looks too small.)
     XR8.XrController.configure({ scale: 'absolute' });
