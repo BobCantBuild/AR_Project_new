@@ -379,9 +379,11 @@
     AI.loading = true; setAI('Downloading AI model (one-time, large)…');
     const tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm');
     tf.env.allowLocalModels = false;
-    const device = (typeof navigator !== 'undefined' && navigator.gpu) ? 'webgpu' : 'wasm';
+    const gpu = typeof navigator !== 'undefined' && !!navigator.gpu;
+    const device = gpu ? 'webgpu' : 'wasm';
+    const dtype = gpu ? 'q4f16' : 'q4';   // smallest 4-bit variants (WebGPU can use q4f16; WASM uses q4)
     AI.estimator = await tf.pipeline('depth-estimation', DEPTH_MODEL, {
-      device, dtype: 'q8',
+      device, dtype,
       progress_callback: (p) => { if (p && p.status === 'progress' && p.progress != null) setAI('Downloading AI model… ' + Math.round(p.progress) + '%'); },
     });
     AI.loading = false; return AI.estimator;
