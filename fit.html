@@ -363,7 +363,7 @@
       if (calibWrap) calibWrap.style.display = 'none';
       setStatus('Calibrated ✓ — aim at the floor and tap Place.');
     } else {
-      setStatus('Calibrating… move your phone around — left/right, up/down or a step (' + Math.round(p * 100) + '%)');
+      setStatus('Move to scan:  ↔ Left ⇄ Right   &   ↕ Up ⇅ Down   (' + Math.round(p * 100) + '%)');
     }
   };
 
@@ -400,27 +400,6 @@
     setStatus('Aim at a new spot on the floor, then tap “Place”.');
   };
 
-  // Reset: clear the placement entirely and go back to aiming. Setting `placed = false` is
-  // what brings the reticle back — onUpdate resumes raycasting the floor on the next frame
-  // and shows it again. Unlike Move, this also restores the default size and rotation, so
-  // the user starts from a known ≈80 cm machine rather than whatever they had tuned to.
-  const doReset = () => {
-    if (washer) {
-      washer.visible = false;
-      washer.rotation.y = 0;
-    }
-    placed = false;
-    rotationY = 0;
-    sizeScale = DEFAULT_SIZE_SCALE;
-    applySize();
-
-    rowPlaced.style.display = 'none';
-    rowSize.style.display = 'none';
-    rowPlace.style.display = 'flex';
-    dimchip.style.display = 'none';
-    setStatus('Reset. Aim at the floor, then tap “Place”.');
-  };
-
   // one-finger drag on the camera (only when placed) => rotate the machine
   let dragX = null, dragBase = 0;
   const onCanvasStart = (e) => {
@@ -450,7 +429,7 @@
 
       ui.classList.add('show');            // reveal controls now that camera is live
       if (calibWrap) calibWrap.style.display = 'block';   // start the scan-gate progress bar
-      setStatus('Move your phone slowly to scan the floor…');
+      setStatus('Move to scan:  ↔ Left ⇄ Right   &   ↕ Up ⇅ Down');
     },
     // runs each frame after the camera pose is updated — keep the reticle on the floor under screen-centre
     onUpdate: () => {
@@ -475,9 +454,9 @@
   placeBtn.addEventListener('click', doPlace);
   moveBtn.addEventListener('click', enterMove);
   rotBtn.addEventListener('click', () => { rotationY += Math.PI / 4; if (washer) washer.rotation.y = rotationY; });
-  // Previously this only called XR8.XrController.recenter(), which shifts the world origin
-  // but leaves the machine placed and the reticle hidden — so Reset appeared to do nothing.
-  resetBtn.addEventListener('click', doReset);
+  // Reset = a full page reload (clean slate): restarts the camera, tracking and calibration,
+  // then you scan + place the machine again — exactly like reopening the page.
+  resetBtn.addEventListener('click', () => window.location.reload());
   const stepSize = (d) => {
     sizeScale = Math.min(1.4, Math.max(0.35, +(sizeScale + d).toFixed(3)));
     applySize();
