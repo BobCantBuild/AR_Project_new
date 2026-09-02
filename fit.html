@@ -355,7 +355,7 @@
     camera.getWorldPosition(_cam);
     if (!cmin) { cmin = _cam.clone(); cmax = _cam.clone(); calibStart = performance.now(); }
     cmin.min(_cam); cmax.max(_cam);
-    const spread = Math.hypot(cmax.x - cmin.x, cmax.z - cmin.z);   // horizontal coverage
+    const spread = Math.hypot(cmax.x - cmin.x, cmax.y - cmin.y, cmax.z - cmin.z);   // movement in ANY direction
     const p = Math.min(1, spread / CALIB_TARGET);
     if (calibFill) calibFill.style.width = Math.round(p * 100) + '%';
     if (p >= 1 && (performance.now() - calibStart) > 1500) {
@@ -363,7 +363,7 @@
       if (calibWrap) calibWrap.style.display = 'none';
       setStatus('Calibrated ✓ — aim at the floor and tap Place.');
     } else {
-      setStatus('Calibrating… slowly move your phone side to side (' + Math.round(p * 100) + '%)');
+      setStatus('Calibrating… move your phone around — left/right, up/down or a step (' + Math.round(p * 100) + '%)');
     }
   };
 
