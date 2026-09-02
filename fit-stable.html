@@ -87,8 +87,14 @@
       </div>
       <div class="row" id="rowPlaced" style="display:none">
         <button class="btn sec" id="moveBtn">↺ Move</button>
-        <button class="btn sec" id="rotBtn">⟳ Rotate 45°</button>
+        <button class="btn sec" id="rotBtn">⟳ 45°</button>
+        <button class="btn sec" id="dimBtn" aria-label="Toggle dimensions">📐</button>
         <button class="btn sec" id="resetBtn">Reset</button>
+      </div>
+      <div class="row" id="rowSize" style="display:none;align-items:center;justify-content:center;gap:14px">
+        <button class="btn sec" id="sizeMinus" aria-label="Smaller">−</button>
+        <span id="sizeLbl" style="min-width:120px;text-align:center;color:#fff;font-weight:700">≈ 80 cm tall</span>
+        <button class="btn sec" id="sizePlus" aria-label="Bigger">+</button>
       </div>
     </div>
   </div>
@@ -105,7 +111,20 @@
   let floorPoint = null;     // latest raycast hit on floor (THREE.Vector3) or null
   let placed = false;
   let rotationY = 0;
+  // The GLB bakes 0.4245 onto its root node, so at scale 1 the machine is 0.85 m tall
+  // (2.0023 × 0.4245). 0.941 therefore shows it at ≈80 cm; − / + fine-tunes from there.
+  const DEFAULT_SIZE_SCALE = 0.941;
+  let sizeScale = DEFAULT_SIZE_SCALE;
   let raycaster, centerNDC;   // created in buildScene() — THREE isn't ready at parse time
+
+  // Product dimensions in cm at size 100% (edit to the exact IFB spec). The H×W×D labels show
+  // these × the current − / + size, so the numbers track the size actually shown.
+  const SPEC = { H: 85, W: 59, D: 62 };
+  let modelSize = null;       // GLB real size (metres) — used to lay out the dimension lines
+  let dimGroup = null;        // the H/W/D lines + labels, parented to the machine
+  let dims = [];              // per-dimension { line, label, pts } for occlusion testing
+  let occluder = null;        // invisible bounding box — hides a dimension that's behind the machine
+  let dimsOn = true;          // dimension labels visible?
 
   // ---- DOM ----
   const ui       = document.getElementById('ui');
@@ -116,6 +135,11 @@
   const moveBtn  = document.getElementById('moveBtn');
   const rotBtn   = document.getElementById('rotBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const dimBtn   = document.getElementById('dimBtn');
+  const rowSize  = document.getElementById('rowSize');
+  const sizeMinus= document.getElementById('sizeMinus');
+  const sizePlus = document.getElementById('sizePlus');
+  const sizeLbl  = document.getElementById('sizeLbl');
   const dimchip  = document.getElementById('dimchip');
 
   const setStatus = (t) => { statusEl.textContent = t; };
@@ -123,6 +147,7 @@
   const buildScene = () => {
     raycaster = new THREE.Raycaster();
     centerNDC = new THREE.Vector2(0, 0);
+    _wp = new THREE.Vector3(); _cam = new THREE.Vector3(); _dir = new THREE.Vector3();
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -172,6 +197,7 @@
       gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
       const box = new THREE.Box3().setFromObject(gltf.scene);
       const c = box.getCenter(new THREE.Vector3());
+      modelSize = box.getSize(new THREE.Vector3());   // real size (metres) for the dim lines
       gltf.scene.position.x -= c.x;
       gltf.scene.position.z -= c.z;
       gltf.scene.position.y -= box.min.y;   // drop base to floor level
@@ -179,29 +205,163 @@
       g.visible = false;
       washer = g;
       scene.add(g);
+      // invisible box at the machine's exact bounds — used only to ray-test which dimension
+      // lines are hidden behind the machine (cheap proxy instead of the 62k-tri mesh).
+      occluder = new THREE.Mesh(
+        new THREE.BoxGeometry(modelSize.x, modelSize.y, modelSize.z),
+        new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })
+      );
+      occluder.position.y = modelSize.y / 2;
+      washer.add(occluder);
       ready = true;
     }, undefined, () => setStatus('Could not load the 3D model. Check your connection and reload.'));
+  };
+
+  // ---- IKEA-style H×W×D dimension lines + labels wrapped around the placed machine ----
+  const makeLabel = (text) => {
+    const fs = 44, padX = 24, padY = 14;
+    const meas = document.createElement('canvas').getContext('2d');
+    meas.font = 'bold ' + fs + 'px Arial';
+    const tw = Math.ceil(meas.measureText(text).width);
+    const c = document.createElement('canvas');
+    c.width = tw + padX * 2; c.height = fs + padY * 2;
+    const ctx = c.getContext('2d');
+    ctx.font = 'bold ' + fs + 'px Arial';
+    if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(2, 2, c.width - 4, c.height - 4, 20); }
+    else { ctx.beginPath(); ctx.rect(2, 2, c.width - 4, c.height - 4); }
+    ctx.fillStyle = 'rgba(225,29,42,0.94)'; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, c.width / 2, c.height / 2);
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    spr.renderOrder = 999;
+    const hm = 0.085;                       // label ~8.5 cm tall in world space
+    spr.scale.set(hm * c.width / c.height, hm, 1);
+    return spr;
+  };
+
+  const disposeDims = () => {
+    if (!dimGroup) return;
+    if (washer) washer.remove(dimGroup);
+    dimGroup.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+    });
+    dimGroup = null;
+  };
+
+  // Dimensions shown = spec × current − / + size, so the value tracks the size on screen.
+  const curDims = () => ({
+    H: Math.round(SPEC.H * sizeScale),
+    W: Math.round(SPEC.W * sizeScale),
+    D: Math.round(SPEC.D * sizeScale),
+  });
+
+  const buildDims = () => {
+    if (!washer || !modelSize) return;
+    disposeDims();
+    dims = [];
+    dimGroup = new THREE.Group();
+    const hw = modelSize.x / 2, H = modelSize.y, hd = modelSize.z / 2, off = 0.05, t = 0.007;
+    const cd = curDims();
+    // Each dimension carries `pts` (sample points along its line) so we can test occlusion.
+    const add = (geo, linePos, text, labelPos, pts) => {
+      const line = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 }));
+      line.position.copy(linePos);
+      const label = makeLabel(text); label.position.copy(labelPos);
+      dimGroup.add(line); dimGroup.add(label);
+      dims.push({ line, label, pts });
+    };
+    // Height — front-right vertical edge
+    add(new THREE.BoxGeometry(t, H, t), new THREE.Vector3(hw + off, H / 2, hd + off),
+        'H ' + cd.H + ' cm', new THREE.Vector3(hw + off + 0.03, H / 2, hd + off),
+        [new THREE.Vector3(hw + off, 0.05, hd + off), new THREE.Vector3(hw + off, H / 2, hd + off), new THREE.Vector3(hw + off, H - 0.05, hd + off)]);
+    // Width — front-bottom edge
+    add(new THREE.BoxGeometry(modelSize.x, t, t), new THREE.Vector3(0, 0.002, hd + off),
+        'W ' + cd.W + ' cm', new THREE.Vector3(0, 0.06, hd + off + 0.03),
+        [new THREE.Vector3(-hw + 0.05, 0.05, hd + off), new THREE.Vector3(0, 0.05, hd + off), new THREE.Vector3(hw - 0.05, 0.05, hd + off)]);
+    // Depth — right-bottom edge
+    add(new THREE.BoxGeometry(t, t, modelSize.z), new THREE.Vector3(hw + off, 0.002, 0),
+        'D ' + cd.D + ' cm', new THREE.Vector3(hw + off + 0.03, 0.06, 0),
+        [new THREE.Vector3(hw + off, 0.05, -hd + 0.05), new THREE.Vector3(hw + off, 0.05, 0), new THREE.Vector3(hw + off, 0.05, hd - 0.05)]);
+    dimGroup.visible = dimsOn;
+    washer.add(dimGroup);
+  };
+
+  // Hide any dimension whose line is COMPLETELY behind the machine from the current view.
+  let _wp, _cam, _dir;   // THREE vectors — created in buildScene() (THREE isn't ready at parse time)
+  const updateDimOcclusion = () => {
+    if (!dims.length || !occluder || !camera || !washer) return;
+    washer.updateWorldMatrix(true, true);        // refresh washer + occluder + dimGroup matrices
+    camera.getWorldPosition(_cam);
+    for (const dim of dims) {
+      let visible = false;
+      for (const p of dim.pts) {
+        _wp.copy(p); washer.localToWorld(_wp);    // sample point → world
+        _dir.copy(_wp).sub(_cam);
+        const dist = _dir.length();
+        raycaster.set(_cam, _dir.normalize());
+        const hit = raycaster.intersectObject(occluder, false);
+        if (!(hit.length && hit[0].distance < dist - 0.02)) { visible = true; break; }  // this point is clear
+      }
+      dim.line.visible = visible;
+      dim.label.visible = visible;
+    }
+  };
+
+  const applySize = () => {
+    if (washer) washer.scale.setScalar(sizeScale);
+    const d = curDims();
+    if (sizeLbl) sizeLbl.textContent = '≈ ' + d.H + ' cm tall';
+    if (dimchip) dimchip.textContent = 'IFB washing machine · ' + d.H + ' × ' + d.W + ' × ' + d.D + ' cm';
   };
 
   const doPlace = () => {
     if (!ready || !floorPoint) return;
     washer.position.set(floorPoint.x, 0, floorPoint.z);
     washer.rotation.y = rotationY;
+    washer.scale.setScalar(sizeScale);
     washer.visible = true;
     placed = true;
     reticle.visible = false;
     rowPlace.style.display = 'none';
     rowPlaced.style.display = 'flex';
+    rowSize.style.display = 'flex';
     dimchip.style.display = 'block';
-    setStatus('Placed. Walk around it to check the fit. Drag to rotate.');
+    applySize();
+    buildDims();          // draw the H×W×D lines + labels around it (IKEA-style)
+    setStatus('Placed. H×W×D shown · − / + adjusts view size · drag to rotate · 📐 toggles labels.');
   };
 
   const enterMove = () => {
     placed = false;
     rowPlaced.style.display = 'none';
+    rowSize.style.display = 'none';
     rowPlace.style.display = 'flex';
     dimchip.style.display = 'none';
     setStatus('Aim at a new spot on the floor, then tap “Place”.');
+  };
+
+  // Reset: clear the placement entirely and go back to aiming. Setting `placed = false` is
+  // what brings the reticle back — onUpdate resumes raycasting the floor on the next frame
+  // and shows it again. Unlike Move, this also restores the default size and rotation, so
+  // the user starts from a known ≈80 cm machine rather than whatever they had tuned to.
+  const doReset = () => {
+    if (washer) {
+      washer.visible = false;
+      washer.rotation.y = 0;
+    }
+    placed = false;
+    rotationY = 0;
+    sizeScale = DEFAULT_SIZE_SCALE;
+    applySize();
+
+    rowPlaced.style.display = 'none';
+    rowSize.style.display = 'none';
+    rowPlace.style.display = 'flex';
+    dimchip.style.display = 'none';
+    setStatus('Reset. Aim at the floor, then tap “Place”.');
   };
 
   // one-finger drag on the camera (only when placed) => rotate the machine
@@ -236,7 +396,8 @@
     },
     // runs each frame after the camera pose is updated — keep the reticle on the floor under screen-centre
     onUpdate: () => {
-      if (placed || !surface) return;
+      if (placed) { updateDimOcclusion(); return; }   // hide dims that are behind the machine
+      if (!surface) return;
       raycaster.setFromCamera(centerNDC, camera);
       const hit = raycaster.intersectObject(surface)[0];
       if (hit) {
@@ -255,7 +416,21 @@
   placeBtn.addEventListener('click', doPlace);
   moveBtn.addEventListener('click', enterMove);
   rotBtn.addEventListener('click', () => { rotationY += Math.PI / 4; if (washer) washer.rotation.y = rotationY; });
-  resetBtn.addEventListener('click', () => { try { XR8.XrController.recenter(); } catch (e) {} });
+  // Previously this only called XR8.XrController.recenter(), which shifts the world origin
+  // but leaves the machine placed and the reticle hidden — so Reset appeared to do nothing.
+  resetBtn.addEventListener('click', doReset);
+  const stepSize = (d) => {
+    sizeScale = Math.min(1.4, Math.max(0.35, +(sizeScale + d).toFixed(3)));
+    applySize();
+    if (placed && washer && washer.visible) buildDims();   // refresh H×W×D labels to the new size
+  };
+  sizeMinus.addEventListener('click', () => stepSize(-0.02));
+  sizePlus.addEventListener('click', () => stepSize(+0.02));
+  dimBtn.addEventListener('click', () => {
+    dimsOn = !dimsOn;
+    if (dimGroup) dimGroup.visible = dimsOn;
+    dimBtn.style.opacity = dimsOn ? '1' : '0.5';
+  });
 
   // ---- boot ----
   const onxrloaded = () => {
