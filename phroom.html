@@ -109,7 +109,7 @@
   <div class="dock" id="dock">
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%">
       <button class="btn" id="aiBtn" style="width:100%;max-width:340px">✨ AI auto-place (Kreativ-style)</button>
-      <span id="aiStatus" style="font-size:11px;color:#cbd0e6;text-align:center;line-height:1.35">AI reads the floor &amp; perspective, then drops it in. Refine with the sliders.</span>
+      <span id="aiStatus" style="font-size:11px;color:#cbd0e6;text-align:center;line-height:1.35">AI finds the <b>floor</b> (not furniture) and places it there — then it snaps to the floor as you drag.</span>
     </div>
     <div class="sliders">
       <div class="slider"><label>Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈85cm</span></div>
@@ -145,6 +145,7 @@ const sSize=document.getElementById('sSize'), sRot=document.getElementById('sRot
 const vSize=document.getElementById('vSize'), vRot=document.getElementById('vRot'), vAng=document.getElementById('vAng');
 
 let photoBitmap = null;                 // chosen photo (EXIF-corrected)
+let floorMask = null;                   // AI floor mask {w,h,data} — constrains placement to the floor
 let renderer, scene, camera, machine, ground, raycaster, ndc, needsRender = true;
 let started = false;
 
@@ -242,7 +243,12 @@ function initThree(){
   const toNDC = (x, y) => { ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1); };
   const moveTo = (x, y) => {
     if (!machine) return;
-    toNDC(x, y);
+    let sx = x, sy = y;
+    if (floorMask) {                                   // washing machine goes on the FLOOR only → snap
+      const im = screenToImage(x, y);
+      if (!isFloorAt(im.fx, im.fy)) { const nf = nearestFloor(im.fx, im.fy); const s = imageToScreen(nf.fx, nf.fy); sx = s.x; sy = s.y; }
+    }
+    ndc.set((sx / window.innerWidth) * 2 - 1, -((sy / window.innerHeight) * 2 - 1));
     raycaster.setFromCamera(ndc, camera);
     const hit = raycaster.intersectObject(ground)[0];
     if (hit) { machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
@@ -320,37 +326,82 @@ document.getElementById('save').addEventListener('click', async () => {
   }, 'image/png');
 });
 
-// ---------- AI auto-place (Depth Anything V2 small — relative depth for floor/perspective) ----------
+// ---------- AI: understand the room (segment objects) → place ONLY on the floor ----------
 const aiBtn = document.getElementById('aiBtn');
 const aiStatus = document.getElementById('aiStatus');
-const AI = { estimator: null, loading: false };
+const AI = { seg: null, loading: false };
 const aiSet = (t) => { aiStatus.textContent = t; };
 
-async function loadDepth(){
-  if (AI.estimator) return AI.estimator;
-  AI.loading = true; aiSet('Loading AI (downloads ~25 MB the first time)…');
+async function loadSeg(){
+  if (AI.seg) return AI.seg;
+  AI.loading = true; aiSet('Loading AI (downloads ~15 MB the first time)…');
   const tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm');
   tf.env.allowLocalModels = false;
   const gpu = !!(navigator.gpu);
-  AI.estimator = await tf.pipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', {
-    device: gpu ? 'webgpu' : 'wasm', dtype: gpu ? 'q4f16' : 'q8',
+  AI.seg = await tf.pipeline('image-segmentation', 'Xenova/segformer-b0-finetuned-ade-512-512', {
+    device: gpu ? 'webgpu' : 'wasm',
     progress_callback: (p) => { if (p && p.status === 'progress' && p.progress != null) aiSet('Loading AI… ' + Math.round(p.progress) + '%'); },
   });
-  AI.loading = false; return AI.estimator;
+  AI.loading = false; return AI.seg;
 }
 
-// downscale the photo → data URL for a fast, reliable model input
-function photoInputURL(max = 768){
+function photoInputURL(max = 1024){
   const iw = photoBitmap.width, ih = photoBitmap.height, s = Math.min(1, max / Math.max(iw, ih));
   const c = document.createElement('canvas'); c.width = Math.round(iw * s); c.height = Math.round(ih * s);
   c.getContext('2d').drawImage(photoBitmap, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', 0.9);
 }
-function placeAtImage(fx, fy){
-  ndc.set(fx * 2 - 1, -(fy * 2 - 1));
+
+// The photo is drawn "cover" over the viewport → convert between screen px and photo-normalised coords
+function coverParams(){
+  const iw = photoBitmap.width, ih = photoBitmap.height, W = window.innerWidth, H = window.innerHeight;
+  const s = Math.max(W / iw, H / ih);
+  return { iw, ih, s, ox: (W - iw * s) / 2, oy: (H - ih * s) / 2 };
+}
+function screenToImage(x, y){ const p = coverParams(); return { fx: ((x - p.ox) / p.s) / p.iw, fy: ((y - p.oy) / p.s) / p.ih }; }
+function imageToScreen(fx, fy){ const p = coverParams(); return { x: fx * p.iw * p.s + p.ox, y: fy * p.ih * p.s + p.oy }; }
+
+// Build a downsampled floor mask (union of floor/rug/carpet) from the segmentation result
+function buildFloorMask(out){
+  const src = out.filter(o => /\b(floor|rug|carpet|mat)\b/i.test(o.label) && o.mask);
+  if (!src.length) return null;
+  const W = src[0].mask.width, H = src[0].mask.height, gw = 160, gh = Math.max(1, Math.round(gw * H / W));
+  const data = new Uint8Array(gw * gh);
+  for (const layer of src){ const m = layer.mask.data;
+    for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++){
+      const sx = (gx / gw * W) | 0, sy = (gy / gh * H) | 0;
+      if (m[sy * W + sx] > 127) data[gy * gw + gx] = 1;
+    } }
+  return { w: gw, h: gh, data };
+}
+function isFloorAt(fx, fy){ if (!floorMask) return true; const { w, h, data } = floorMask;
+  const gx = Math.min(w-1, Math.max(0, (fx*w)|0)), gy = Math.min(h-1, Math.max(0, (fy*h)|0)); return data[gy*w+gx] === 1; }
+function nearestFloor(fx, fy){                       // nearest floor cell (image-normalised)
+  if (!floorMask) return { fx, fy }; const { w, h, data } = floorMask;
+  const cx = Math.min(w-1, Math.max(0, (fx*w)|0)), cy = Math.min(h-1, Math.max(0, (fy*h)|0));
+  if (data[cy*w+cx] === 1) return { fx, fy };
+  let bx = -1, by = -1, bd = Infinity;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[y*w+x]){ const d = (x-cx)*(x-cx)+(y-cy)*(y-cy); if (d < bd){ bd = d; bx = x; by = y; } }
+  return bx < 0 ? { fx, fy } : { fx: (bx+0.5)/w, fy: (by+0.5)/h };
+}
+function angleFromFloor(){                            // rough camera pitch from how high the floor reaches
+  if (!floorMask) return 12; const { w, h, data } = floorMask; const tops = [];
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) if (data[y*w+x]){ tops.push(y/h); break; }
+  if (!tops.length) return 12; tops.sort((a,b)=>a-b);
+  return Math.round(Math.min(22, Math.max(10, (0.60 - tops[(tops.length*0.5)|0]) * 80 + 10)));
+}
+function autoFloorPoint(){                            // floor cell nearest centre & ~70% down = believable size
+  if (!floorMask) return { fx: 0.5, fy: 0.72 }; const { w, h, data } = floorMask, tx = w*0.5, ty = h*0.70;
+  let bx = -1, by = -1, bd = Infinity;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[y*w+x]){ const d = (x-tx)*(x-tx)+(y-ty)*(y-ty); if (d < bd){ bd = d; bx = x; by = y; } }
+  return bx < 0 ? { fx: 0.5, fy: 0.72 } : { fx: (bx+0.5)/w, fy: (by+0.5)/h };
+}
+function placeAtImageCoord(fx, fy){                   // image-normalised → screen → ground raycast
+  const sc = imageToScreen(fx, fy);
+  ndc.set((sc.x/window.innerWidth)*2-1, -((sc.y/window.innerHeight)*2-1));
   raycaster.setFromCamera(ndc, camera);
   const hit = raycaster.intersectObject(ground)[0];
-  if (hit && machine) { machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
+  if (hit && machine){ machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
 }
 function matchLighting(){
   try {
@@ -358,7 +409,7 @@ function matchLighting(){
     const cx = c.getContext('2d'); cx.drawImage(photoBitmap, 0, 0, 32, 32);
     const d = cx.getImageData(0, 0, 32, 32).data; let lum = 0;
     for (let i = 0; i < d.length; i += 4) lum += (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
-    lum /= (d.length / 4) * 255;                                  // 0..1 average brightness
+    lum /= (d.length / 4) * 255;
     renderer.toneMappingExposure = Math.max(0.6, Math.min(1.4, 0.6 + lum));
     needsRender = true;
   } catch (e) {}
@@ -367,23 +418,18 @@ async function runAIPlace(){
   if (!photoBitmap || !machine) { aiSet('Load a photo first.'); return; }
   aiBtn.disabled = true;
   try {
-    await loadDepth();
-    aiSet('Analysing the room…');
-    const out = await AI.estimator(photoInputURL());
-    const pd = out.predicted_depth, dims = pd.dims, H = dims[dims.length - 2], W = dims[dims.length - 1], data = pd.data;
-    let mn = Infinity, mx = -Infinity;
-    for (let i = 0; i < data.length; i++) { const v = data[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
-    const nz = (v) => (v - mn) / (mx - mn + 1e-6);                // Depth Anything v2: higher = nearer
-    const band = (y0, y1) => { let s = 0, n = 0; for (let y = (H*y0)|0; y < (H*y1)|0; y++) for (let x = (W*0.3)|0; x < (W*0.7)|0; x++) { s += nz(data[y * W + x]); n++; } return n ? s / n : 0; };
-    const recede = Math.max(0, band(0.80, 0.98) - band(0.45, 0.62));   // floor nearer at bottom ⇒ recedes upward
-    // Most room photos are shot near eye level → keep the pitch gentle (steep angles make it float).
-    const angDeg = Math.round(Math.min(18, Math.max(6, 6 + recede * 24)));
-    sAng.value = angDeg; vAng.textContent = angDeg + '°'; updateCamera();
+    await loadSeg();
+    aiSet('Understanding the room…');
+    const out = await AI.seg(photoInputURL());
+    floorMask = buildFloorMask(out);
+    if (!floorMask){ aiSet('No clear floor found — place it with drag + the sliders.'); return; }
+    const ang = angleFromFloor(); sAng.value = ang; vAng.textContent = ang + '°'; updateCamera();
     matchLighting();
-    placeAtImage(0.5, 0.82);                                       // drop on the near floor, centred
-    aiSet('AI-placed ✓ (floor angle ' + angDeg + '°). Drag to move · sliders to refine.');
+    const p = autoFloorPoint(); placeAtImageCoord(p.fx, p.fy);
+    const objs = [...new Set(out.map(o => o.label))].slice(0, 7).join(', ');
+    aiSet('Placed on the floor ✓ — it now snaps to the floor when you drag. (Detected: ' + objs + ')');
   } catch (e) {
-    aiSet('AI unavailable here — place it with the sliders (still works great).');
+    aiSet('AI unavailable here — drag + sliders still place it.');
   } finally { aiBtn.disabled = false; }
 }
 aiBtn.addEventListener('click', runAIPlace);
