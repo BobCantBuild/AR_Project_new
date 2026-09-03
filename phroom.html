@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>IFB Washing Machine — AI Room Placement (Kreativ-style)</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23e11d2a'/%3E%3Ctext x='32' y='43' font-size='24' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EIFB%3C/text%3E%3C/svg%3E" />
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.172.0/build/three.module.min.js",
+    "three/addons/": "https://unpkg.com/three@0.172.0/examples/jsm/"
+  }
+}
+</script>
+
+<style>
+  :root{--brand:#e11d2a;--brand2:#ff4d57;--ink:#eef1f8;--muted:#aab0c8;--panel:#171a2b;--line:#2b3050}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:#0f1220;color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+
+  /* ---------- top bar ---------- */
+  .top{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:10px;
+    padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 12px;
+    background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,0))}
+  .back{color:#fff;text-decoration:none;font-weight:800;font-size:17px;background:rgba(0,0,0,.4);
+    border:1px solid rgba(255,255,255,.28);border-radius:10px;width:34px;height:34px;
+    display:flex;align-items:center;justify-content:center}
+  .brand{font-weight:800;color:#fff;background:var(--brand);padding:4px 8px;border-radius:7px;font-size:14px}
+  .ttl{color:#fff;font-size:13px;opacity:.92}
+
+  /* ---------- upload screen ---------- */
+  #upload{position:fixed;inset:0;z-index:15;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;gap:18px;padding:24px;text-align:center;
+    background:radial-gradient(900px 600px at 50% 0%, #1a1f36, #0f1220 60%)}
+  #upload h1{font-size:22px;margin:0}
+  #upload p{color:var(--muted);font-size:14px;max-width:340px;margin:0;line-height:1.5}
+  .pick{display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:16px;color:#fff;
+    background:linear-gradient(180deg,var(--brand2),var(--brand));padding:15px 22px;border-radius:16px;
+    box-shadow:0 10px 26px rgba(225,29,42,.4);cursor:pointer;border:0}
+  #file{display:none}
+  .preview{max-width:min(88vw,420px);max-height:44vh;border-radius:14px;border:1px solid var(--line);display:none}
+  .confirmRow{display:none;gap:10px}
+  .btn{appearance:none;border:0;cursor:pointer;font-weight:800;font-size:15px;color:#fff;border-radius:14px;
+    padding:14px 20px;background:linear-gradient(180deg,var(--brand2),var(--brand));box-shadow:0 8px 22px rgba(225,29,42,.4)}
+  .btn.sec{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);box-shadow:none}
+  .steps{color:var(--muted);font-size:12.5px;line-height:1.8;text-align:left}
+  .steps b{color:var(--ink)}
+
+  /* ---------- composer ---------- */
+  #stage{position:fixed;inset:0;z-index:5;display:none}
+  #bg,#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #gl{touch-action:none}
+  .hint{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 52px);transform:translateX(-50%);
+    z-index:16;color:#fff;font-size:12px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);
+    border-radius:999px;padding:6px 12px;display:none;white-space:nowrap}
+
+  .dock{position:fixed;left:0;right:0;bottom:0;z-index:16;display:none;flex-direction:column;gap:12px;
+    padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 14px);
+    background:linear-gradient(0deg,rgba(0,0,0,.72),rgba(0,0,0,.15) 70%,transparent);backdrop-filter:blur(4px)}
+  .sliders{display:flex;flex-direction:column;gap:9px}
+  .slider{display:flex;align-items:center;gap:12px;color:#fff;font-size:12px}
+  .slider label{width:52px;opacity:.85;flex:none}
+  .slider .val{width:52px;text-align:right;opacity:.7;flex:none;font-variant-numeric:tabular-nums}
+  input[type=range]{flex:1;accent-color:var(--brand2);height:26px}
+  .actions{display:flex;gap:10px}
+  .actions .btn{flex:1}
+  .credit{position:fixed;left:0;right:0;bottom:0;text-align:center;color:rgba(255,255,255,.35);
+    font-size:9px;z-index:5;padding-bottom:2px}
+</style>
+</head>
+<body>
+  <!-- top bar (shared) -->
+  <div class="top">
+    <a class="back" href="index.html" aria-label="Back">&larr;</a>
+    <span class="brand">IFB</span>
+    <span class="ttl" id="topTtl">Add the washing machine to your photo</span>
+  </div>
+
+  <!-- ===== UPLOAD SCREEN ===== -->
+  <section id="upload">
+    <h1>See it in your room — from a photo</h1>
+    <p>Take a photo of your space (or pick one), then drop the IFB washing machine into it and save the picture.</p>
+    <label class="pick">📷 Take / choose a photo
+      <input id="file" type="file" accept="image/*" capture="environment" />
+    </label>
+    <img id="preview" class="preview" alt="Your photo preview" />
+    <div class="confirmRow" id="confirmRow">
+      <button class="btn sec" id="retake">Choose another</button>
+      <button class="btn" id="usephoto">Use this photo →</button>
+    </div>
+    <div class="steps">
+      <div>① <b>Take or choose</b> a photo of your laundry space</div>
+      <div>② <b>Position</b> the machine — drag it, resize, rotate</div>
+      <div>③ <b>Save</b> or share the final picture</div>
+    </div>
+  </section>
+
+  <!-- ===== COMPOSER ===== -->
+  <section id="stage">
+    <canvas id="bg"></canvas>
+    <canvas id="gl"></canvas>
+  </section>
+  <div class="hint" id="hint">Drag the machine to position it</div>
+
+  <div class="dock" id="dock">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%">
+      <button class="btn" id="aiBtn" style="width:100%;max-width:340px">✨ AI auto-place (Kreativ-style)</button>
+      <span id="aiStatus" style="font-size:11px;color:#cbd0e6;text-align:center;line-height:1.35">AI reads the floor &amp; perspective, then drops it in. Refine with the sliders.</span>
+    </div>
+    <div class="sliders">
+      <div class="slider"><label>Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈85cm</span></div>
+      <div class="slider"><label>Rotate</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
+      <div class="slider"><label>Angle</label><input id="sAng" type="range" min="0" max="42" value="14"><span class="val" id="vAng">14°</span></div>
+    </div>
+    <div class="actions">
+      <button class="btn sec" id="change">Change photo</button>
+      <button class="btn" id="save">💾 Save picture</button>
+    </div>
+  </div>
+  <div class="credit">IFB · washing machine composited with three.js</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const MODEL_URL = 'models/IFB_WM.glb';
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+// DOM
+const fileInput = document.getElementById('file');
+const preview   = document.getElementById('preview');
+const confirmRow= document.getElementById('confirmRow');
+const uploadEl  = document.getElementById('upload');
+const stageEl   = document.getElementById('stage');
+const dockEl    = document.getElementById('dock');
+const hintEl    = document.getElementById('hint');
+const bg        = document.getElementById('bg');
+const glCanvas  = document.getElementById('gl');
+const sSize=document.getElementById('sSize'), sRot=document.getElementById('sRot'), sAng=document.getElementById('sAng');
+const vSize=document.getElementById('vSize'), vRot=document.getElementById('vRot'), vAng=document.getElementById('vAng');
+
+let photoBitmap = null;                 // chosen photo (EXIF-corrected)
+let renderer, scene, camera, machine, ground, raycaster, ndc, needsRender = true;
+let started = false;
+
+// ---------- upload flow ----------
+fileInput.addEventListener('change', async (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  try {
+    photoBitmap = await createImageBitmap(f, { imageOrientation: 'from-image' });
+  } catch (err) {
+    photoBitmap = await createImageBitmap(f);   // fallback
+  }
+  preview.src = URL.createObjectURL(f);
+  preview.style.display = 'block';
+  confirmRow.style.display = 'flex';
+});
+document.getElementById('retake').addEventListener('click', () => fileInput.click());
+document.getElementById('change').addEventListener('click', () => { showUpload(); });
+document.getElementById('usephoto').addEventListener('click', () => startComposer());
+
+function showUpload(){
+  stageEl.style.display = 'none';
+  dockEl.style.display = 'none';
+  hintEl.style.display = 'none';
+  uploadEl.style.display = 'flex';
+  document.getElementById('topTtl').textContent = 'Add the washing machine to your photo';
+}
+
+function startComposer(){
+  uploadEl.style.display = 'none';
+  stageEl.style.display = 'block';
+  dockEl.style.display = 'flex';
+  hintEl.style.display = 'block';
+  setTimeout(() => { hintEl.style.display = 'none'; }, 2600);
+  document.getElementById('topTtl').textContent = 'Position it · then save';
+  if (!started) initThree();
+  resize();
+  drawPhoto();
+  needsRender = true;
+}
+
+// ---------- three.js composer ----------
+function initThree(){
+  started = true;
+  renderer = new THREE.WebGLRenderer({ canvas: glCanvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(DPR);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  scene = new THREE.Scene();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  camera = new THREE.PerspectiveCamera(45, 1, 0.05, 100);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x445, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 2.1);
+  sun.position.set(2, 6, 3.2);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 40;
+  sun.shadow.bias = -0.0005;
+  scene.add(sun);
+
+  // shadow-catcher / raycast ground
+  ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.ShadowMaterial({ opacity: 0.34 }));
+  ground.rotateX(-Math.PI / 2);
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  raycaster = new THREE.Raycaster();
+  ndc = new THREE.Vector2();
+
+  new GLTFLoader().load(MODEL_URL, (gltf) => {
+    const g = new THREE.Group();
+    gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const c = box.getCenter(new THREE.Vector3());
+    gltf.scene.position.x -= c.x;
+    gltf.scene.position.z -= c.z;
+    gltf.scene.position.y -= box.min.y;   // base on floor
+    g.add(gltf.scene);
+    machine = g;
+    machine.rotation.y = THREE.MathUtils.degToRad(+sRot.value);
+    machine.scale.setScalar(+sSize.value / 100);
+    scene.add(machine);
+    needsRender = true;
+  }, undefined, () => { hintEl.textContent = 'Could not load the 3D model — check connection.'; hintEl.style.display='block'; });
+
+  updateCamera();
+
+  // --- interaction: drag machine along the floor ---
+  let dragging = false;
+  const toNDC = (x, y) => { ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1); };
+  const moveTo = (x, y) => {
+    if (!machine) return;
+    toNDC(x, y);
+    raycaster.setFromCamera(ndc, camera);
+    const hit = raycaster.intersectObject(ground)[0];
+    if (hit) { machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
+  };
+  glCanvas.addEventListener('pointerdown', (e) => { dragging = true; glCanvas.setPointerCapture(e.pointerId); moveTo(e.clientX, e.clientY); });
+  glCanvas.addEventListener('pointermove', (e) => { if (dragging) moveTo(e.clientX, e.clientY); });
+  glCanvas.addEventListener('pointerup',   () => { dragging = false; });
+  glCanvas.addEventListener('pointercancel', () => { dragging = false; });
+
+  // render loop (renders only when something changed)
+  const tick = () => { if (needsRender && renderer) { renderer.render(scene, camera); needsRender = false; } requestAnimationFrame(tick); };
+  tick();
+
+  window.addEventListener('resize', () => { resize(); drawPhoto(); needsRender = true; });
+}
+
+function updateCamera(){
+  if (!camera) return;
+  const ang = THREE.MathUtils.degToRad(+sAng.value); // 0 = eye level looking straight, higher = looking down
+  const dist = 3.0;
+  camera.position.set(0, 0.55 + Math.sin(ang) * dist, Math.cos(ang) * dist);
+  camera.lookAt(0, 0.42, 0);
+  needsRender = true;
+}
+
+function resize(){
+  const w = window.innerWidth, h = window.innerHeight;
+  if (renderer) { renderer.setSize(w, h, false); glCanvas.width = w * DPR; glCanvas.height = h * DPR; renderer.setSize(w, h, false); }
+  glCanvas.width = w * DPR; glCanvas.height = h * DPR;
+  if (camera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
+  bg.width = w * DPR; bg.height = h * DPR;
+}
+
+// draw the photo into #bg with "cover" fit
+function drawPhoto(){
+  if (!photoBitmap) return;
+  const ctx = bg.getContext('2d');
+  const cw = bg.width, ch = bg.height, iw = photoBitmap.width, ih = photoBitmap.height;
+  const s = Math.max(cw / iw, ch / ih);
+  const dw = iw * s, dh = ih * s;
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.drawImage(photoBitmap, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+}
+
+// ---------- sliders ----------
+sSize.addEventListener('input', () => {
+  vSize.textContent = '≈' + Math.round(85 * (+sSize.value / 100)) + 'cm';
+  if (machine) { machine.scale.setScalar(+sSize.value / 100); needsRender = true; }
+});
+sRot.addEventListener('input', () => {
+  vRot.textContent = sRot.value + '°';
+  if (machine) { machine.rotation.y = THREE.MathUtils.degToRad(+sRot.value); needsRender = true; }
+});
+sAng.addEventListener('input', () => { vAng.textContent = sAng.value + '°'; updateCamera(); });
+
+// ---------- save / share ----------
+document.getElementById('save').addEventListener('click', async () => {
+  if (!renderer) return;
+  renderer.render(scene, camera);                       // ensure fresh frame
+  const out = document.createElement('canvas');
+  out.width = bg.width; out.height = bg.height;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(bg, 0, 0);                               // photo
+  ctx.drawImage(glCanvas, 0, 0, out.width, out.height);  // machine + shadow
+  out.toBlob(async (blob) => {
+    if (!blob) return;
+    const file = new File([blob], 'IFB-washing-machine-in-my-room.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'IFB Washing Machine' }); return; } catch (e) {}
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }, 'image/png');
+});
+
+// ---------- AI auto-place (Depth Anything V2 small — relative depth for floor/perspective) ----------
+const aiBtn = document.getElementById('aiBtn');
+const aiStatus = document.getElementById('aiStatus');
+const AI = { estimator: null, loading: false };
+const aiSet = (t) => { aiStatus.textContent = t; };
+
+async function loadDepth(){
+  if (AI.estimator) return AI.estimator;
+  AI.loading = true; aiSet('Loading AI (downloads ~25 MB the first time)…');
+  const tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm');
+  tf.env.allowLocalModels = false;
+  const gpu = !!(navigator.gpu);
+  AI.estimator = await tf.pipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', {
+    device: gpu ? 'webgpu' : 'wasm', dtype: gpu ? 'q4f16' : 'q8',
+    progress_callback: (p) => { if (p && p.status === 'progress' && p.progress != null) aiSet('Loading AI… ' + Math.round(p.progress) + '%'); },
+  });
+  AI.loading = false; return AI.estimator;
+}
+
+// downscale the photo → data URL for a fast, reliable model input
+function photoInputURL(max = 768){
+  const iw = photoBitmap.width, ih = photoBitmap.height, s = Math.min(1, max / Math.max(iw, ih));
+  const c = document.createElement('canvas'); c.width = Math.round(iw * s); c.height = Math.round(ih * s);
+  c.getContext('2d').drawImage(photoBitmap, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.9);
+}
+function placeAtImage(fx, fy){
+  ndc.set(fx * 2 - 1, -(fy * 2 - 1));
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObject(ground)[0];
+  if (hit && machine) { machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
+}
+function matchLighting(){
+  try {
+    const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+    const cx = c.getContext('2d'); cx.drawImage(photoBitmap, 0, 0, 32, 32);
+    const d = cx.getImageData(0, 0, 32, 32).data; let lum = 0;
+    for (let i = 0; i < d.length; i += 4) lum += (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+    lum /= (d.length / 4) * 255;                                  // 0..1 average brightness
+    renderer.toneMappingExposure = Math.max(0.6, Math.min(1.4, 0.6 + lum));
+    needsRender = true;
+  } catch (e) {}
+}
+async function runAIPlace(){
+  if (!photoBitmap || !machine) { aiSet('Load a photo first.'); return; }
+  aiBtn.disabled = true;
+  try {
+    await loadDepth();
+    aiSet('Analysing the room…');
+    const out = await AI.estimator(photoInputURL());
+    const pd = out.predicted_depth, dims = pd.dims, H = dims[dims.length - 2], W = dims[dims.length - 1], data = pd.data;
+    let mn = Infinity, mx = -Infinity;
+    for (let i = 0; i < data.length; i++) { const v = data[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
+    const nz = (v) => (v - mn) / (mx - mn + 1e-6);                // Depth Anything v2: higher = nearer
+    const band = (y0, y1) => { let s = 0, n = 0; for (let y = (H*y0)|0; y < (H*y1)|0; y++) for (let x = (W*0.3)|0; x < (W*0.7)|0; x++) { s += nz(data[y * W + x]); n++; } return n ? s / n : 0; };
+    const recede = Math.max(0, band(0.80, 0.98) - band(0.45, 0.62));   // floor nearer at bottom ⇒ recedes upward
+    // Most room photos are shot near eye level → keep the pitch gentle (steep angles make it float).
+    const angDeg = Math.round(Math.min(18, Math.max(6, 6 + recede * 24)));
+    sAng.value = angDeg; vAng.textContent = angDeg + '°'; updateCamera();
+    matchLighting();
+    placeAtImage(0.5, 0.82);                                       // drop on the near floor, centred
+    aiSet('AI-placed ✓ (floor angle ' + angDeg + '°). Drag to move · sliders to refine.');
+  } catch (e) {
+    aiSet('AI unavailable here — place it with the sliders (still works great).');
+  } finally { aiBtn.disabled = false; }
+}
+aiBtn.addEventListener('click', runAIPlace);
+
+// test hook: load a real room photo from a CORS-enabled URL (desktop verification)
+window.__loadUrlTest = async (url) => {
+  const blob = await (await fetch(url)).blob();
+  photoBitmap = await createImageBitmap(blob);
+  startComposer();
+  return true;
+};
+
+// expose a hook for automated verification (feeds a synthetic photo)
+window.__composeTest = async (w = 1280, h = 720) => {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  const grd = x.createLinearGradient(0, 0, 0, h); grd.addColorStop(0, '#dfe6ee'); grd.addColorStop(1, '#b9c2cc');
+  x.fillStyle = grd; x.fillRect(0, 0, w, h);
+  x.fillStyle = '#a5aeb8'; x.fillRect(0, h * 0.68, w, h * 0.32);   // "floor"
+  photoBitmap = await createImageBitmap(c);
+  startComposer();
+  return true;
+};
+</script>
+</body>
+</html>
