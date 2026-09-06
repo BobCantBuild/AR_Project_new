@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>IFB Washing Machine — Add to your photo</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23e11d2a'/%3E%3Ctext x='32' y='43' font-size='24' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EIFB%3C/text%3E%3C/svg%3E" />
+<link rel="icon" type="image/png" href="assets/IFB%20logo%201.png" />
 
 <script type="importmap">
 {
@@ -29,7 +29,9 @@
   .back{color:#fff;text-decoration:none;font-weight:800;font-size:17px;background:rgba(0,0,0,.4);
     border:1px solid rgba(255,255,255,.28);border-radius:10px;width:34px;height:34px;
     display:flex;align-items:center;justify-content:center}
-  .brand{font-weight:800;color:#fff;background:var(--brand);padding:4px 8px;border-radius:7px;font-size:14px}
+  /* The logo PNG already carries the red ground and white wordmark, so the chip that used to
+     fake it drops its own background and padding — otherwise it's red on red. */
+  .brand{display:block;width:30px;height:30px;border-radius:7px;flex:none}
   .ttl{color:#fff;font-size:13px;opacity:.92}
 
   /* ---------- upload screen ---------- */
@@ -58,6 +60,10 @@
     z-index:16;color:#fff;font-size:12px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);
     border-radius:999px;padding:6px 12px;display:none;white-space:nowrap}
 
+  .dimchip{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 52px);transform:translateX(-50%);
+    z-index:15;color:#fff;font-size:12px;font-weight:700;background:rgba(0,0,0,.5);
+    border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:6px 13px;display:none;white-space:nowrap}
+
   .dock{position:fixed;left:0;right:0;bottom:0;z-index:16;display:none;flex-direction:column;gap:12px;
     padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 14px);
     background:linear-gradient(0deg,rgba(0,0,0,.72),rgba(0,0,0,.15) 70%,transparent);backdrop-filter:blur(4px)}
@@ -76,7 +82,7 @@
   <!-- top bar (shared) -->
   <div class="top">
     <a class="back" href="index.html" aria-label="Back">&larr;</a>
-    <span class="brand">IFB</span>
+    <img class="brand" src="assets/IFB%20logo%201.png" alt="IFB" />
     <span class="ttl" id="topTtl">Add the washing machine to your photo</span>
   </div>
 
@@ -104,7 +110,8 @@
     <canvas id="bg"></canvas>
     <canvas id="gl"></canvas>
   </section>
-  <div class="hint" id="hint">Drag the machine to position it</div>
+  <div class="hint" id="hint">Drag the floor to move it · drag the machine to turn it</div>
+  <div class="dimchip" id="dimchip">IFB washing machine · 85 × 59 × 62 cm</div>
 
   <div class="dock" id="dock">
     <div class="sliders">
@@ -113,8 +120,9 @@
       <div class="slider"><label>Angle</label><input id="sAng" type="range" min="0" max="42" value="14"><span class="val" id="vAng">14°</span></div>
     </div>
     <div class="actions">
+      <button class="btn sec" id="dimBtn" style="flex:0 0 auto" aria-label="Toggle dimensions" aria-pressed="true">📐</button>
       <button class="btn sec" id="change">Change photo</button>
-      <button class="btn" id="save">💾 Save picture</button>
+      <button class="btn" id="save">💾 Save</button>
     </div>
   </div>
   <div class="credit">IFB · washing machine composited with three.js</div>
@@ -144,6 +152,23 @@ let photoBitmap = null;                 // chosen photo (EXIF-corrected)
 let renderer, scene, camera, machine, ground, raycaster, ndc, needsRender = true;
 let started = false;
 
+// ---- H×W×D dimension lines (same approach as fit.html) ----
+// Product dimensions in cm at size 100%. The labels show these × the current Size slider,
+// so the numbers always match the machine actually on screen.
+const SPEC = { H: 85, W: 59, D: 62 };
+let modelSize = null;      // GLB real size (metres) — sets where the dimension lines sit
+let dimGroup = null;       // lines + labels, parented to the machine so they follow it
+let dimSets = [];          // [{name, cands:[…]}] — only the best-facing candidate is shown
+let occluder = null;       // invisible box at the machine's bounds: ray-target for hit-testing
+let dimsOn = true;
+let _wp, _cam, _dir;       // scratch vectors — created in initThree(), THREE isn't ready at parse time
+
+// Rotation lives here (radians) so the slider and finger-drag stay in sync.
+let rotationY = THREE.MathUtils.degToRad(+document.getElementById('sRot').value);
+
+const dimchip = document.getElementById('dimchip');
+const dimBtn  = document.getElementById('dimBtn');
+
 // ---------- upload flow ----------
 fileInput.addEventListener('change', async (e) => {
   const f = e.target.files && e.target.files[0];
@@ -165,6 +190,7 @@ function showUpload(){
   stageEl.style.display = 'none';
   dockEl.style.display = 'none';
   hintEl.style.display = 'none';
+  dimchip.style.display = 'none';
   uploadEl.style.display = 'flex';
   document.getElementById('topTtl').textContent = 'Add the washing machine to your photo';
 }
@@ -174,12 +200,140 @@ function startComposer(){
   stageEl.style.display = 'block';
   dockEl.style.display = 'flex';
   hintEl.style.display = 'block';
-  setTimeout(() => { hintEl.style.display = 'none'; }, 2600);
+  // the chip sits where the hint is, so let the hint have the spot first
+  setTimeout(() => { hintEl.style.display = 'none'; if (dimsOn) dimchip.style.display = 'block'; }, 2600);
   document.getElementById('topTtl').textContent = 'Position it · then save';
   if (!started) initThree();
+  updateDimChip();
   resize();
   drawPhoto();
   needsRender = true;
+}
+
+// ---------- H×W×D dimension lines + labels ----------
+const sizeScale = () => +sSize.value / 100;
+const curDims = () => ({
+  H: Math.round(SPEC.H * sizeScale()),
+  W: Math.round(SPEC.W * sizeScale()),
+  D: Math.round(SPEC.D * sizeScale()),
+});
+
+function makeLabel(text){
+  const fs = 44, padX = 24, padY = 14;
+  const meas = document.createElement('canvas').getContext('2d');
+  meas.font = 'bold ' + fs + 'px Arial';
+  const tw = Math.ceil(meas.measureText(text).width);
+  const c = document.createElement('canvas');
+  c.width = tw + padX * 2; c.height = fs + padY * 2;
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold ' + fs + 'px Arial';
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(2, 2, c.width - 4, c.height - 4, 20); }
+  else { ctx.beginPath(); ctx.rect(2, 2, c.width - 4, c.height - 4); }
+  ctx.fillStyle = 'rgba(225,29,42,0.94)'; ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, c.width / 2, c.height / 2);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  spr.renderOrder = 999;
+  const hm = 0.085;                      // label ≈8.5 cm tall in world space
+  spr.scale.set(hm * c.width / c.height, hm, 1);
+  return spr;
+}
+
+function disposeDims(){
+  if (!dimGroup) return;
+  if (machine) machine.remove(dimGroup);
+  dimGroup.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+  });
+  dimGroup = null;
+}
+
+function buildDims(){
+  if (!machine || !modelSize) return;
+  disposeDims();
+  dimSets = [];
+  dimGroup = new THREE.Group();
+  const hw = modelSize.x / 2, H = modelSize.y, hd = modelSize.z / 2, off = 0.05, t = 0.007;
+  const cd = curDims();
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  // One candidate edge = a line + a label + the sample points used to test whether it's visible.
+  const cand = (geo, linePos, text, labelPos, pts) => {
+    const line = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 }));
+    line.position.copy(linePos);
+    const label = makeLabel(text); label.position.copy(labelPos);
+    dimGroup.add(line); dimGroup.add(label);
+    return { line, label, pts, mid: linePos.clone() };
+  };
+
+  // HEIGHT — all four vertical corners
+  const hGeo = () => new THREE.BoxGeometry(t, H, t);
+  const hSamp = (x, z) => [V(x, 0.05, z), V(x, H / 2, z), V(x, H - 0.05, z)];
+  const hLabel = 'H ' + cd.H + ' cm';
+  dimSets.push({ name: 'H', cands: [
+    cand(hGeo(), V(hw + off, H / 2, hd + off),   hLabel, V(hw + off + 0.03, H / 2, hd + off),   hSamp(hw + off, hd + off)),
+    cand(hGeo(), V(-hw - off, H / 2, hd + off),  hLabel, V(-hw - off - 0.03, H / 2, hd + off),  hSamp(-hw - off, hd + off)),
+    cand(hGeo(), V(hw + off, H / 2, -hd - off),  hLabel, V(hw + off + 0.03, H / 2, -hd - off),  hSamp(hw + off, -hd - off)),
+    cand(hGeo(), V(-hw - off, H / 2, -hd - off), hLabel, V(-hw - off - 0.03, H / 2, -hd - off), hSamp(-hw - off, -hd - off)),
+  ]});
+
+  // WIDTH — front and back bottom edges
+  const wGeo = () => new THREE.BoxGeometry(modelSize.x, t, t);
+  const wSamp = (z) => [V(-hw + 0.05, 0.05, z), V(0, 0.05, z), V(hw - 0.05, 0.05, z)];
+  const wLabel = 'W ' + cd.W + ' cm';
+  dimSets.push({ name: 'W', cands: [
+    cand(wGeo(), V(0, 0.002, hd + off),  wLabel, V(0, 0.06, hd + off + 0.03),  wSamp(hd + off)),
+    cand(wGeo(), V(0, 0.002, -hd - off), wLabel, V(0, 0.06, -hd - off - 0.03), wSamp(-hd - off)),
+  ]});
+
+  // DEPTH — left and right bottom edges
+  const dGeo = () => new THREE.BoxGeometry(t, t, modelSize.z);
+  const dSamp = (x) => [V(x, 0.05, -hd + 0.05), V(x, 0.05, 0), V(x, 0.05, hd - 0.05)];
+  const dLabel = 'D ' + cd.D + ' cm';
+  dimSets.push({ name: 'D', cands: [
+    cand(dGeo(), V(hw + off, 0.002, 0),  dLabel, V(hw + off + 0.03, 0.06, 0),  dSamp(hw + off)),
+    cand(dGeo(), V(-hw - off, 0.002, 0), dLabel, V(-hw - off - 0.03, 0.06, 0), dSamp(-hw - off)),
+  ]});
+
+  dimGroup.visible = dimsOn;
+  machine.add(dimGroup);
+  needsRender = true;
+}
+
+// Is this sample point un-occluded by the machine from the current camera?
+function clearPt(localPt){
+  _wp.copy(localPt); machine.localToWorld(_wp);
+  _dir.copy(_wp).sub(_cam);
+  const dist = _dir.length();
+  raycaster.set(_cam, _dir.normalize());
+  const hit = raycaster.intersectObject(occluder, false);
+  return !(hit.length && hit[0].distance < dist - 0.02);
+}
+
+// Show only the best-facing candidate per axis, so a dimension never draws through the machine.
+function updateDimOcclusion(){
+  if (!dimSets.length || !occluder || !camera || !machine || !dimsOn) return;
+  machine.updateWorldMatrix(true, true);
+  camera.getWorldPosition(_cam);
+  for (const set of dimSets) {
+    let best = null, bestVis = -1, bestDist = Infinity;
+    for (const c of set.cands) {
+      c.line.visible = false; c.label.visible = false;
+      let vis = 0;
+      for (const p of c.pts) if (clearPt(p)) vis++;
+      _wp.copy(c.mid); machine.localToWorld(_wp);
+      const md = _wp.distanceTo(_cam);
+      if (vis > bestVis || (vis === bestVis && md < bestDist)) { best = c; bestVis = vis; bestDist = md; }
+    }
+    if (best && bestVis > 0) { best.line.visible = true; best.label.visible = true; }
+  }
+}
+
+function updateDimChip(){
+  const d = curDims();
+  dimchip.textContent = 'IFB washing machine · ' + d.H + ' × ' + d.W + ' × ' + d.D + ' cm';
 }
 
 // ---------- three.js composer ----------
@@ -214,28 +368,51 @@ function initThree(){
 
   raycaster = new THREE.Raycaster();
   ndc = new THREE.Vector2();
+  _wp = new THREE.Vector3(); _cam = new THREE.Vector3(); _dir = new THREE.Vector3();
 
   new GLTFLoader().load(MODEL_URL, (gltf) => {
     const g = new THREE.Group();
     gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     const box = new THREE.Box3().setFromObject(gltf.scene);
     const c = box.getCenter(new THREE.Vector3());
+    modelSize = box.getSize(new THREE.Vector3());   // real size (metres) — lays out the dim lines
     gltf.scene.position.x -= c.x;
     gltf.scene.position.z -= c.z;
     gltf.scene.position.y -= box.min.y;   // base on floor
     g.add(gltf.scene);
     machine = g;
-    machine.rotation.y = THREE.MathUtils.degToRad(+sRot.value);
-    machine.scale.setScalar(+sSize.value / 100);
+    machine.rotation.y = rotationY;
+    machine.scale.setScalar(sizeScale());
     scene.add(machine);
+
+    // Invisible box on the machine's exact bounds. Two jobs: ray-test which dimension lines
+    // are hidden behind the machine, and give finger-drag a forgiving target to grab.
+    occluder = new THREE.Mesh(
+      new THREE.BoxGeometry(modelSize.x, modelSize.y, modelSize.z),
+      new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })
+    );
+    occluder.position.y = modelSize.y / 2;
+    machine.add(occluder);
+
+    buildDims();
+    updateDimChip();
     needsRender = true;
   }, undefined, () => { hintEl.textContent = 'Could not load the 3D model — check connection.'; hintEl.style.display='block'; });
 
   updateCamera();
 
-  // --- interaction: drag machine along the floor ---
-  let dragging = false;
+  // --- interaction ---
+  // One finger on the machine turns it left/right, with the same feel as fit.html: a swipe
+  // across the full screen width is one complete turn. One finger anywhere else repositions
+  // it on the floor. photo.html needs both gestures, so what you grab decides which you get.
+  let mode = null, startX = 0, rotBase = 0;
   const toNDC = (x, y) => { ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1); };
+  const hitsMachine = (x, y) => {
+    if (!occluder) return false;
+    toNDC(x, y);
+    raycaster.setFromCamera(ndc, camera);
+    return raycaster.intersectObject(occluder, false).length > 0;
+  };
   const moveTo = (x, y) => {
     if (!machine) return;
     toNDC(x, y);
@@ -243,13 +420,39 @@ function initThree(){
     const hit = raycaster.intersectObject(ground)[0];
     if (hit) { machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
   };
-  glCanvas.addEventListener('pointerdown', (e) => { dragging = true; glCanvas.setPointerCapture(e.pointerId); moveTo(e.clientX, e.clientY); });
-  glCanvas.addEventListener('pointermove', (e) => { if (dragging) moveTo(e.clientX, e.clientY); });
-  glCanvas.addEventListener('pointerup',   () => { dragging = false; });
-  glCanvas.addEventListener('pointercancel', () => { dragging = false; });
+  const turnTo = (x) => {
+    if (!machine) return;
+    rotationY = rotBase + ((x - startX) / window.innerWidth) * Math.PI * 2;
+    machine.rotation.y = rotationY;
+    let deg = Math.round(THREE.MathUtils.radToDeg(rotationY)) % 360;
+    if (deg < 0) deg += 360;
+    sRot.value = deg; vRot.textContent = deg + '°';   // slider follows the finger
+    needsRender = true;
+  };
+  glCanvas.addEventListener('pointerdown', (e) => {
+    glCanvas.setPointerCapture(e.pointerId);
+    if (machine && hitsMachine(e.clientX, e.clientY)) {
+      mode = 'turn'; startX = e.clientX; rotBase = rotationY;
+    } else {
+      mode = 'move'; moveTo(e.clientX, e.clientY);
+    }
+  });
+  glCanvas.addEventListener('pointermove', (e) => {
+    if (mode === 'move') moveTo(e.clientX, e.clientY);
+    else if (mode === 'turn') turnTo(e.clientX);
+  });
+  glCanvas.addEventListener('pointerup',     () => { mode = null; });
+  glCanvas.addEventListener('pointercancel', () => { mode = null; });
 
   // render loop (renders only when something changed)
-  const tick = () => { if (needsRender && renderer) { renderer.render(scene, camera); needsRender = false; } requestAnimationFrame(tick); };
+  const tick = () => {
+    if (needsRender && renderer) {
+      updateDimOcclusion();          // re-pick the best-facing H/W/D edges for this view
+      renderer.render(scene, camera);
+      needsRender = false;
+    }
+    requestAnimationFrame(tick);
+  };
   tick();
 
   window.addEventListener('resize', () => { resize(); drawPhoto(); needsRender = true; });
@@ -285,12 +488,23 @@ function drawPhoto(){
 
 // ---------- sliders ----------
 sSize.addEventListener('input', () => {
-  vSize.textContent = '≈' + Math.round(85 * (+sSize.value / 100)) + 'cm';
-  if (machine) { machine.scale.setScalar(+sSize.value / 100); needsRender = true; }
+  vSize.textContent = '≈' + curDims().H + 'cm';
+  if (machine) { machine.scale.setScalar(sizeScale()); needsRender = true; }
+  updateDimChip();
+  if (dimGroup) buildDims();   // rebuild so the H/W/D labels show the new numbers
 });
 sRot.addEventListener('input', () => {
   vRot.textContent = sRot.value + '°';
-  if (machine) { machine.rotation.y = THREE.MathUtils.degToRad(+sRot.value); needsRender = true; }
+  rotationY = THREE.MathUtils.degToRad(+sRot.value);
+  if (machine) { machine.rotation.y = rotationY; needsRender = true; }
+});
+dimBtn.addEventListener('click', () => {
+  dimsOn = !dimsOn;
+  if (dimGroup) dimGroup.visible = dimsOn;
+  dimchip.style.display = dimsOn ? 'block' : 'none';
+  dimBtn.style.opacity = dimsOn ? '1' : '0.5';
+  dimBtn.setAttribute('aria-pressed', String(dimsOn));
+  needsRender = true;
 });
 sAng.addEventListener('input', () => { vAng.textContent = sAng.value + '°'; updateCamera(); });
 
