@@ -6,7 +6,7 @@
 <title>IFB Washing Machine — View in Your Room (AR)</title>
 <meta name="description" content="View an IFB washing machine in 3D and place it in your own room at real size — right from your browser, no app." />
 <meta name="theme-color" content="#0f1220" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23e11d2a'/%3E%3Ctext x='32' y='43' font-size='24' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EIFB%3C/text%3E%3C/svg%3E" />
+<link rel="icon" type="image/png" href="assets/IFB%20logo%201.png" />
 <!-- Social/link preview -->
 <meta property="og:title" content="IFB Washing Machine — View in Your Room (AR)" />
 <meta property="og:description" content="See an IFB washing machine in 3D and place it in your room at real size — no app." />
@@ -33,10 +33,9 @@
     border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5;
     background:rgba(15,18,32,.82); backdrop-filter:blur(10px);
   }
-  .logo{
-    font-weight:800; letter-spacing:.5px; font-size:18px; color:#fff;
-    background:var(--brand); padding:5px 9px; border-radius:8px;
-  }
+  /* The logo PNG already carries the red ground and white wordmark, so the chip that used to
+     fake it drops its own background and padding — otherwise it's red on red. */
+  .logo{ display:block; width:36px; height:36px; border-radius:8px; flex:none; }
   .title{font-size:14px; color:var(--muted); line-height:1.2}
   .title b{color:var(--ink); font-size:15px; display:block}
   main{flex:1; width:100%; max-width:1080px; margin:0 auto; padding:18px; display:grid;
@@ -96,7 +95,7 @@
 </head>
 <body>
 <header>
-  <span class="logo">IFB</span>
+  <img class="logo" src="assets/IFB%20logo%201.png" alt="IFB" />
   <div class="title"><b>Washing Machine — AR Viewer</b>See it in your room, at real size</div>
 </header>
 

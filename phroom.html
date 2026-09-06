@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
 <title>IFB Washing Machine — AI Room Placement (Kreativ-style)</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23e11d2a'/%3E%3Ctext x='32' y='43' font-size='24' font-family='Arial' font-weight='bold' fill='white' text-anchor='middle'%3EIFB%3C/text%3E%3C/svg%3E" />
+<link rel="icon" type="image/png" href="assets/IFB%20logo%201.png" />
 
 <script type="importmap">
 {
@@ -29,7 +29,9 @@
   .back{color:#fff;text-decoration:none;font-weight:800;font-size:17px;background:rgba(0,0,0,.4);
     border:1px solid rgba(255,255,255,.28);border-radius:10px;width:34px;height:34px;
     display:flex;align-items:center;justify-content:center}
-  .brand{font-weight:800;color:#fff;background:var(--brand);padding:4px 8px;border-radius:7px;font-size:14px}
+  /* The logo PNG already carries the red ground and white wordmark, so the chip that used to
+     fake it drops its own background and padding — otherwise it's red on red. */
+  .brand{display:block;width:30px;height:30px;border-radius:7px;flex:none}
   .ttl{color:#fff;font-size:13px;opacity:.92}
 
   /* ---------- upload screen ---------- */
@@ -76,7 +78,7 @@
   <!-- top bar (shared) -->
   <div class="top">
     <a class="back" href="index.html" aria-label="Back">&larr;</a>
-    <span class="brand">IFB</span>
+    <img class="brand" src="assets/IFB%20logo%201.png" alt="IFB" />
     <span class="ttl" id="topTtl">Add the washing machine to your photo</span>
   </div>
 
