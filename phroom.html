@@ -106,9 +106,18 @@
   #menu.open{display:block}
   #menu .sheet{position:absolute;left:0;right:0;top:0;background:#141011;border-bottom:1px solid rgba(255,255,255,.12);
     padding:calc(env(safe-area-inset-top,0px) + 58px) 16px 18px;display:flex;flex-direction:column;gap:9px}
-  #menu .mlabel{color:rgba(255,255,255,.5);font-size:11px;font-weight:700;letter-spacing:.11em;text-transform:uppercase}
   #menu .choice[aria-checked="true"]{border-color:#e11d2a;background:rgba(225,29,42,.14)}
   #menu .choice[aria-checked="true"] .cn::after{content:" ✓";color:#ff6069}
+
+  /* ---------- collapsible sections inside the switcher (Model Select / Style It) ---------- */
+  .accHead{appearance:none;width:100%;display:flex;align-items:center;justify-content:space-between;
+    gap:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:12px;
+    padding:13px 15px;color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;text-align:left}
+  .accHead:hover,.accHead:focus-visible{border-color:#e11d2a;outline:none}
+  .accChevron{flex:none;opacity:.65;font-size:13px;transition:transform .18s}
+  .accHead[aria-expanded="true"] .accChevron{transform:rotate(180deg)}
+  .accBody{padding:11px 2px 2px}
+  .accBody[hidden]{display:none}
 </style>
 </head>
 <body>
@@ -129,11 +138,30 @@
     <p class="sub" style="font-size:11.5px;opacity:.5">You can switch machines any time from the menu.</p>
   </section>
 
-  <!-- ===== Switcher, opened from the hamburger ===== -->
+  <!-- ===== Switcher, opened from the hamburger. Model choice and the position sliders both
+       live here now, each under its own collapsible section, so the composer screen itself
+       stays clear of controls and only shows the photo + machine. ===== -->
   <div id="menu">
     <div class="sheet">
-      <span class="mlabel">Machine type</span>
-      <div class="choices" id="menuList" role="radiogroup" aria-label="Machine type"></div>
+      <button class="accHead" id="accModelHead" aria-expanded="false" aria-controls="accModelBody" type="button">
+        <span class="accTitle">Model Select</span>
+        <span class="accChevron">⌄</span>
+      </button>
+      <div class="accBody" id="accModelBody" hidden>
+        <div class="choices" id="menuList" role="radiogroup" aria-label="Machine type"></div>
+      </div>
+
+      <button class="accHead" id="accStyleHead" aria-expanded="false" aria-controls="accStyleBody" type="button">
+        <span class="accTitle">Style It</span>
+        <span class="accChevron">⌄</span>
+      </button>
+      <div class="accBody" id="accStyleBody" hidden>
+        <div class="sliders">
+          <div class="slider"><label>Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈85cm</span></div>
+          <div class="slider"><label>Rotate</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
+          <div class="slider"><label>Angle</label><input id="sAng" type="range" min="0" max="42" value="14"><span class="val" id="vAng">14°</span></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -167,11 +195,6 @@
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%">
       <button class="btn" id="aiBtn" style="width:100%;max-width:340px">✨ AI auto-place (Kreativ-style)</button>
       <span id="aiStatus" style="font-size:11px;color:#cbd0e6;text-align:center;line-height:1.35">AI finds the <b>floor</b> (not furniture) and places it there — then it snaps to the floor as you drag.</span>
-    </div>
-    <div class="sliders">
-      <div class="slider"><label>Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈85cm</span></div>
-      <div class="slider"><label>Rotate</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
-      <div class="slider"><label>Angle</label><input id="sAng" type="range" min="0" max="42" value="14"><span class="val" id="vAng">14°</span></div>
     </div>
     <div class="actions">
       <button class="btn sec" id="change">Change photo</button>
@@ -638,6 +661,20 @@ function startWith(k){
 hamBtn.addEventListener('click', () => setMenu(!menu.classList.contains('open')));
 menu.addEventListener('click', (e) => { if (e.target === menu) setMenu(false); });
 renderLists();
+
+// ---------- collapsible sections inside the switcher: Model Select / Style It ----------
+// Size/Rotate/Angle used to sit directly on the composer dock, competing for space with the
+// photo itself. They now live here instead, alongside the model picker, so the composer
+// screen stays clear and shows only the photo and the placed machine.
+function makeAccordion(headEl, bodyEl){
+  headEl.addEventListener('click', () => {
+    const open = headEl.getAttribute('aria-expanded') !== 'true';
+    headEl.setAttribute('aria-expanded', String(open));
+    bodyEl.hidden = !open;
+  });
+}
+makeAccordion(document.getElementById('accModelHead'), document.getElementById('accModelBody'));
+makeAccordion(document.getElementById('accStyleHead'), document.getElementById('accStyleBody'));
 
 // test hook: load a real room photo from a CORS-enabled URL (desktop verification)
 window.__loadUrlTest = async (url) => {
