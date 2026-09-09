@@ -70,6 +70,10 @@
     z-index:16;color:#fff;font-size:12px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);
     border-radius:999px;padding:6px 12px;display:none;white-space:nowrap}
 
+  .dimchip{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 52px);transform:translateX(-50%);
+    z-index:15;color:#fff;font-size:12px;font-weight:700;background:rgba(0,0,0,.5);
+    border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:6px 13px;display:none;white-space:nowrap}
+
   .dock{flex:none;display:none;flex-direction:column;gap:12px;
     padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 14px);
     background:var(--panel);border-top:1px solid var(--line)}
@@ -199,7 +203,8 @@
     <canvas id="bg"></canvas>
     <canvas id="gl"></canvas>
   </section>
-  <div class="hint" id="hint">Drag the machine to position it</div>
+  <div class="hint" id="hint">Drag the floor to move it · drag the machine to turn it</div>
+  <div class="dimchip" id="dimchip">IFB washing machine · 85 × 59 × 62 cm</div>
 
   <div class="dock" id="dock">
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%">
@@ -207,8 +212,9 @@
       <span id="aiStatus" style="font-size:11px;color:#cbd0e6;text-align:center;line-height:1.35">AI finds the <b>floor</b> (not furniture) and places it there — then it snaps to the floor as you drag.</span>
     </div>
     <div class="actions">
+      <button class="btn sec" id="dimBtn" style="flex:0 0 auto" aria-label="Toggle dimensions" aria-pressed="true">📐</button>
       <button class="btn sec" id="change">Change photo</button>
-      <button class="btn" id="save">💾 Save picture</button>
+      <button class="btn" id="save">💾 Save</button>
     </div>
   </div>
   <div class="credit">IFB · washing machine composited with three.js</div>
@@ -245,6 +251,17 @@ let modelKey = DEFAULT_MODEL;
 let baseScale = 1;          // GLB units → real size for the current machine (set on load)
 let modelSize = null;       // current GLB's size in its own units
 
+// ---- H×W×D dimension lines (IKEA-style, ported from fit.html) ----
+let occluder = null;        // invisible bounding box on the machine — hit-tests both rotate-
+                             // vs-move touch and which dimension edge is behind the machine
+let dimGroup = null;        // the H/W/D lines + labels, parented to the machine
+let dimSets = [];           // [{name, cands:[{line,label,pts,mid}]}] — show the best-facing candidate
+let dimsOn = true;
+// This is a real ES module (import * as THREE from 'three' at the top), unlike fit.html's
+// plain <script> that waits on a separately-loaded module setting window.THREE — so there is
+// no "THREE isn't ready yet" race here and these can be constructed immediately.
+const _wp = new THREE.Vector3(), _cam = new THREE.Vector3(), _dir = new THREE.Vector3();
+
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 
 // DOM
@@ -264,6 +281,8 @@ const glCanvas  = document.getElementById('gl');
 const introP    = document.getElementById('introP');
 const sSize=document.getElementById('sSize'), sRot=document.getElementById('sRot'), sAng=document.getElementById('sAng');
 const vSize=document.getElementById('vSize'), vRot=document.getElementById('vRot'), vAng=document.getElementById('vAng');
+const dimchip = document.getElementById('dimchip');
+const dimBtn  = document.getElementById('dimBtn');
 
 let photoBitmap = null;                 // chosen photo (EXIF-corrected)
 let floorMask = null;                   // AI floor mask {w,h,data} — constrains placement to the floor
@@ -301,6 +320,7 @@ function showUpload(){
   stageEl.style.display = 'none';
   dockEl.style.display = 'none';
   hintEl.style.display = 'none';
+  dimchip.style.display = 'none';
   uploadEl.style.display = 'flex';
   document.getElementById('topTtl').textContent = 'Add the ' + machineLabel() + ' to your photo';
 }
@@ -309,6 +329,7 @@ function showUpload(){
 // switching types repeatedly would leak a full mesh + textures every time.
 function disposeModel(){
   if (!machine) return;
+  disposeDims();
   scene.remove(machine);
   machine.traverse((o) => {
     if (o.geometry) o.geometry.dispose();
@@ -322,7 +343,7 @@ function disposeModel(){
       }
     }
   });
-  machine = null; modelSize = null;
+  machine = null; modelSize = null; occluder = null;
 }
 
 // Load one machine: base-anchored (feet on y=0), centred on x/z, wrapped in a group, and
@@ -354,11 +375,153 @@ function loadModel(key){
     machine.position.copy(keepPos);
     machine.scale.setScalar(baseScale * (+sSize.value / 100));
     scene.add(machine);
+    // Invisible box at the machine's exact bounds — used both to hit-test whether a touch
+    // started ON the machine (rotate) vs the floor around it (move), and to ray-test which
+    // dimension lines are hidden behind the machine, without testing against the full mesh.
+    occluder = new THREE.Mesh(
+      new THREE.BoxGeometry(modelSize.x, modelSize.y, modelSize.z),
+      new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })
+    );
+    occluder.position.y = modelSize.y / 2;
+    machine.add(occluder);
     applyRotation();
     vSize.textContent = '≈' + Math.round(cfg.heightCm * (+sSize.value / 100)) + 'cm';
+    buildDims();
+    updateDimChip();
     hintEl.style.display = 'none';
     needsRender = true;
   }, undefined, () => { hintEl.textContent = 'Could not load the ' + cfg.label.toLowerCase() + ' — check connection.'; hintEl.style.display = 'block'; });
+}
+
+// ---- IKEA-style H×W×D dimension lines + labels wrapped around the machine (ported from
+// fit.html — same approach: real 3D line meshes + sprite labels parented to the machine, not
+// a screen-space overlay, so they naturally follow it as it turns and moves). ----
+const makeLabel = (text) => {
+  const fs = 44, padX = 24, padY = 14;
+  const meas = document.createElement('canvas').getContext('2d');
+  meas.font = 'bold ' + fs + 'px Arial';
+  const tw = Math.ceil(meas.measureText(text).width);
+  const c = document.createElement('canvas');
+  c.width = tw + padX * 2; c.height = fs + padY * 2;
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold ' + fs + 'px Arial';
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(2, 2, c.width - 4, c.height - 4, 20); }
+  else { ctx.beginPath(); ctx.rect(2, 2, c.width - 4, c.height - 4); }
+  ctx.fillStyle = 'rgba(225,29,42,0.94)'; ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, c.width / 2, c.height / 2);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  spr.renderOrder = 999;
+  const hm = 0.085;                       // label ~8.5 cm tall in world space
+  spr.scale.set(hm * c.width / c.height, hm, 1);
+  return spr;
+};
+
+const disposeDims = () => {
+  if (!dimGroup) return;
+  if (machine) machine.remove(dimGroup);
+  dimGroup.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+  });
+  dimGroup = null;
+};
+
+// Dimensions are measured off the loaded GLB and scaled the same way the machine is, so the
+// labels always describe what's actually on screen — whichever machine is selected.
+const curDims = () => {
+  if (!modelSize) return { H: 0, W: 0, D: 0 };
+  const k = baseScale * (+sSize.value / 100) * 100;
+  return {
+    H: Math.round(modelSize.y * k),
+    W: Math.round(modelSize.x * k),
+    D: Math.round(modelSize.z * k),
+  };
+};
+
+const buildDims = () => {
+  if (!machine || !modelSize) return;
+  disposeDims();
+  dimSets = [];
+  dimGroup = new THREE.Group();
+  const hw = modelSize.x / 2, H = modelSize.y, hd = modelSize.z / 2, off = 0.05, t = 0.007;
+  const cd = curDims();
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const cand = (geo, linePos, text, labelPos, pts) => {
+    const line = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 }));
+    line.position.copy(linePos);
+    const label = makeLabel(text); label.position.copy(labelPos);
+    dimGroup.add(line); dimGroup.add(label);
+    return { line, label, pts, mid: linePos.clone() };
+  };
+
+  // HEIGHT — all 4 vertical corners
+  const hGeo = () => new THREE.BoxGeometry(t, H, t);
+  const hSamp = (x, z) => [V(x, 0.05, z), V(x, H / 2, z), V(x, H - 0.05, z)];
+  const hLabel = 'H ' + cd.H + ' cm';
+  dimSets.push({ name: 'H', cands: [
+    cand(hGeo(), V(hw + off, H / 2, hd + off),   hLabel, V(hw + off + 0.03, H / 2, hd + off),   hSamp(hw + off, hd + off)),
+    cand(hGeo(), V(-hw - off, H / 2, hd + off),  hLabel, V(-hw - off - 0.03, H / 2, hd + off),  hSamp(-hw - off, hd + off)),
+    cand(hGeo(), V(hw + off, H / 2, -hd - off),  hLabel, V(hw + off + 0.03, H / 2, -hd - off),  hSamp(hw + off, -hd - off)),
+    cand(hGeo(), V(-hw - off, H / 2, -hd - off), hLabel, V(-hw - off - 0.03, H / 2, -hd - off), hSamp(-hw - off, -hd - off)),
+  ]});
+
+  // WIDTH — front and back bottom edges
+  const wGeo = () => new THREE.BoxGeometry(modelSize.x, t, t);
+  const wSamp = (z) => [V(-hw + 0.05, 0.05, z), V(0, 0.05, z), V(hw - 0.05, 0.05, z)];
+  const wLabel = 'W ' + cd.W + ' cm';
+  dimSets.push({ name: 'W', cands: [
+    cand(wGeo(), V(0, 0.002, hd + off),  wLabel, V(0, 0.06, hd + off + 0.03),  wSamp(hd + off)),
+    cand(wGeo(), V(0, 0.002, -hd - off), wLabel, V(0, 0.06, -hd - off - 0.03), wSamp(-hd - off)),
+  ]});
+
+  // DEPTH — left and right bottom edges
+  const dGeo = () => new THREE.BoxGeometry(t, t, modelSize.z);
+  const dSamp = (x) => [V(x, 0.05, -hd + 0.05), V(x, 0.05, 0), V(x, 0.05, hd - 0.05)];
+  const dLabel = 'D ' + cd.D + ' cm';
+  dimSets.push({ name: 'D', cands: [
+    cand(dGeo(), V(hw + off, 0.002, 0),  dLabel, V(hw + off + 0.03, 0.06, 0),  dSamp(hw + off)),
+    cand(dGeo(), V(-hw - off, 0.002, 0), dLabel, V(-hw - off - 0.03, 0.06, 0), dSamp(-hw - off)),
+  ]});
+
+  dimGroup.visible = dimsOn;
+  machine.add(dimGroup);
+};
+
+// Is this sample point un-occluded by the machine from the current camera?
+const clearPt = (localPt) => {
+  _wp.copy(localPt); machine.localToWorld(_wp);
+  _dir.copy(_wp).sub(_cam);
+  const dist = _dir.length();
+  raycaster.set(_cam, _dir.normalize());
+  const hit = raycaster.intersectObject(occluder, false);
+  return !(hit.length && hit[0].distance < dist - 0.02);
+};
+
+// Show only the best-facing candidate per axis, so a dimension never draws through the machine.
+const updateDimOcclusion = () => {
+  if (!dimSets.length || !occluder || !camera || !machine) return;
+  machine.updateWorldMatrix(true, true);
+  camera.getWorldPosition(_cam);
+  for (const set of dimSets) {
+    let best = null, bestVis = -1, bestDist = Infinity;
+    for (const c of set.cands) {
+      c.line.visible = false; c.label.visible = false;
+      let vis = 0;
+      for (const p of c.pts) if (clearPt(p)) vis++;
+      _wp.copy(c.mid); machine.localToWorld(_wp);
+      const md = _wp.distanceTo(_cam);
+      if (vis > bestVis || (vis === bestVis && md < bestDist)) { best = c; bestVis = vis; bestDist = md; }
+    }
+    if (best && bestVis > 0) { best.line.visible = true; best.label.visible = true; }
+  }
+};
+
+function updateDimChip(){
+  const d = curDims();
+  dimchip.textContent = 'IFB ' + machineLabel() + ' · ' + d.H + ' × ' + d.W + ' × ' + d.D + ' cm';
 }
 
 function startComposer(){
@@ -366,9 +529,11 @@ function startComposer(){
   stageEl.style.display = 'block';
   dockEl.style.display = 'flex';
   hintEl.style.display = 'block';
-  setTimeout(() => { hintEl.style.display = 'none'; }, 2600);
+  // the chip sits where the hint is, so let the hint have the spot first
+  setTimeout(() => { hintEl.style.display = 'none'; if (dimsOn) dimchip.style.display = 'block'; }, 2600);
   document.getElementById('topTtl').textContent = 'Position it · then save';
   if (!started) initThree();
+  updateDimChip();
   resize();
   drawPhoto();
   needsRender = true;
@@ -410,9 +575,18 @@ function initThree(){
   loadModel(modelKey);
   updateCamera();
 
-  // --- interaction: drag machine along the floor ---
-  let dragging = false;
+  // --- interaction ---
+  // One finger on the machine turns it (matching fit.html); one finger on the floor around it
+  // moves it, snapping to the AI floor mask when one is available. What the touch starts on
+  // decides which gesture it is.
+  let dragMode = null, dragStartX = 0, rotBaseDeg = 0;
   const toNDC = (x, y) => { ndc.set((x / window.innerWidth) * 2 - 1, -(y / stageH()) * 2 + 1); };
+  const hitsMachine = (x, y) => {
+    if (!occluder) return false;
+    toNDC(x, y);
+    raycaster.setFromCamera(ndc, camera);
+    return raycaster.intersectObject(occluder, false).length > 0;
+  };
   const moveTo = (x, y) => {
     if (!machine) return;
     let sx = x, sy = y;
@@ -425,13 +599,41 @@ function initThree(){
     const hit = raycaster.intersectObject(ground)[0];
     if (hit) { machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
   };
-  glCanvas.addEventListener('pointerdown', (e) => { dragging = true; glCanvas.setPointerCapture(e.pointerId); moveTo(e.clientX, e.clientY); });
-  glCanvas.addEventListener('pointermove', (e) => { if (dragging) moveTo(e.clientX, e.clientY); });
-  glCanvas.addEventListener('pointerup',   () => { dragging = false; });
-  glCanvas.addEventListener('pointercancel', () => { dragging = false; });
+  // Same mapping as fit.html: a swipe across the full screen width is one full turn. The
+  // Rotate slider follows along, since applyRotation() reads its value as the source of truth.
+  const turnTo = (x) => {
+    if (!machine) return;
+    let deg = rotBaseDeg + ((x - dragStartX) / window.innerWidth) * 360;
+    deg = ((deg % 360) + 360) % 360;
+    sRot.value = Math.round(deg);
+    vRot.textContent = sRot.value + '°';
+    applyRotation();
+    needsRender = true;
+  };
+  glCanvas.addEventListener('pointerdown', (e) => {
+    glCanvas.setPointerCapture(e.pointerId);
+    if (machine && hitsMachine(e.clientX, e.clientY)) {
+      dragMode = 'turn'; dragStartX = e.clientX; rotBaseDeg = +sRot.value;
+    } else {
+      dragMode = 'move'; moveTo(e.clientX, e.clientY);
+    }
+  });
+  glCanvas.addEventListener('pointermove', (e) => {
+    if (dragMode === 'move') moveTo(e.clientX, e.clientY);
+    else if (dragMode === 'turn') turnTo(e.clientX);
+  });
+  glCanvas.addEventListener('pointerup',     () => { dragMode = null; });
+  glCanvas.addEventListener('pointercancel', () => { dragMode = null; });
 
   // render loop (renders only when something changed)
-  const tick = () => { if (needsRender && renderer) { renderer.render(scene, camera); needsRender = false; } requestAnimationFrame(tick); };
+  const tick = () => {
+    if (needsRender && renderer) {
+      updateDimOcclusion();          // re-pick the best-facing H/W/D edges for this view
+      renderer.render(scene, camera);
+      needsRender = false;
+    }
+    requestAnimationFrame(tick);
+  };
   tick();
 
   window.addEventListener('resize', () => { resize(); drawPhoto(); needsRender = true; });
@@ -475,6 +677,8 @@ function drawPhoto(){
 sSize.addEventListener('input', () => {
   vSize.textContent = '≈' + Math.round(MODELS[modelKey].heightCm * (+sSize.value / 100)) + 'cm';
   if (machine) { machine.scale.setScalar(baseScale * (+sSize.value / 100)); needsRender = true; }
+  updateDimChip();
+  if (dimGroup) buildDims();   // rebuild so the H/W/D labels show the new numbers
 });
 sRot.addEventListener('input', () => {
   vRot.textContent = sRot.value + '°';
@@ -695,6 +899,15 @@ function makeAccordion(headEl, bodyEl){
 }
 makeAccordion(document.getElementById('accModelHead'), document.getElementById('accModelBody'));
 makeAccordion(document.getElementById('accStyleHead'), document.getElementById('accStyleBody'));
+
+dimBtn.addEventListener('click', () => {
+  dimsOn = !dimsOn;
+  if (dimGroup) dimGroup.visible = dimsOn;
+  dimchip.style.display = (dimsOn && stageEl.style.display === 'block') ? 'block' : 'none';
+  dimBtn.style.opacity = dimsOn ? '1' : '0.5';
+  dimBtn.setAttribute('aria-pressed', String(dimsOn));
+  needsRender = true;
+});
 
 // test hook: load a real room photo from a CORS-enabled URL (desktop verification)
 window.__loadUrlTest = async (url) => {
