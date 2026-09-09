@@ -196,6 +196,23 @@
     washer.rotation.y = rotationY + THREE.MathUtils.degToRad(MODELS[modelKey].yawOffsetDeg || 0);
   };
 
+  // yawOffsetDeg corrects the model's own geometry so its front aligns with the same "local
+  // +Z = front" convention for every model (see MODELS above) -- but rotationY=0 on top of
+  // that only actually faces the customer if world +Z happens to point back at wherever they
+  // are standing. In 8th Wall that depends on how the AR session's coordinate frame was
+  // established at start, which this app has no control over, so it cannot be assumed.
+  // Solving that properly: aim the model's front at the live AR camera position at the exact
+  // moment of placement, rather than trusting a fixed default. This runs for every model, not
+  // just TL -- FL was never reported as backwards, but that is easier explained by it looking
+  // like "a washing machine" from most angles than by the world-frame assumption actually
+  // holding, and this removes the assumption entirely rather than relying on luck.
+  const _camPos = new THREE.Vector3();
+  const faceCameraYaw = (pos) => {
+    if (!camera) return 0;
+    camera.getWorldPosition(_camPos);
+    return Math.atan2(_camPos.x - pos.x, _camPos.z - pos.z);
+  };
+
   // shared refs
   let scene, camera, renderer, surface, reticle, washer;
   let ready = false;         // model loaded
@@ -504,6 +521,7 @@
   const doPlace = () => {
     if (!ready || !floorPoint) return;
     washer.position.set(floorPoint.x, 0, floorPoint.z);
+    rotationY = faceCameraYaw(floorPoint);   // orient the front toward the user, not a guess
     applyRotation();
     washer.scale.setScalar(baseScale * sizeScale);
     washer.visible = true;
