@@ -18,7 +18,14 @@
 <style>
   :root{--brand:#e11d2a;--brand2:#ff4d57;--ink:#eef1f8;--muted:#aab0c8;--panel:#171a2b;--line:#2b3050}
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;overflow:hidden;background:#0f1220;color:var(--ink);
+  /* height:100% here means "100% of the layout viewport", which on a phone is not the same
+     as the actually-visible area once the browser's address bar is on screen -- so #stage
+     and .dock (below) could compute their combined height against a viewport taller than
+     what's really visible, pushing .dock off the bottom with no way to scroll to it (see
+     overflow:hidden). 100dvh (the *dynamic* viewport height, updates live as the address bar
+     shows/hides) is what actually matches the visible area; kept behind the 100% so a browser
+     old enough not to understand dvh just ignores that line and keeps the previous behaviour. */
+  html,body{margin:0;height:100%;height:100dvh;overflow:hidden;background:#0f1220;color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   /* #stage and .dock are the only in-flow (non position:fixed) direct children of body -- every
@@ -74,7 +81,12 @@
     z-index:15;color:#fff;font-size:12px;font-weight:700;background:rgba(0,0,0,.5);
     border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:6px 13px;display:none;white-space:nowrap}
 
+  /* Last-resort safety net: if the viewport-height fixes above ever fall short on some real
+     device, this makes the difference between "the Save button is unreachable" and "the
+     customer can scroll the dock a little to reach it" -- not a substitute for those fixes,
+     just insurance against the failure mode actually reported (a cropped, unreachable dock). */
   .dock{flex:none;display:none;flex-direction:column;gap:12px;
+    max-height:70vh;overflow-y:auto;
     padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 14px);
     background:var(--panel);border-top:1px solid var(--line)}
   .sliders{display:flex;flex-direction:column;gap:9px}
@@ -223,6 +235,18 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+// Belt-and-suspenders for the 100dvh fix in the <style> block above: sets body's height in
+// px directly from the visual viewport, which is the one thing guaranteed to match what's
+// actually visible on screen on every mobile browser, including in-app WebViews (the QR-code
+// flow) that may not fully support dvh yet. Runs before anything else touches layout.
+(function pinBodyHeightToVisibleViewport(){
+  const vv = window.visualViewport;
+  const apply = () => { document.body.style.height = (vv ? vv.height : window.innerHeight) + 'px'; };
+  apply();
+  if (vv) { vv.addEventListener('resize', apply); vv.addEventListener('scroll', apply); }
+  else { window.addEventListener('resize', apply); }
+})();
 
 // yawOffsetDeg corrects for the model's own local "forward" — each GLB was authored by a
 // different source with no shared convention, so a raw rotationY of 0 doesn't necessarily
