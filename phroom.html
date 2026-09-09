@@ -72,6 +72,42 @@
   .actions .btn{flex:1}
   .credit{position:fixed;left:0;right:0;bottom:0;text-align:center;color:rgba(255,255,255,.35);
     font-size:9px;z-index:5;padding-bottom:2px}
+
+  /* ---------- model chooser (first screen) + switcher menu — same pattern as fit.html ---------- */
+  #upload{display:none}   /* the chooser is the true landing screen now; startWith() reveals this */
+  /* safe center + scroll: on a short screen (small phone, or landscape) plain centring would
+     clip the logo off the top with no way to reach it. */
+  #chooser{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;
+    justify-content:safe center;gap:18px;padding:26px 22px;text-align:center;overflow-y:auto;
+    background:radial-gradient(900px 620px at 50% 0%,#241417,#0d0b0c 62%)}
+  #chooser .ch-brand{display:block;width:46px;height:46px;border-radius:11px;flex:none}
+  #chooser h1{color:#fff;font-size:22px;margin:0;font-weight:800;letter-spacing:-.01em}
+  #chooser .sub{color:rgba(255,255,255,.62);font-size:13.5px;margin:0;max-width:330px;line-height:1.5}
+  .choices{display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px}
+  .choice{appearance:none;cursor:pointer;text-align:left;display:flex;align-items:center;gap:14px;
+    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:16px;
+    padding:15px 17px;color:#fff;transition:border-color .15s,background .15s}
+  .choice:hover,.choice:focus-visible{background:rgba(255,255,255,.12);border-color:#e11d2a;outline:none}
+  .choice .ico{flex:none;width:42px;height:42px;border-radius:11px;background:rgba(225,29,42,.16);
+    border:1px solid rgba(225,29,42,.42);display:flex;align-items:center;justify-content:center;
+    font-size:12.5px;font-weight:800;letter-spacing:.02em;color:#ff8b91}
+  .choice .txt{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .choice .cn{display:block;font-weight:800;font-size:15.5px;line-height:1.2}
+  .choice .cd{display:block;color:rgba(255,255,255,.55);font-size:12px;line-height:1.35}
+
+  .ham{margin-left:auto;color:#fff;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.28);
+    border-radius:10px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+    pointer-events:auto;cursor:pointer;padding:0;flex:none}
+  .ham span{display:block;width:15px;height:1.8px;background:#fff;border-radius:2px;box-shadow:0 5px 0 #fff,0 -5px 0 #fff}
+
+  #menu{position:fixed;inset:0;z-index:30;display:none;background:rgba(0,0,0,.55);
+    -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+  #menu.open{display:block}
+  #menu .sheet{position:absolute;left:0;right:0;top:0;background:#141011;border-bottom:1px solid rgba(255,255,255,.12);
+    padding:calc(env(safe-area-inset-top,0px) + 58px) 16px 18px;display:flex;flex-direction:column;gap:9px}
+  #menu .mlabel{color:rgba(255,255,255,.5);font-size:11px;font-weight:700;letter-spacing:.11em;text-transform:uppercase}
+  #menu .choice[aria-checked="true"]{border-color:#e11d2a;background:rgba(225,29,42,.14)}
+  #menu .choice[aria-checked="true"] .cn::after{content:" ✓";color:#ff6069}
 </style>
 </head>
 <body>
@@ -80,12 +116,30 @@
     <a class="back" href="index.html" aria-label="Back">&larr;</a>
     <img class="brand" src="assets/IFB%20logo%201.png" alt="IFB" />
     <span class="ttl" id="topTtl">Add the washing machine to your photo</span>
+    <button class="ham" id="hamBtn" aria-label="Change machine model" aria-expanded="false"><span></span></button>
+  </div>
+
+  <!-- ===== First screen: pick the machine type, before anything else is shown. ===== -->
+  <section id="chooser">
+    <img class="ch-brand" src="assets/IFB%20logo%201.png" alt="IFB" />
+    <h1>Which machine?</h1>
+    <p class="sub">Pick the type you're considering — we'll drop it into your photo at its real size.</p>
+    <div class="choices" id="chooserList"></div>
+    <p class="sub" style="font-size:11.5px;opacity:.5">You can switch machines any time from the menu.</p>
+  </section>
+
+  <!-- ===== Switcher, opened from the hamburger ===== -->
+  <div id="menu">
+    <div class="sheet">
+      <span class="mlabel">Machine type</span>
+      <div class="choices" id="menuList" role="radiogroup" aria-label="Machine type"></div>
+    </div>
   </div>
 
   <!-- ===== UPLOAD SCREEN ===== -->
   <section id="upload">
     <h1>See it in your room — from a photo</h1>
-    <p>Take a photo of your space (or pick one), then drop the IFB washing machine into it and save the picture.</p>
+    <p id="introP">Take a photo of your space (or pick one), then drop the IFB washing machine into it and save the picture.</p>
     <label class="pick">📷 Take / choose a photo
       <input id="file" type="file" accept="image/*" capture="environment" />
     </label>
@@ -130,7 +184,25 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
-const MODEL_URL = 'models/IFB_WM.glb';
+// yawOffsetDeg corrects for the model's own local "forward" — each GLB was authored by a
+// different source with no shared convention, so a raw rotationY of 0 doesn't necessarily
+// face the same way across models. FL is the reference: its door faces the camera at 0°.
+// TL (Sketchfab) turned out to face 180° opposite — its control panel pointed away from the
+// camera at rotationY 0, i.e. the customer saw its back by default. Verified by rendering the
+// raw GLB from all four cardinal angles and reading off which one shows the control panel.
+const MODELS = {
+  FL:  { label: 'Front Loader', desc: 'Front-loading washing machine',
+         url: 'models/IFB_WM.glb', heightCm: 80, yawOffsetDeg: 0 },
+  TL:  { label: 'Top Loader',   desc: 'Top-loading washing machine',
+         url: 'models/washing_machine_top_load.glb', heightCm: 95, yawOffsetDeg: 180 },
+  WDR: { label: 'Washer Dryer', desc: 'Washer–dryer combo',
+         url: 'models/IFB_WM.glb', heightCm: 80, yawOffsetDeg: 0 },
+};
+const DEFAULT_MODEL = 'FL';
+let modelKey = DEFAULT_MODEL;
+let baseScale = 1;          // GLB units → real size for the current machine (set on load)
+let modelSize = null;       // current GLB's size in its own units
+
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 
 // DOM
@@ -143,6 +215,7 @@ const dockEl    = document.getElementById('dock');
 const hintEl    = document.getElementById('hint');
 const bg        = document.getElementById('bg');
 const glCanvas  = document.getElementById('gl');
+const introP    = document.getElementById('introP');
 const sSize=document.getElementById('sSize'), sRot=document.getElementById('sRot'), sAng=document.getElementById('sAng');
 const vSize=document.getElementById('vSize'), vRot=document.getElementById('vRot'), vAng=document.getElementById('vAng');
 
@@ -150,6 +223,16 @@ let photoBitmap = null;                 // chosen photo (EXIF-corrected)
 let floorMask = null;                   // AI floor mask {w,h,data} — constrains placement to the floor
 let renderer, scene, camera, machine, ground, raycaster, ndc, needsRender = true;
 let started = false;
+
+const machineLabel = () => MODELS[modelKey].label.toLowerCase();
+
+// Applies the Rotate slider plus the current model's yaw correction — every place that turns
+// the machine goes through this instead of setting machine.rotation.y directly, so a model
+// swap can never leave the wrong offset applied.
+const applyRotation = () => {
+  if (!machine) return;
+  machine.rotation.y = THREE.MathUtils.degToRad(+sRot.value) + THREE.MathUtils.degToRad(MODELS[modelKey].yawOffsetDeg || 0);
+};
 
 // ---------- upload flow ----------
 fileInput.addEventListener('change', async (e) => {
@@ -173,7 +256,63 @@ function showUpload(){
   dockEl.style.display = 'none';
   hintEl.style.display = 'none';
   uploadEl.style.display = 'flex';
-  document.getElementById('topTtl').textContent = 'Add the washing machine to your photo';
+  document.getElementById('topTtl').textContent = 'Add the ' + machineLabel() + ' to your photo';
+}
+
+// Free the previous machine's GPU memory before swapping in another one — without this,
+// switching types repeatedly would leak a full mesh + textures every time.
+function disposeModel(){
+  if (!machine) return;
+  scene.remove(machine);
+  machine.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap']) {
+          if (m[k]) m[k].dispose();
+        }
+        m.dispose();
+      }
+    }
+  });
+  machine = null; modelSize = null;
+}
+
+// Load one machine: base-anchored (feet on y=0), centred on x/z, wrapped in a group, and
+// scaled so it stands at its real-world height whatever units the GLB was authored in.
+// Keeps the current floor position across a switch, since (unlike fit.html's live AR scan)
+// there is no floor-tracking cost here to redo — just swap the mesh where it already sits.
+function loadModel(key){
+  const cfg = MODELS[key];
+  if (!cfg) return;
+  const keepPos = machine ? machine.position.clone() : new THREE.Vector3(0, 0, 0);
+  disposeModel();
+  hintEl.textContent = 'Loading the ' + cfg.label.toLowerCase() + '…';
+  hintEl.style.display = 'block';
+
+  new GLTFLoader().load(cfg.url, (gltf) => {
+    const g = new THREE.Group();
+    gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const c = box.getCenter(new THREE.Vector3());
+    modelSize = box.getSize(new THREE.Vector3());
+    // Each GLB is authored at a different scale, so normalise on height rather than trusting
+    // the file: this one stands at cfg.heightCm no matter how it was exported.
+    baseScale = modelSize.y > 0 ? (cfg.heightCm / 100) / modelSize.y : 1;
+    gltf.scene.position.x -= c.x;
+    gltf.scene.position.z -= c.z;
+    gltf.scene.position.y -= box.min.y;   // base on floor
+    g.add(gltf.scene);
+    machine = g;
+    machine.position.copy(keepPos);
+    machine.scale.setScalar(baseScale * (+sSize.value / 100));
+    scene.add(machine);
+    applyRotation();
+    vSize.textContent = '≈' + Math.round(cfg.heightCm * (+sSize.value / 100)) + 'cm';
+    hintEl.style.display = 'none';
+    needsRender = true;
+  }, undefined, () => { hintEl.textContent = 'Could not load the ' + cfg.label.toLowerCase() + ' — check connection.'; hintEl.style.display = 'block'; });
 }
 
 function startComposer(){
@@ -222,22 +361,7 @@ function initThree(){
   raycaster = new THREE.Raycaster();
   ndc = new THREE.Vector2();
 
-  new GLTFLoader().load(MODEL_URL, (gltf) => {
-    const g = new THREE.Group();
-    gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-    const box = new THREE.Box3().setFromObject(gltf.scene);
-    const c = box.getCenter(new THREE.Vector3());
-    gltf.scene.position.x -= c.x;
-    gltf.scene.position.z -= c.z;
-    gltf.scene.position.y -= box.min.y;   // base on floor
-    g.add(gltf.scene);
-    machine = g;
-    machine.rotation.y = THREE.MathUtils.degToRad(+sRot.value);
-    machine.scale.setScalar(+sSize.value / 100);
-    scene.add(machine);
-    needsRender = true;
-  }, undefined, () => { hintEl.textContent = 'Could not load the 3D model — check connection.'; hintEl.style.display='block'; });
-
+  loadModel(modelKey);
   updateCamera();
 
   // --- interaction: drag machine along the floor ---
@@ -297,12 +421,12 @@ function drawPhoto(){
 
 // ---------- sliders ----------
 sSize.addEventListener('input', () => {
-  vSize.textContent = '≈' + Math.round(85 * (+sSize.value / 100)) + 'cm';
-  if (machine) { machine.scale.setScalar(+sSize.value / 100); needsRender = true; }
+  vSize.textContent = '≈' + Math.round(MODELS[modelKey].heightCm * (+sSize.value / 100)) + 'cm';
+  if (machine) { machine.scale.setScalar(baseScale * (+sSize.value / 100)); needsRender = true; }
 });
 sRot.addEventListener('input', () => {
   vRot.textContent = sRot.value + '°';
-  if (machine) { machine.rotation.y = THREE.MathUtils.degToRad(+sRot.value); needsRender = true; }
+  applyRotation(); needsRender = true;
 });
 sAng.addEventListener('input', () => { vAng.textContent = sAng.value + '°'; updateCamera(); });
 
@@ -435,6 +559,76 @@ async function runAIPlace(){
   } finally { aiBtn.disabled = false; }
 }
 aiBtn.addEventListener('click', runAIPlace);
+
+// ---------- machine chooser + switcher ----------
+const chooser     = document.getElementById('chooser');
+const chooserList = document.getElementById('chooserList');
+const menu        = document.getElementById('menu');
+const menuList    = document.getElementById('menuList');
+const hamBtn      = document.getElementById('hamBtn');
+
+const optionMarkup = (k) =>
+  '<span class="ico">' + k + '</span>' +
+  '<span class="txt"><span class="cn">' + MODELS[k].label + '</span>' +
+  '<span class="cd">' + MODELS[k].desc + '</span></span>';
+
+function renderLists(){
+  chooserList.innerHTML = '';
+  menuList.innerHTML = '';
+  for (const k of Object.keys(MODELS)) {
+    const a = document.createElement('button');
+    a.type = 'button'; a.className = 'choice'; a.innerHTML = optionMarkup(k);
+    a.addEventListener('click', () => startWith(k));
+    chooserList.appendChild(a);
+
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'choice';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(k === modelKey));
+    b.innerHTML = optionMarkup(k);
+    b.addEventListener('click', () => selectModel(k));
+    menuList.appendChild(b);
+  }
+}
+
+function syncMenuChecks(){
+  [...menuList.children].forEach((el, i) => {
+    el.setAttribute('aria-checked', String(Object.keys(MODELS)[i] === modelKey));
+  });
+}
+
+function setMenu(open){
+  menu.classList.toggle('open', open);
+  hamBtn.setAttribute('aria-expanded', String(open));
+}
+
+// Switching mid-session swaps the mesh in place (see loadModel's keepPos) rather than
+// resetting the composition — there is no floor re-scan to redo here, unlike fit.html's AR
+// flow, so there is nothing to gain from throwing the current placement away.
+function selectModel(k){
+  setMenu(false);
+  if (k === modelKey) return;
+  modelKey = k;
+  syncMenuChecks();
+  document.getElementById('topTtl').textContent =
+    (stageEl.style.display === 'block') ? 'Position it · then save' : 'Add the ' + machineLabel() + ' to your photo';
+  if (started) loadModel(modelKey);
+}
+
+// First choice reveals the upload screen — the chooser is the true landing screen, so nobody
+// picks a photo before deciding what they're even placing in it.
+function startWith(k){
+  modelKey = k;
+  syncMenuChecks();
+  chooser.style.display = 'none';
+  introP.textContent = 'Take a photo of your space (or pick one), then drop the IFB ' +
+    machineLabel() + ' into it and save the picture.';
+  showUpload();
+}
+
+hamBtn.addEventListener('click', () => setMenu(!menu.classList.contains('open')));
+menu.addEventListener('click', (e) => { if (e.target === menu) setMenu(false); });
+renderLists();
 
 // test hook: load a real room photo from a CORS-enabled URL (desktop verification)
 window.__loadUrlTest = async (url) => {
