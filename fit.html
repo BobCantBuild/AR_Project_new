@@ -616,9 +616,34 @@
   placeBtn.addEventListener('click', doPlace);
   moveBtn.addEventListener('click', enterMove);
   rotBtn.addEventListener('click', () => { rotationY += Math.PI / 4; applyRotation(); });
-  // Reset = a full page reload (clean slate): restarts the camera, tracking and calibration,
-  // then you scan + place the machine again — exactly like reopening the page.
-  resetBtn.addEventListener('click', () => window.location.reload());
+  // Reset is an internal reset only -- it keeps the AR session and the machine the customer
+  // already chose in memory. A full page.reload() would also throw away that choice and send
+  // them back to the FL/TL/WDR screen, which is the whole thing being avoided here.
+  //
+  // It un-places the machine and re-arms the scan-gate exactly like a fresh load would --
+  // the customer has to physically move the phone and re-calibrate before Place unlocks
+  // again -- because a stale calibration from wherever they last stood is exactly the kind
+  // of thing "reset" is supposed to clear.
+  resetBtn.addEventListener('click', () => {
+    if (!washer) return;
+    washer.visible = false;
+    placed = false;
+    rotationY = 0;
+    sizeScale = DEFAULT_SIZE_SCALE;
+    applyRotation();
+
+    calibrated = false;
+    cmin = null; cmax = null; calibStart = 0;
+    placeBtn.disabled = true;
+    if (calibFill) calibFill.style.width = '0%';
+    if (calibWrap) calibWrap.style.display = 'block';
+
+    rowPlaced.style.display = 'none';
+    rowSize.style.display = 'none';
+    rowPlace.style.display = 'flex';
+    dimchip.style.display = 'none';
+    setStatus('Move to scan:  ↔ Left ⇄ Right   &   ↕ Up ⇅ Down');
+  });
   const stepSize = (d) => {
     sizeScale = Math.min(1.4, Math.max(0.35, +(sizeScale + d).toFixed(3)));
     applySize();
