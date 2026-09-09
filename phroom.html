@@ -88,9 +88,10 @@
     background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:16px;
     padding:15px 17px;color:#fff;transition:border-color .15s,background .15s}
   .choice:hover,.choice:focus-visible{background:rgba(255,255,255,.12);border-color:#e11d2a;outline:none}
-  .choice .ico{flex:none;width:42px;height:42px;border-radius:11px;background:rgba(225,29,42,.16);
-    border:1px solid rgba(225,29,42,.42);display:flex;align-items:center;justify-content:center;
-    font-size:12.5px;font-weight:800;letter-spacing:.02em;color:#ff8b91}
+  .choice .thumb{flex:none;width:66px;height:88px;border-radius:10px;background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;
+    padding:6px;overflow:hidden}
+  .choice .thumb img{width:100%;height:100%;object-fit:contain}
   .choice .txt{display:flex;flex-direction:column;gap:3px;min-width:0}
   .choice .cn{display:block;font-weight:800;font-size:15.5px;line-height:1.2}
   .choice .cd{display:block;color:rgba(255,255,255,.55);font-size:12px;line-height:1.35}
@@ -190,13 +191,21 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 // TL (Sketchfab) turned out to face 180° opposite — its control panel pointed away from the
 // camera at rotationY 0, i.e. the customer saw its back by default. Verified by rendering the
 // raw GLB from all four cardinal angles and reading off which one shows the control panel.
+// thumb: a real front-view render of each GLB, generated with the exact same "front" rule
+// as yawOffsetDeg above (rotationY 0 + the model's own offset, camera on +Z) -- so the
+// picture matches how the machine actually faces once placed in the photo.
+// ⚠️ WDR reuses FL's photo because it currently reuses FL's GLB too (see url below) -- once
+// there's a real washer-dryer model, re-render assets/thumb-washer-dryer.png from it.
 const MODELS = {
   FL:  { label: 'Front Loader', desc: 'Front-loading washing machine',
-         url: 'models/IFB_WM.glb', heightCm: 80, yawOffsetDeg: 0 },
+         url: 'models/IFB_WM.glb', heightCm: 80, yawOffsetDeg: 0,
+         thumb: 'assets/thumb-front-loader.png' },
   TL:  { label: 'Top Loader',   desc: 'Top-loading washing machine',
-         url: 'models/washing_machine_top_load.glb', heightCm: 95, yawOffsetDeg: 180 },
+         url: 'models/washing_machine_top_load.glb', heightCm: 95, yawOffsetDeg: 180,
+         thumb: 'assets/thumb-top-loader.png' },
   WDR: { label: 'Washer Dryer', desc: 'Washer–dryer combo',
-         url: 'models/IFB_WM.glb', heightCm: 80, yawOffsetDeg: 0 },
+         url: 'models/IFB_WM.glb', heightCm: 80, yawOffsetDeg: 0,
+         thumb: 'assets/thumb-washer-dryer.png' },
 };
 const DEFAULT_MODEL = 'FL';
 let modelKey = DEFAULT_MODEL;
@@ -568,7 +577,7 @@ const menuList    = document.getElementById('menuList');
 const hamBtn      = document.getElementById('hamBtn');
 
 const optionMarkup = (k) =>
-  '<span class="ico">' + k + '</span>' +
+  '<span class="thumb"><img src="' + MODELS[k].thumb + '" alt="' + MODELS[k].label + '" loading="lazy"></span>' +
   '<span class="txt"><span class="cn">' + MODELS[k].label + '</span>' +
   '<span class="cd">' + MODELS[k].desc + '</span></span>';
 
