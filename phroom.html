@@ -21,6 +21,12 @@
   html,body{margin:0;height:100%;overflow:hidden;background:#0f1220;color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  /* #stage and .dock are the only in-flow (non position:fixed) direct children of body -- every
+     other screen (.top, #chooser, #menu, #upload, .hint, .credit) is its own fixed overlay and
+     is untouched by this: fixed/absolute elements sit outside normal flow, so a flex container
+     has no effect on them. This column is what keeps the dock from sitting on top of the photo:
+     #stage takes whatever height is left over, .dock takes its own natural height below it. */
+  body{display:flex;flex-direction:column}
 
   /* ---------- top bar ---------- */
   .top{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:10px;
@@ -52,17 +58,21 @@
   .steps{color:var(--muted);font-size:12.5px;line-height:1.8;text-align:left}
   .steps b{color:var(--ink)}
 
-  /* ---------- composer ---------- */
-  #stage{position:fixed;inset:0;z-index:5;display:none}
+  /* ---------- composer ----------
+     #stage used to be position:fixed;inset:0 (full viewport) with .dock floating on top of it
+     as a bottom overlay -- so the AI/Change photo/Save controls sat directly over the photo.
+     #stage is now a normal flex item that only gets the space .dock doesn't take, so the photo
+     frame and the controls below it never overlap. */
+  #stage{position:relative;flex:1;min-height:0;z-index:5;display:none}
   #bg,#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
   #gl{touch-action:none}
   .hint{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 52px);transform:translateX(-50%);
     z-index:16;color:#fff;font-size:12px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);
     border-radius:999px;padding:6px 12px;display:none;white-space:nowrap}
 
-  .dock{position:fixed;left:0;right:0;bottom:0;z-index:16;display:none;flex-direction:column;gap:12px;
+  .dock{flex:none;display:none;flex-direction:column;gap:12px;
     padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 14px);
-    background:linear-gradient(0deg,rgba(0,0,0,.72),rgba(0,0,0,.15) 70%,transparent);backdrop-filter:blur(4px)}
+    background:var(--panel);border-top:1px solid var(--line)}
   .sliders{display:flex;flex-direction:column;gap:9px}
   .slider{display:flex;align-items:center;gap:12px;color:#fff;font-size:12px}
   .slider label{width:52px;opacity:.85;flex:none}
@@ -244,6 +254,10 @@ const confirmRow= document.getElementById('confirmRow');
 const uploadEl  = document.getElementById('upload');
 const stageEl   = document.getElementById('stage');
 const dockEl    = document.getElementById('dock');
+// #stage no longer spans the full viewport now that .dock sits below it in normal flow, so
+// anything that used to treat window.innerHeight as "the photo frame's height" needs this
+// instead. Width is untouched -- the dock is full-width, so it only ever eats into height.
+const stageH = () => stageEl.clientHeight || window.innerHeight;
 const hintEl    = document.getElementById('hint');
 const bg        = document.getElementById('bg');
 const glCanvas  = document.getElementById('gl');
@@ -398,7 +412,7 @@ function initThree(){
 
   // --- interaction: drag machine along the floor ---
   let dragging = false;
-  const toNDC = (x, y) => { ndc.set((x / window.innerWidth) * 2 - 1, -(y / window.innerHeight) * 2 + 1); };
+  const toNDC = (x, y) => { ndc.set((x / window.innerWidth) * 2 - 1, -(y / stageH()) * 2 + 1); };
   const moveTo = (x, y) => {
     if (!machine) return;
     let sx = x, sy = y;
@@ -406,7 +420,7 @@ function initThree(){
       const im = screenToImage(x, y);
       if (!isFloorAt(im.fx, im.fy)) { const nf = nearestFloor(im.fx, im.fy); const s = imageToScreen(nf.fx, nf.fy); sx = s.x; sy = s.y; }
     }
-    ndc.set((sx / window.innerWidth) * 2 - 1, -((sy / window.innerHeight) * 2 - 1));
+    ndc.set((sx / window.innerWidth) * 2 - 1, -((sy / stageH()) * 2 - 1));
     raycaster.setFromCamera(ndc, camera);
     const hit = raycaster.intersectObject(ground)[0];
     if (hit) { machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
@@ -421,6 +435,12 @@ function initThree(){
   tick();
 
   window.addEventListener('resize', () => { resize(); drawPhoto(); needsRender = true; });
+
+  // The dock's height isn't fixed -- the AI status line changes length several times during
+  // runAIPlace() and can wrap differently, which changes how much of the column .dock takes
+  // and therefore how tall #stage actually is. A plain resize listener only fires for the
+  // window itself, so it would miss that; watching #stage directly catches every cause.
+  new ResizeObserver(() => { resize(); drawPhoto(); needsRender = true; }).observe(stageEl);
 }
 
 function updateCamera(){
@@ -433,7 +453,7 @@ function updateCamera(){
 }
 
 function resize(){
-  const w = window.innerWidth, h = window.innerHeight;
+  const w = window.innerWidth, h = stageH();
   if (renderer) { renderer.setSize(w, h, false); glCanvas.width = w * DPR; glCanvas.height = h * DPR; renderer.setSize(w, h, false); }
   glCanvas.width = w * DPR; glCanvas.height = h * DPR;
   if (camera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
@@ -512,7 +532,7 @@ function photoInputURL(max = 1024){
 
 // The photo is drawn "cover" over the viewport → convert between screen px and photo-normalised coords
 function coverParams(){
-  const iw = photoBitmap.width, ih = photoBitmap.height, W = window.innerWidth, H = window.innerHeight;
+  const iw = photoBitmap.width, ih = photoBitmap.height, W = window.innerWidth, H = stageH();
   const s = Math.max(W / iw, H / ih);
   return { iw, ih, s, ox: (W - iw * s) / 2, oy: (H - ih * s) / 2 };
 }
@@ -556,7 +576,7 @@ function autoFloorPoint(){                            // floor cell nearest cent
 }
 function placeAtImageCoord(fx, fy){                   // image-normalised → screen → ground raycast
   const sc = imageToScreen(fx, fy);
-  ndc.set((sc.x/window.innerWidth)*2-1, -((sc.y/window.innerHeight)*2-1));
+  ndc.set((sc.x/window.innerWidth)*2-1, -((sc.y/stageH())*2-1));
   raycaster.setFromCamera(ndc, camera);
   const hit = raycaster.intersectObject(ground)[0];
   if (hit && machine){ machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
