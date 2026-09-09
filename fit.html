@@ -206,9 +206,16 @@
   // just TL -- FL was never reported as backwards, but that is easier explained by it looking
   // like "a washing machine" from most angles than by the world-frame assumption actually
   // holding, and this removes the assumption entirely rather than relying on luck.
-  const _camPos = new THREE.Vector3();
+  // _camPos is declared here but only assigned a THREE.Vector3 inside buildScene(), same as
+  // _wp/_cam/_dir below -- THREE is a global set up by an earlier <script type="module">,
+  // which executes asynchronously (deferred, like every module script) relative to this
+  // plain <script>, so it is not guaranteed ready yet at this point in parsing. `new
+  // THREE.Vector3()` right here, at top level, previously threw "THREE is not defined" and
+  // aborted this entire script before it reached renderLists() -- which is why the chooser
+  // rendered its heading but never any of the three machine options.
+  let _camPos;
   const faceCameraYaw = (pos) => {
-    if (!camera) return 0;
+    if (!camera || !_camPos) return 0;
     camera.getWorldPosition(_camPos);
     return Math.atan2(_camPos.x - pos.x, _camPos.z - pos.z);
   };
@@ -261,6 +268,7 @@
     raycaster = new THREE.Raycaster();
     centerNDC = new THREE.Vector2(0, 0);
     _wp = new THREE.Vector3(); _cam = new THREE.Vector3(); _dir = new THREE.Vector3();
+    _camPos = new THREE.Vector3();
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
