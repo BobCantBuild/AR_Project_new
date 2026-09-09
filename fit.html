@@ -169,17 +169,32 @@
   // depth, the H×W×D labels) is measured off the GLB and scaled to match, so the numbers
   // always describe the machine actually on screen rather than a spec it might not match.
   // ⚠️ These heights are estimates — replace each with the exact IFB datasheet height.
+  // yawOffsetDeg corrects for the model's own local "forward" — each GLB was authored by a
+  // different source with no shared convention, so a raw rotationY of 0 doesn't necessarily
+  // face the same way across models. FL is the reference: its door faces the camera at 0°.
+  // TL (Sketchfab) turned out to face 180° opposite — its control panel pointed away from the
+  // camera at rotationY 0, i.e. the customer saw its back on first placement. Verified by
+  // rendering the raw GLB from all four cardinal angles and reading off which one shows the
+  // control panel.
   const MODELS = {
     FL:  { label: 'Front Loader', desc: 'Front-loading washing machine',
-           url: 'models/IFB_WM.glb', heightCm: 80 },
+           url: 'models/IFB_WM.glb', heightCm: 80, yawOffsetDeg: 0 },
     TL:  { label: 'Top Loader',   desc: 'Top-loading washing machine',
-           url: 'models/washing_machine_top_load.glb', heightCm: 95 },
+           url: 'models/washing_machine_top_load.glb', heightCm: 95, yawOffsetDeg: 180 },
     WDR: { label: 'Washer Dryer', desc: 'Washer–dryer combo',
-           url: 'models/IFB_WM.glb', heightCm: 80 },
+           url: 'models/IFB_WM.glb', heightCm: 80, yawOffsetDeg: 0 },
   };
   const DEFAULT_MODEL = 'FL';
   let modelKey = DEFAULT_MODEL;
   let baseScale = 1;          // GLB units → real size for the current machine (set on load)
+
+  // Applies rotationY plus the current model's yaw correction — every place that turns the
+  // machine goes through this instead of setting washer.rotation.y directly, so a model swap
+  // can never leave the wrong offset applied.
+  const applyRotation = () => {
+    if (!washer) return;
+    washer.rotation.y = rotationY + THREE.MathUtils.degToRad(MODELS[modelKey].yawOffsetDeg || 0);
+  };
 
   // shared refs
   let scene, camera, renderer, surface, reticle, washer;
@@ -489,7 +504,7 @@
   const doPlace = () => {
     if (!ready || !floorPoint) return;
     washer.position.set(floorPoint.x, 0, floorPoint.z);
-    washer.rotation.y = rotationY;
+    applyRotation();
     washer.scale.setScalar(baseScale * sizeScale);
     washer.visible = true;
     placed = true;
@@ -523,7 +538,7 @@
     e.preventDefault();
     const dx = e.touches[0].clientX - dragX;
     rotationY = dragBase + (dx / window.innerWidth) * Math.PI * 2;
-    if (washer) washer.rotation.y = rotationY;
+    applyRotation();
   };
   const onCanvasEnd = () => { dragX = null; };
 
@@ -565,7 +580,7 @@
   // ---- buttons ----
   placeBtn.addEventListener('click', doPlace);
   moveBtn.addEventListener('click', enterMove);
-  rotBtn.addEventListener('click', () => { rotationY += Math.PI / 4; if (washer) washer.rotation.y = rotationY; });
+  rotBtn.addEventListener('click', () => { rotationY += Math.PI / 4; applyRotation(); });
   // Reset = a full page reload (clean slate): restarts the camera, tracking and calibration,
   // then you scan + place the machine again — exactly like reopening the page.
   resetBtn.addEventListener('click', () => window.location.reload());
