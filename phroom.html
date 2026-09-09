@@ -687,13 +687,28 @@ function resize(){
 }
 
 // draw the photo into #bg with "cover" fit
+// Draws the whole photo, never cropped -- CONTAIN fit, not COVER. Most phone photos are tall
+// (portrait), and the composer frame is now shorter than it used to be (the dock lives below
+// it, not on top of it -- see the fix above this one), so a squarer/wider frame than the
+// photo's own aspect ratio. COVER fills the frame by cropping whatever overflows; on a
+// portrait photo in a squarer frame that meant losing real content off the top and bottom.
+// Fills the leftover space with a blurred, darkened copy of the same photo rather than blank
+// bars -- same pattern as Instagram Stories / Spotify's blurred album-art backdrop.
 function drawPhoto(){
   if (!photoBitmap) return;
   const ctx = bg.getContext('2d');
   const cw = bg.width, ch = bg.height, iw = photoBitmap.width, ih = photoBitmap.height;
-  const s = Math.max(cw / iw, ch / ih);
-  const dw = iw * s, dh = ih * s;
   ctx.clearRect(0, 0, cw, ch);
+
+  const coverS = Math.max(cw / iw, ch / ih) * 1.15;   // +15% headroom so the blur never reveals a bare edge
+  const cdw = iw * coverS, cdh = ih * coverS;
+  ctx.save();
+  ctx.filter = 'blur(24px) brightness(0.55)';
+  ctx.drawImage(photoBitmap, (cw - cdw) / 2, (ch - cdh) / 2, cdw, cdh);
+  ctx.restore();
+
+  const s = Math.min(cw / iw, ch / ih);               // CONTAIN -- the whole photo, always
+  const dw = iw * s, dh = ih * s;
   ctx.drawImage(photoBitmap, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
 }
 
@@ -758,10 +773,14 @@ function photoInputURL(max = 1024){
   return c.toDataURL('image/jpeg', 0.9);
 }
 
-// The photo is drawn "cover" over the viewport → convert between screen px and photo-normalised coords
+// Converts between screen px and photo-normalised coords. Must use the same fit as
+// drawPhoto()'s sharp foreground layer (CONTAIN, not COVER) --
+// this is what converts between screen pixels and photo-normalised coordinates for the AI
+// floor placement and drag-to-move snapping, so if it disagreed with what's actually drawn,
+// a tap would land on a different part of the photo than the one the customer is looking at.
 function coverParams(){
   const iw = photoBitmap.width, ih = photoBitmap.height, W = window.innerWidth, H = stageH();
-  const s = Math.max(W / iw, H / ih);
+  const s = Math.min(W / iw, H / ih);
   return { iw, ih, s, ox: (W - iw * s) / 2, oy: (H - ih * s) / 2 };
 }
 function screenToImage(x, y){ const p = coverParams(); return { fx: ((x - p.ox) / p.s) / p.iw, fy: ((y - p.oy) / p.s) / p.ih }; }
