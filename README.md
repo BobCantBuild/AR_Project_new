@@ -13,7 +13,7 @@ pattern Shopify and Amazon use (GLB for web/Android, auto-USDZ for iPhone Quick 
 index.html            Product 3D/AR viewer (model-viewer, pinned 4.3.1)
 fit.html               "Will it fit?" live AR — 8th Wall SLAM, place at real scale
 photo.html             "Add to a photo" — drop the machine into a still photo, save/share
-models/IFB_WM.glb      The 3D washing-machine model (real scale: 85×59×62 cm)
+models/IFB_WM1.glb      The 3D washing-machine model (real scale: 85×59×62 cm)
 assets/qr.png          QR code to the live site (shown to desktop users)
 .nojekyll              Tells GitHub Pages to serve files as-is
 AR-Washing-Machine-Viewer-Plan.pdf   Project plan & tech guide
@@ -58,11 +58,11 @@ git push
 ```
 
 ## Swapping the model
-Replace `models/IFB_WM.glb` with your own GLB (keep the same filename, or update `src` in
+Replace `models/IFB_WM1.glb` with your own GLB (keep the same filename, or update `src` in
 `index.html`). For accurate AR size, author the GLB in **metres** (1 unit = 1 m) with its
 **origin at the base-centre** so it rests flat on the floor. Keep it compressed (< ~5–10 MB).
 
 ## iPhone note
 iPhone AR uses Apple Quick Look; `<model-viewer>` generates the USDZ automatically from the
-GLB. For best iPhone fidelity you can later add a hand-authored `IFB_WM.usdz` and point
+GLB. For best iPhone fidelity you can later add a hand-authored `IFB_WM1.usdz` and point
 `ios-src` at it in `index.html`.
