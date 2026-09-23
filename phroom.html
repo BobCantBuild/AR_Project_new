@@ -316,6 +316,13 @@ let floorMask = null;                   // AI floor mask {w,h,data} — constrai
 // anywhere" would have a gap right at the start, before the AI has had a chance to look.
 let floorLocking = false;
 let pendingAutoFloor = false;           // set by startComposer() when loadModel() is still loading
+// Snapping only checked the ONE point the machine's base sits on -- fine for a point, but the
+// machine has real width and depth, and near the edge of a floor mask (next to a chair, a rug
+// edge, a wall) that single point can be on the floor while the box drawn around it visibly
+// spills onto whatever's next to it. lastValidX/Z is the last position where the FULL footprint
+// (see footprintOnFloor()) was confirmed clear, so a drag that would spill can slide back toward
+// it instead of jumping there anyway.
+let lastValidX = 0, lastValidZ = 0;
 let renderer, scene, camera, machine, ground, raycaster, ndc, needsRender = true;
 let started = false;
 
@@ -422,7 +429,18 @@ function loadModel(key){
     needsRender = true;
     // The very first load for a fresh photo: the machine model just became available, so the
     // auto floor-detect that startComposer() asked for (and was waiting on) can run now.
-    if (pendingAutoFloor) { pendingAutoFloor = false; runAIPlace(); }
+    if (pendingAutoFloor) {
+      pendingAutoFloor = false; runAIPlace();
+    } else if (floorMask && !footprintOnFloor(machine.position.x, machine.position.z)) {
+      // Not a fresh photo -- a machine-type switch that kept the old position (see keepPos
+      // above). A different model has a different width × depth, so a spot that fully fit the
+      // last machine can spill this one onto furniture next to it. Refit it on the same floor
+      // rather than leaving it overlapping something that isn't the floor.
+      const sc0 = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z));
+      const im0 = screenToImage(sc0.x, sc0.y);
+      const fitted = nearestValidFootprint(im0.fx, im0.fy);
+      if (fitted) placeAtImageCoord(fitted.fx, fitted.fy);
+    }
   }, undefined, () => {
     hintEl.textContent = 'Could not load the ' + cfg.label.toLowerCase() + ' — check connection.'; hintEl.style.display = 'block';
     pendingAutoFloor = false; floorLocking = false;   // nothing to detect on if the model itself never arrived
@@ -642,13 +660,14 @@ function initThree(){
     return raycaster.intersectObject(occluder, false).length > 0;
   };
   // Places the machine at the exact screen point, no floor snapping -- the manual-override half
-  // of placement. moveTo() (below) is just this plus the floor-mask snap layered on top.
+  // of placement (long press). Still records a valid anchor when the result happens to clear
+  // the floor check, so a plain drag right after has something sane to slide back from.
   const placeRaw = (x, y) => {
     if (!machine) return;
-    ndc.set((x / window.innerWidth) * 2 - 1, -((y / stageH()) * 2 - 1));
-    raycaster.setFromCamera(ndc, camera);
-    const hit = raycaster.intersectObject(ground)[0];
-    if (hit) { machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
+    const p = groundHit(x, y);
+    if (!p) return;
+    machine.position.set(p.x, 0, p.z); needsRender = true;
+    if (footprintOnFloor(p.x, p.z)) { lastValidX = p.x; lastValidZ = p.z; }
   };
   const moveTo = (x, y) => {
     if (!machine) return;
@@ -657,7 +676,24 @@ function initThree(){
       const im = screenToImage(x, y);
       if (!isFloorAt(im.fx, im.fy)) { const nf = nearestFloor(im.fx, im.fy); const s = imageToScreen(nf.fx, nf.fy); sx = s.x; sy = s.y; }
     }
-    placeRaw(sx, sy);
+    const p = groundHit(sx, sy);
+    if (!p) return;
+    let { x: tx, z: tz } = p;
+    if (floorMask && !footprintOnFloor(tx, tz)) {
+      // The anchor point itself is on the floor, but the machine's real width × depth from here
+      // would spill onto a chair/desk/wall -- slide back toward the last spot that was fully
+      // clear, stopping as soon as the whole footprint fits, instead of dropping it half onto
+      // furniture just because its one anchor point happened to land on carpet.
+      const STEPS = 14;
+      let best = { x: lastValidX, z: lastValidZ };
+      for (let i = 1; i <= STEPS; i++) {
+        const t = i / STEPS, cx = lastValidX + (tx - lastValidX) * t, cz = lastValidZ + (tz - lastValidZ) * t;
+        if (footprintOnFloor(cx, cz)) best = { x: cx, z: cz }; else break;
+      }
+      tx = best.x; tz = best.z;
+    }
+    machine.position.set(tx, 0, tz); needsRender = true;
+    if (!floorMask || footprintOnFloor(tx, tz)) { lastValidX = tx; lastValidZ = tz; }
   };
   const clearLongPress = () => { clearTimeout(longPressTimer); longPressTimer = null; };
   // Same mapping as fit.html: a swipe across the full screen width is one full turn. The
@@ -843,6 +879,60 @@ function coverParams(){
 function screenToImage(x, y){ const p = coverParams(); return { fx: ((x - p.ox) / p.s) / p.iw, fy: ((y - p.oy) / p.s) / p.ih }; }
 function imageToScreen(fx, fy){ const p = coverParams(); return { x: fx * p.iw * p.s + p.ox, y: fy * p.ih * p.s + p.oy }; }
 
+// Screen point → world (x,z) on the invisible ground plane. Shared by every placement path,
+// top-level (not just inside initThree()) so runAIPlace()/selectModel() can use it too.
+function groundHit(x, y){
+  ndc.set((x / window.innerWidth) * 2 - 1, -((y / stageH()) * 2 - 1));
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObject(ground)[0];
+  return hit ? { x: hit.point.x, z: hit.point.z } : null;
+}
+// World point → screen point -- the inverse of groundHit's NDC math, for going the other way:
+// given a corner of the machine's footprint, where does it land on screen (and so in the photo)?
+function worldToScreen(v){
+  camera.updateMatrixWorld();
+  const p = v.clone().project(camera);
+  return { x: (p.x + 1) / 2 * window.innerWidth, y: (1 - p.y) / 2 * stageH() };
+}
+// The four corners of the machine's actual footprint (its real width × depth, at its current
+// size and turn) around a candidate centre point -- as opposed to just that one centre point.
+function footprintCorners(cx, cz){
+  if (!modelSize || !machine) return null;
+  const s = baseScale * (+sSize.value / 100);
+  const hw = (modelSize.x * s) / 2, hd = (modelSize.z * s) / 2;
+  const rot = machine.rotation.y, cos = Math.cos(rot), sin = Math.sin(rot);
+  return [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([lx, lz]) =>
+    new THREE.Vector3(cx + lx * cos - lz * sin, 0, cz + lx * sin + lz * cos));
+}
+// Is the machine's WHOLE footprint on the floor from here, not just the point it's anchored to?
+// Each corner is projected back to a screen point and checked against the floor mask the same
+// way a drag point is -- so "on the floor" means the same thing everywhere it's asked.
+function footprintOnFloor(cx, cz){
+  if (!floorMask) return true;
+  const corners = footprintCorners(cx, cz);
+  if (!corners) return true;
+  return corners.every((c) => { const s = worldToScreen(c); const im = screenToImage(s.x, s.y); return isFloorAt(im.fx, im.fy); });
+}
+// Nearest floor cell to (fx,fy) whose full footprint -- not just that one cell -- clears the
+// floor mask. A one-time grid scan (used only for the initial AI placement and a model switch,
+// never per drag frame), so the per-cell cost of the footprint check is fine. Returns null if
+// nothing on the whole detected floor is big enough to fit the machine at its current size.
+function nearestValidFootprint(fx, fy){
+  if (!floorMask || !modelSize) return null;
+  const { w, h, data } = floorMask;
+  const cx = Math.min(w-1, Math.max(0, (fx*w)|0)), cy = Math.min(h-1, Math.max(0, (fy*h)|0));
+  let bx = -1, by = -1, bd = Infinity;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    if (!data[y*w+x]) continue;
+    const d = (x-cx)*(x-cx)+(y-cy)*(y-cy);
+    if (d >= bd) continue;
+    const sc = imageToScreen((x+0.5)/w, (y+0.5)/h);
+    const p = groundHit(sc.x, sc.y);
+    if (p && footprintOnFloor(p.x, p.z)) { bd = d; bx = x; by = y; }
+  }
+  return bx < 0 ? null : { fx: (bx+0.5)/w, fy: (by+0.5)/h };
+}
+
 // Build a downsampled floor mask (union of floor/rug/carpet) from the segmentation result
 function buildFloorMask(out){
   const src = out.filter(o => /\b(floor|rug|carpet|mat)\b/i.test(o.label) && o.mask);
@@ -879,11 +969,12 @@ function autoFloorPoint(){                            // floor cell nearest cent
   return bx < 0 ? { fx: 0.5, fy: 0.72 } : { fx: (bx+0.5)/w, fy: (by+0.5)/h };
 }
 function placeAtImageCoord(fx, fy){                   // image-normalised → screen → ground raycast
+  if (!machine) return;
   const sc = imageToScreen(fx, fy);
-  ndc.set((sc.x/window.innerWidth)*2-1, -((sc.y/stageH())*2-1));
-  raycaster.setFromCamera(ndc, camera);
-  const hit = raycaster.intersectObject(ground)[0];
-  if (hit && machine){ machine.position.set(hit.point.x, 0, hit.point.z); needsRender = true; }
+  const p = groundHit(sc.x, sc.y);
+  if (!p) return;
+  machine.position.set(p.x, 0, p.z); needsRender = true;
+  if (footprintOnFloor(p.x, p.z)) { lastValidX = p.x; lastValidZ = p.z; }
 }
 function matchLighting(){
   try {
@@ -907,9 +998,24 @@ async function runAIPlace(){
     if (!floorMask){ aiSet('No clear floor found — place it with drag + the sliders.'); return; }
     const ang = angleFromFloor(); sAng.value = ang; vAng.textContent = ang + '°'; updateCamera();
     matchLighting();
-    const p = autoFloorPoint(); placeAtImageCoord(p.fx, p.fy);
+    let p = autoFloorPoint();
+    placeAtImageCoord(p.fx, p.fy);
     const objs = [...new Set(out.map(o => o.label))].slice(0, 7).join(', ');
-    aiSet('Placed on the floor ✓ — it now snaps to the floor when you drag. (Detected: ' + objs + ')');
+    // autoFloorPoint() only picked a single centre point -- re-check with the machine's real
+    // width × depth (now that the model, and so modelSize, is loaded) and, if that spot would
+    // actually spill it onto whatever's next to the floor, search for the nearest spot on this
+    // floor where the whole footprint really does fit.
+    if (!footprintOnFloor(machine.position.x, machine.position.z)) {
+      const fitted = nearestValidFootprint(p.fx, p.fy);
+      if (fitted) {
+        placeAtImageCoord(fitted.fx, fitted.fy);
+        aiSet('Placed on the floor ✓ — it now snaps to the floor when you drag. (Detected: ' + objs + ')');
+      } else {
+        aiSet('Floor found, but it may be too small for this machine here — long-press to place it manually. (Detected: ' + objs + ')');
+      }
+    } else {
+      aiSet('Placed on the floor ✓ — it now snaps to the floor when you drag. (Detected: ' + objs + ')');
+    }
   } catch (e) {
     aiSet('AI unavailable here — drag + sliders still place it.');
   } finally {
