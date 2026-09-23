@@ -71,7 +71,11 @@
      #stage is now a normal flex item that only gets the space .dock doesn't take, so the photo
      frame and the controls below it never overlap. */
   #stage{position:relative;flex:1;min-height:0;z-index:5;display:none}
-  #bg,#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #bg,#gl,#occlude{position:absolute;inset:0;width:100%;height:100%;display:block}
+  /* Paints above #gl (later in the DOM) so real furniture the AI found shows in front of the
+     CG machine wherever they overlap -- see drawOcclusion(). Never intercepts touch/drag; #gl
+     underneath still owns all of that. */
+  #occlude{pointer-events:none}
   #gl{touch-action:none}
   .hint{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 52px);transform:translateX(-50%);
     z-index:16;color:#fff;font-size:12px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);
@@ -214,6 +218,7 @@
   <section id="stage">
     <canvas id="bg"></canvas>
     <canvas id="gl"></canvas>
+    <canvas id="occlude"></canvas>
   </section>
   <div class="hint" id="hint">Drag to move it on the floor · long-press to place it exactly · drag the machine to turn it</div>
   <div class="dimchip" id="dimchip">IFB washing machine · 85 × 59 × 62 cm</div>
@@ -306,6 +311,7 @@ const stageH = () => stageEl.clientHeight || window.innerHeight;
 const hintEl    = document.getElementById('hint');
 const bg        = document.getElementById('bg');
 const glCanvas  = document.getElementById('gl');
+const occludeCanvas = document.getElementById('occlude');
 const introP    = document.getElementById('introP');
 const sSize=document.getElementById('sSize'), sRot=document.getElementById('sRot'), sAng=document.getElementById('sAng');
 const vSize=document.getElementById('vSize'), vRot=document.getElementById('vRot'), vAng=document.getElementById('vAng');
@@ -314,6 +320,15 @@ const dimBtn  = document.getElementById('dimBtn');
 
 let photoBitmap = null;                 // chosen photo (EXIF-corrected)
 let floorMask = null;                   // AI floor mask {w,h,data} — constrains placement to the floor
+// The segmentation pass already returns a per-pixel mask for every object it finds, not just
+// the floor -- chair, desk, cabinet, sofa, person, etc. We were only ever using the floor ones.
+// occluderMaskCanvas is those other masks' union, at the photo's own resolution, cut out of the
+// photo itself -- see buildOccluderMaskCanvas()/drawOcclusion(). Drawn into #occlude, which
+// paints above the machine's canvas, so real furniture the AI found shows in front of the CG
+// machine wherever they happen to overlap, instead of the machine always drawing on top of
+// everything regardless of which is actually nearer the camera.
+let occluderMaskCanvas = null;
+const OCCLUDER_RE = /\b(chair|table|desk|cabinet|sofa|couch|sideboard|ottoman|stool|bed|wardrobe|shelf|shelving|bookcase|plant|person|box|cushion|pillow|lamp|television|screen|monitor|refrigerator|counter|column|armchair|bench|drawer|sink|toilet|bathtub)\b/i;
 // Floor detection now runs automatically (see startComposer()) instead of waiting for a button
 // tap, so there's a brief window on a fresh photo where floorMask isn't ready yet. floorLocking
 // blocks the move-the-machine drag during that window -- otherwise "only the floor, never
@@ -595,6 +610,7 @@ function startComposer(){
   // the customer should never have to find and tap the AI button just to get floor-only
   // placement; it's the default now, with the button left for a manual retry.
   floorMask = null;
+  occluderMaskCanvas = null;   // this photo's furniture cut-outs no longer apply to the new one
   floorLocking = true;
   if (!started) { initThree(); pendingAutoFloor = true; }   // loadModel() will call runAIPlace() once the model (and so `machine`) exists
   else runAIPlace();                                        // model's already loaded -- detect this photo's floor right away
@@ -780,6 +796,7 @@ function resize(){
   glCanvas.width = w * DPR; glCanvas.height = h * DPR;
   if (camera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
   bg.width = w * DPR; bg.height = h * DPR;
+  occludeCanvas.width = w * DPR; occludeCanvas.height = h * DPR;
 }
 
 // draw the photo into #bg with "cover" fit
@@ -806,6 +823,48 @@ function drawPhoto(){
   const s = Math.min(cw / iw, ch / ih);               // CONTAIN -- the whole photo, always
   const dw = iw * s, dh = ih * s;
   ctx.drawImage(photoBitmap, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+  drawOcclusion();   // keep #occlude in lock-step with #bg -- same CONTAIN placement, every call site
+}
+
+// Union of every non-floor object mask the segmentation pass found (chair, desk, cabinet,
+// sofa, person, ...), rendered at the photo's own resolution -- an offscreen canvas that's
+// white+opaque exactly where a real piece of furniture is, transparent everywhere else. Built
+// once per photo (not per frame); drawOcclusion() uses it every time the composite needs
+// redrawing.
+function buildOccluderMaskCanvas(out, iw, ih){
+  const src = out.filter(o => o.mask && OCCLUDER_RE.test(o.label));
+  if (!src.length) return null;
+  const c = document.createElement('canvas'); c.width = iw; c.height = ih;
+  const ctx = c.getContext('2d');
+  for (const layer of src) {
+    const { width: mw, height: mh, data } = layer.mask;
+    const tmp = document.createElement('canvas'); tmp.width = mw; tmp.height = mh;
+    const tctx = tmp.getContext('2d');
+    const px = tctx.createImageData(mw, mh);
+    for (let i = 0; i < mw * mh; i++) {
+      px.data[i * 4] = px.data[i * 4 + 1] = px.data[i * 4 + 2] = 255;
+      px.data[i * 4 + 3] = data[i] > 127 ? 255 : 0;
+    }
+    tctx.putImageData(px, 0, 0);
+    ctx.drawImage(tmp, 0, 0, mw, mh, 0, 0, iw, ih);   // upscale the (coarser) mask to full photo res
+  }
+  return c;
+}
+// Cuts the real photo's furniture pixels out (using occluderMaskCanvas as a stencil) onto
+// #occlude, which paints above the machine's canvas -- same CONTAIN placement as drawPhoto(),
+// so it lines up with the photo underneath pixel for pixel.
+function drawOcclusion(){
+  const ctx = occludeCanvas.getContext('2d');
+  const cw = occludeCanvas.width, ch = occludeCanvas.height;
+  ctx.clearRect(0, 0, cw, ch);
+  if (!occluderMaskCanvas || !photoBitmap) return;
+  const iw = photoBitmap.width, ih = photoBitmap.height;
+  const s = Math.min(cw / iw, ch / ih), dw = iw * s, dh = ih * s, dx = (cw - dw) / 2, dy = (ch - dh) / 2;
+  ctx.save();
+  ctx.drawImage(photoBitmap, dx, dy, dw, dh);
+  ctx.globalCompositeOperation = 'destination-in';      // keep only the pixels the stencil covers
+  ctx.drawImage(occluderMaskCanvas, dx, dy, dw, dh);
+  ctx.restore();
 }
 
 // ---------- sliders ----------
@@ -830,6 +889,7 @@ document.getElementById('save').addEventListener('click', async () => {
   const ctx = out.getContext('2d');
   ctx.drawImage(bg, 0, 0);                               // photo
   ctx.drawImage(glCanvas, 0, 0, out.width, out.height);  // machine + shadow
+  ctx.drawImage(occludeCanvas, 0, 0, out.width, out.height);  // real furniture in front of it, where they overlap
   out.toBlob(async (blob) => {
     if (!blob) return;
     const file = new File([blob], 'IFB-washing-machine-in-my-room.png', { type: 'image/png' });
@@ -1042,6 +1102,8 @@ async function runAIPlace(){
     const ang = angleFromFloor(); sAng.value = ang; vAng.textContent = ang + '°';
     camZoomDist = camDistFromFloor(floorMask); updateCamera();
     matchLighting();
+    occluderMaskCanvas = buildOccluderMaskCanvas(out, photoBitmap.width, photoBitmap.height);
+    drawOcclusion();
     let p = autoFloorPoint();
     placeAtImageCoord(p.fx, p.fy);
     const objs = labels.slice(0, 7).join(', ');
