@@ -69,6 +69,42 @@
   .btn.sec{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);box-shadow:none;
     font-size:14px;padding:12px 16px}
   .credit{position:fixed;right:8px;bottom:2px;z-index:11;color:rgba(255,255,255,.6);font-size:9.5px}
+
+  /* ---------- model chooser (first screen) + switcher menu ---------- */
+  /* safe center + scroll: on a short screen (small phone, or landscape) plain centring would
+     clip the logo off the top with no way to reach it. */
+  #chooser{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;
+    justify-content:safe center;gap:18px;padding:26px 22px;text-align:center;overflow-y:auto;
+    background:radial-gradient(900px 620px at 50% 0%,#241417,#0d0b0c 62%)}
+  #chooser .ch-brand{display:block;width:46px;height:46px;border-radius:11px;flex:none}
+  #chooser h1{color:#fff;font-size:22px;margin:0;font-weight:800;letter-spacing:-.01em}
+  #chooser .sub{color:rgba(255,255,255,.62);font-size:13.5px;margin:0;max-width:330px;line-height:1.5}
+  .choices{display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px}
+  .choice{appearance:none;cursor:pointer;text-align:left;display:flex;align-items:center;gap:14px;
+    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:16px;
+    padding:15px 17px;color:#fff;transition:border-color .15s,background .15s}
+  .choice:hover,.choice:focus-visible{background:rgba(255,255,255,.12);border-color:#e11d2a;outline:none}
+  .choice .thumb{flex:none;width:66px;height:88px;border-radius:10px;background:rgba(255,255,255,.05);
+    border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;
+    padding:6px;overflow:hidden}
+  .choice .thumb img{width:100%;height:100%;object-fit:contain}
+  .choice .txt{display:flex;flex-direction:column;gap:3px;min-width:0}
+  .choice .cn{display:block;font-weight:800;font-size:15.5px;line-height:1.2}
+  .choice .cd{display:block;color:rgba(255,255,255,.55);font-size:12px;line-height:1.35}
+
+  .ham{margin-left:auto;color:#fff;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.28);
+    border-radius:10px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;
+    pointer-events:auto;cursor:pointer;padding:0;flex:none}
+  .ham span{display:block;width:15px;height:1.8px;background:#fff;border-radius:2px;box-shadow:0 5px 0 #fff,0 -5px 0 #fff}
+
+  #menu{position:fixed;inset:0;z-index:30;display:none;background:rgba(0,0,0,.55);
+    -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+  #menu.open{display:block}
+  #menu .sheet{position:absolute;left:0;right:0;top:0;background:#141011;border-bottom:1px solid rgba(255,255,255,.12);
+    padding:calc(env(safe-area-inset-top,0px) + 58px) 16px 18px;display:flex;flex-direction:column;gap:9px}
+  #menu .mlabel{color:rgba(255,255,255,.5);font-size:11px;font-weight:700;letter-spacing:.11em;text-transform:uppercase}
+  #menu .choice[aria-checked="true"]{border-color:#e11d2a;background:rgba(225,29,42,.14)}
+  #menu .choice[aria-checked="true"] .cn::after{content:" ✓";color:#ff6069}
 </style>
 </head>
 <body>
@@ -78,7 +114,8 @@
     <div class="top">
       <a class="back" href="index.html" aria-label="Back">&larr;</a>
       <img class="brand" src="assets/IFB%20logo%201.png" alt="IFB" />
-      <span class="title">Will it fit? · washing&nbsp;machine in&nbsp;AR</span>
+      <span class="title" id="topTitle">Will it fit? · washing&nbsp;machine in&nbsp;AR</span>
+      <button class="ham" id="hamBtn" aria-label="Change machine model" aria-expanded="false"><span></span></button>
     </div>
     <div class="dimchip" id="dimchip">Washing machine · 85 × 59 × 62 cm</div>
 
@@ -102,10 +139,80 @@
   </div>
   <div class="credit">Powered by 8th Wall</div>
 
+  <!-- ===== First screen: pick the machine type. Shown before the camera starts, so the
+       customer never waits on a camera permission prompt for a model they didn't want. ===== -->
+  <section id="chooser">
+    <img class="ch-brand" src="assets/IFB%20logo%201.png" alt="IFB" />
+    <h1>Which machine?</h1>
+    <p class="sub">Pick the type you're considering — we'll place it in your room at its real size.</p>
+    <div class="choices" id="chooserList"></div>
+    <p class="sub" style="font-size:11.5px;opacity:.5">You can switch machines any time from the menu.</p>
+  </section>
+
+  <!-- ===== Switcher, opened from the hamburger ===== -->
+  <div id="menu">
+    <div class="sheet">
+      <span class="mlabel">Machine type</span>
+      <div class="choices" id="menuList" role="radiogroup" aria-label="Machine type"></div>
+    </div>
+  </div>
+
 <script>
 /* globals XR8 XRExtras THREE */
 (() => {
-  const MODEL_URL = 'models/IFB_WM1.glb';
+  // ---- Machine catalogue -------------------------------------------------------------
+  // heightCm is the real-world height the machine is placed at. Everything else (width,
+  // depth, the H×W×D labels) is measured off the GLB and scaled to match, so the numbers
+  // always describe the machine actually on screen rather than a spec it might not match.
+  // ⚠️ These heights are estimates — replace each with the exact IFB datasheet height.
+  // yawOffsetDeg corrects for the model's own local "forward" — each GLB was authored by a
+  // different source with no shared convention, so a raw rotationY of 0 doesn't necessarily
+  // face the same way across models. FL is the reference: its door faces the camera at 0°.
+  // TL (Sketchfab) turned out to face 180° opposite — its control panel pointed away from the
+  // camera at rotationY 0, i.e. the customer saw its back on first placement. Verified by
+  // rendering the raw GLB from all four cardinal angles and reading off which one shows the
+  // control panel.
+  // thumb: a real front-view render of each GLB, generated with the exact same "front" rule
+  // as yawOffsetDeg above (rotationY 0 + the model's own offset, camera on +Z) -- so the
+  // picture matches how the machine actually faces the first time it's placed.
+  // ⚠️ WDR reuses FL's photo because it currently reuses FL's GLB too (see url below) -- once
+  // there's a real washer-dryer model, re-render assets/thumb-washer-dryer.png from it.
+  const MODELS = {
+    FL:  { label: 'Front Loader', desc: 'Front-loading washing machine',
+           url: 'models/IFB_WM1.glb', heightCm: 80, yawOffsetDeg: 0,
+           thumb: 'assets/thumb-front-loader.png' },
+    TL:  { label: 'Top Loader',   desc: 'Top-loading washing machine',
+           url: 'models/washing_machine_top_load.glb', heightCm: 95, yawOffsetDeg: 180,
+           thumb: 'assets/thumb-top-loader.png' },
+    WDR: { label: 'Washer Dryer', desc: 'Washer–dryer combo',
+           url: 'models/IFB_WM1.glb', heightCm: 80, yawOffsetDeg: 0,
+           thumb: 'assets/thumb-washer-dryer.png' },
+  };
+  const DEFAULT_MODEL = 'FL';
+  let modelKey = DEFAULT_MODEL;
+  let baseScale = 1;          // GLB units → real size for the current machine (set on load)
+
+  // Applies rotationY plus the current model's yaw correction — every place that turns the
+  // machine goes through this instead of setting washer.rotation.y directly, so a model swap
+  // can never leave the wrong offset applied.
+  const applyRotation = () => {
+    if (!washer) return;
+    washer.rotation.y = rotationY + THREE.MathUtils.degToRad(MODELS[modelKey].yawOffsetDeg || 0);
+  };
+
+  // yawOffsetDeg corrects the model's own geometry so its front aligns with the same "local
+  // +Z = front" convention for every model (see MODELS above) -- but rotationY=0 on top of
+  // that only actually faces the customer if world +Z happens to point back at wherever they
+  // are standing. In 8th Wall that depends on how the AR session's coordinate frame was
+  // established at start, which this app has no control over, so it cannot be assumed.
+  // Solving that properly: aim the model's front at the live AR camera position at the exact
+  // moment of placement, rather than trusting a fixed default.
+  let _camPos;
+  const faceCameraYaw = (pos) => {
+    if (!camera || !_camPos) return 0;
+    camera.getWorldPosition(_camPos);
+    return Math.atan2(_camPos.x - pos.x, _camPos.z - pos.z);
+  };
 
   // shared refs
   let scene, camera, renderer, surface, reticle, washer;
@@ -113,16 +220,13 @@
   let floorPoint = null;     // latest raycast hit on floor (THREE.Vector3) or null
   let placed = false;
   let rotationY = 0;
-  // The GLB bakes 0.4245 onto its root node, so at scale 1 the machine is 0.85 m tall
-  // (2.0023 × 0.4245). 0.941 therefore shows it at ≈80 cm; − / + fine-tunes from there.
-  const DEFAULT_SIZE_SCALE = 0.941;
+  // baseScale already puts the machine at its real height, so 1 = true size and − / + trims
+  // from there.
+  const DEFAULT_SIZE_SCALE = 1;
   let sizeScale = DEFAULT_SIZE_SCALE;
   let raycaster, centerNDC;   // created in buildScene() — THREE isn't ready at parse time
 
-  // Product dimensions in cm at size 100% (edit to the exact IFB spec). The H×W×D labels show
-  // these × the current − / + size, so the numbers track the size actually shown.
-  const SPEC = { H: 85, W: 59, D: 62 };
-  let modelSize = null;       // GLB real size (metres) — used to lay out the dimension lines
+  let modelSize = null;       // GLB size in its own units — used to lay out the dimension lines
   let dimGroup = null;        // the H/W/D lines + labels, parented to the machine
   let dimSets = [];          // [{name, cands:[{line,label,pts,mid}]}] — show the best-facing candidate
   let occluder = null;        // invisible bounding box — hides a dimension that's behind the machine
@@ -150,6 +254,7 @@
     raycaster = new THREE.Raycaster();
     centerNDC = new THREE.Vector2(0, 0);
     _wp = new THREE.Vector3(); _cam = new THREE.Vector3(); _dir = new THREE.Vector3();
+    _camPos = new THREE.Vector3();
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -193,22 +298,57 @@
 
     camera.position.set(0, 2, 0);
 
-    // preload washer: base-anchored (feet on y=0), centered on x/z, wrapped in a group
-    new THREE.GLTFLoader().load(MODEL_URL, (gltf) => {
+    loadModel(modelKey);
+  };
+
+  // Free the previous machine's GPU memory before swapping in another one — without this,
+  // switching types repeatedly would leak a full mesh + textures every time.
+  const disposeModel = () => {
+    disposeDims();
+    if (!washer) return;
+    scene.remove(washer);
+    washer.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) {
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) {
+          for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap']) {
+            if (m[k]) m[k].dispose();
+          }
+          m.dispose();
+        }
+      }
+    });
+    washer = null; occluder = null; modelSize = null; ready = false;
+  };
+
+  // Load one machine: base-anchored (feet on y=0), centred on x/z, wrapped in a group, and
+  // scaled so it stands at its real-world height whatever units the GLB was authored in.
+  const loadModel = (key) => {
+    const cfg = MODELS[key];
+    if (!cfg) return;
+    disposeModel();
+    setStatus('Loading the ' + cfg.label.toLowerCase() + '…');
+
+    new THREE.GLTFLoader().load(cfg.url, (gltf) => {
       const g = new THREE.Group();
       gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
       const box = new THREE.Box3().setFromObject(gltf.scene);
       const c = box.getCenter(new THREE.Vector3());
-      modelSize = box.getSize(new THREE.Vector3());   // real size (metres) for the dim lines
+      modelSize = box.getSize(new THREE.Vector3());
+      // Each GLB is authored at a different scale, so normalise on height rather than
+      // trusting the file: this one stands at cfg.heightCm no matter how it was exported.
+      baseScale = modelSize.y > 0 ? (cfg.heightCm / 100) / modelSize.y : 1;
       gltf.scene.position.x -= c.x;
       gltf.scene.position.z -= c.z;
       gltf.scene.position.y -= box.min.y;   // drop base to floor level
       g.add(gltf.scene);
       g.visible = false;
+      g.scale.setScalar(baseScale * sizeScale);
       washer = g;
       scene.add(g);
       // invisible box at the machine's exact bounds — used only to ray-test which dimension
-      // lines are hidden behind the machine (cheap proxy instead of the 62k-tri mesh).
+      // lines are hidden behind the machine (cheap proxy instead of the full mesh).
       occluder = new THREE.Mesh(
         new THREE.BoxGeometry(modelSize.x, modelSize.y, modelSize.z),
         new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })
@@ -216,7 +356,9 @@
       occluder.position.y = modelSize.y / 2;
       washer.add(occluder);
       ready = true;
-    }, undefined, () => setStatus('Could not load the 3D model. Check your connection and reload.'));
+      applySize();
+      setStatus('Move your phone slowly to scan the floor…');
+    }, undefined, () => setStatus('Could not load the ' + cfg.label.toLowerCase() + '. Check your connection and reload.'));
   };
 
   // ---- IKEA-style H×W×D dimension lines + labels wrapped around the placed machine ----
@@ -253,12 +395,17 @@
     dimGroup = null;
   };
 
-  // Dimensions shown = spec × current − / + size, so the value tracks the size on screen.
-  const curDims = () => ({
-    H: Math.round(SPEC.H * sizeScale),
-    W: Math.round(SPEC.W * sizeScale),
-    D: Math.round(SPEC.D * sizeScale),
-  });
+  // Dimensions are measured off the loaded GLB and scaled the same way the machine is, so
+  // the labels always describe what's actually on screen — whichever machine is selected.
+  const curDims = () => {
+    if (!modelSize) return { H: 0, W: 0, D: 0 };
+    const k = baseScale * sizeScale * 100;
+    return {
+      H: Math.round(modelSize.y * k),
+      W: Math.round(modelSize.x * k),
+      D: Math.round(modelSize.z * k),
+    };
+  };
 
   const buildDims = () => {
     if (!washer || !modelSize) return;
@@ -340,17 +487,19 @@
   };
 
   const applySize = () => {
-    if (washer) washer.scale.setScalar(sizeScale);
+    if (washer) washer.scale.setScalar(baseScale * sizeScale);
     const d = curDims();
     if (sizeLbl) sizeLbl.textContent = '≈ ' + d.H + ' cm tall';
-    if (dimchip) dimchip.textContent = 'IFB washing machine · ' + d.H + ' × ' + d.W + ' × ' + d.D + ' cm';
+    if (dimchip) dimchip.textContent = 'IFB ' + MODELS[modelKey].label.toLowerCase() +
+      ' · ' + d.H + ' × ' + d.W + ' × ' + d.D + ' cm';
   };
 
   const doPlace = () => {
     if (!ready || !floorPoint) return;
     washer.position.set(floorPoint.x, 0, floorPoint.z);
-    washer.rotation.y = rotationY;
-    washer.scale.setScalar(sizeScale);
+    rotationY = faceCameraYaw(floorPoint);   // orient the front toward the user, not a guess
+    applyRotation();
+    washer.scale.setScalar(baseScale * sizeScale);
     washer.visible = true;
     placed = true;
     reticle.visible = false;
@@ -374,16 +523,17 @@
 
   // Reset: clear the placement entirely and go back to aiming. Setting `placed = false` is
   // what brings the reticle back — onUpdate resumes raycasting the floor on the next frame
-  // and shows it again. Unlike Move, this also restores the default size and rotation, so
-  // the user starts from a known ≈80 cm machine rather than whatever they had tuned to.
+  // and shows it again. This also restores the default size and rotation, so the user starts
+  // from the machine's true size rather than whatever they had tuned to. It keeps the machine
+  // type the customer already chose — switching types goes through the chooser/menu instead.
   const doReset = () => {
     if (washer) {
       washer.visible = false;
-      washer.rotation.y = 0;
     }
     placed = false;
     rotationY = 0;
     sizeScale = DEFAULT_SIZE_SCALE;
+    applyRotation();
     applySize();
 
     rowPlaced.style.display = 'none';
@@ -404,7 +554,7 @@
     e.preventDefault();
     const dx = e.touches[0].clientX - dragX;
     rotationY = dragBase + (dx / window.innerWidth) * Math.PI * 2;
-    if (washer) washer.rotation.y = rotationY;
+    applyRotation();
   };
   const onCanvasEnd = () => { dragX = null; };
 
@@ -444,7 +594,7 @@
   // ---- buttons ----
   placeBtn.addEventListener('click', doPlace);
   moveBtn.addEventListener('click', enterMove);
-  rotBtn.addEventListener('click', () => { rotationY += Math.PI / 4; if (washer) washer.rotation.y = rotationY; });
+  rotBtn.addEventListener('click', () => { rotationY += Math.PI / 4; applyRotation(); });
   // Previously this only called XR8.XrController.recenter(), which shifts the world origin
   // but leaves the machine placed and the reticle hidden — so Reset appeared to do nothing.
   resetBtn.addEventListener('click', doReset);
@@ -461,6 +611,85 @@
     dimBtn.style.opacity = dimsOn ? '1' : '0.5';
   });
 
+  // ---- machine chooser + switcher ----
+  const chooser   = document.getElementById('chooser');
+  const chooserList = document.getElementById('chooserList');
+  const menu      = document.getElementById('menu');
+  const menuList  = document.getElementById('menuList');
+  const hamBtn    = document.getElementById('hamBtn');
+  const topTitle  = document.getElementById('topTitle');
+
+  const optionMarkup = (k) =>
+    '<span class="thumb"><img src="' + MODELS[k].thumb + '" alt="' + MODELS[k].label + '" loading="lazy"></span>' +
+    '<span class="txt"><span class="cn">' + MODELS[k].label + '</span>' +
+    '<span class="cd">' + MODELS[k].desc + '</span></span>';
+
+  const renderLists = () => {
+    chooserList.innerHTML = '';
+    menuList.innerHTML = '';
+    for (const k of Object.keys(MODELS)) {
+      const a = document.createElement('button');
+      a.type = 'button'; a.className = 'choice'; a.innerHTML = optionMarkup(k);
+      a.addEventListener('click', () => startWith(k));
+      chooserList.appendChild(a);
+
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'choice';
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(k === modelKey));
+      b.innerHTML = optionMarkup(k);
+      b.addEventListener('click', () => selectModel(k));
+      menuList.appendChild(b);
+    }
+  };
+
+  const syncMenuChecks = () => {
+    [...menuList.children].forEach((el, i) => {
+      el.setAttribute('aria-checked', String(Object.keys(MODELS)[i] === modelKey));
+    });
+  };
+
+  const setMenu = (open) => {
+    menu.classList.toggle('open', open);
+    hamBtn.setAttribute('aria-expanded', String(open));
+  };
+
+  const applyModelLabels = () => {
+    topTitle.innerHTML = 'Will it fit? · IFB ' + MODELS[modelKey].label.toLowerCase();
+  };
+
+  // Switching mid-session: drop the placed machine and go back to aiming, because the new
+  // one is a different size and the old placement would be meaningless for it.
+  const selectModel = (k) => {
+    setMenu(false);
+    if (k === modelKey) return;
+    modelKey = k;
+    sizeScale = DEFAULT_SIZE_SCALE;
+    rotationY = 0;
+    applyModelLabels();
+    syncMenuChecks();
+    if (scene) {                      // camera already running — hot-swap the machine
+      enterMove();
+      loadModel(modelKey);
+    }
+  };
+
+  // First choice also starts the AR session, so the camera prompt only appears once the
+  // customer has actually asked for a machine.
+  let booted = false;
+  const startWith = (k) => {
+    modelKey = k;
+    applyModelLabels();
+    syncMenuChecks();
+    chooser.style.display = 'none';
+    if (!booted) { booted = true; boot(); }
+  };
+
+  hamBtn.addEventListener('click', () => setMenu(!menu.classList.contains('open')));
+  menu.addEventListener('click', (e) => { if (e.target === menu) setMenu(false); });
+  renderLists();
+  applyModelLabels();
+
   // ---- boot ----
   const onxrloaded = () => {
     XR8.addCameraPipelineModules([
@@ -473,13 +702,18 @@
       XRExtras.RuntimeError.pipelineModule(),
       pipeline(),
     ]);
-    // Real-world scale: 1 three.js unit = 1 metre, so the 0.85 m model shows at TRUE size.
+    // Real-world scale: 1 three.js unit = 1 metre, so the machine shows at TRUE size.
     // (8th Wall defaults to "responsive", which sizes by camera distance and looks too small.)
     XR8.XrController.configure({ scale: 'absolute' });
     XR8.run({canvas: document.getElementById('camerafeed')});
   };
-  const boot = () => XRExtras.Loading.showLoading({onxrloaded});
-  window.onload = () => { window.XRExtras ? boot() : window.addEventListener('xrextrasloaded', boot); };
+  // The chooser is the landing screen, so the camera starts on the customer's first pick
+  // rather than on page load. If the 8th Wall bundle is still arriving when they choose,
+  // wait for it instead of dropping the boot.
+  function boot() {
+    if (window.XRExtras) XRExtras.Loading.showLoading({ onxrloaded });
+    else window.addEventListener('xrextrasloaded', () => XRExtras.Loading.showLoading({ onxrloaded }), { once: true });
+  }
 })();
 </script>
 </body>
