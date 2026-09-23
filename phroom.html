@@ -220,8 +220,8 @@
 
   <div class="dock" id="dock">
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%">
-      <button class="btn" id="aiBtn" style="width:100%;max-width:340px">✨ AI auto-place (Kreativ-style)</button>
-      <span id="aiStatus" style="font-size:11px;color:#cbd0e6;text-align:center;line-height:1.35">AI finds the <b>floor</b> (not furniture) and places it there — then it snaps to the floor as you drag.</span>
+      <button class="btn sec" id="aiBtn" style="width:100%;max-width:340px">🔄 Re-detect floor</button>
+      <span id="aiStatus" style="font-size:11px;color:#cbd0e6;text-align:center;line-height:1.35">AI finds the <b>floor</b> (not furniture) automatically and keeps the machine on it as you drag.</span>
     </div>
     <div class="actions">
       <button class="btn sec" id="dimBtn" style="flex:0 0 auto" aria-label="Toggle dimensions" aria-pressed="true">📐</button>
@@ -310,6 +310,12 @@ const dimBtn  = document.getElementById('dimBtn');
 
 let photoBitmap = null;                 // chosen photo (EXIF-corrected)
 let floorMask = null;                   // AI floor mask {w,h,data} — constrains placement to the floor
+// Floor detection now runs automatically (see startComposer()) instead of waiting for a button
+// tap, so there's a brief window on a fresh photo where floorMask isn't ready yet. floorLocking
+// blocks the move-the-machine drag during that window -- otherwise "only the floor, never
+// anywhere" would have a gap right at the start, before the AI has had a chance to look.
+let floorLocking = false;
+let pendingAutoFloor = false;           // set by startComposer() when loadModel() is still loading
 let renderer, scene, camera, machine, ground, raycaster, ndc, needsRender = true;
 let started = false;
 
@@ -414,7 +420,13 @@ function loadModel(key){
     updateDimChip();
     hintEl.style.display = 'none';
     needsRender = true;
-  }, undefined, () => { hintEl.textContent = 'Could not load the ' + cfg.label.toLowerCase() + ' — check connection.'; hintEl.style.display = 'block'; });
+    // The very first load for a fresh photo: the machine model just became available, so the
+    // auto floor-detect that startComposer() asked for (and was waiting on) can run now.
+    if (pendingAutoFloor) { pendingAutoFloor = false; runAIPlace(); }
+  }, undefined, () => {
+    hintEl.textContent = 'Could not load the ' + cfg.label.toLowerCase() + ' — check connection.'; hintEl.style.display = 'block';
+    pendingAutoFloor = false; floorLocking = false;   // nothing to detect on if the model itself never arrived
+  });
 }
 
 // ---- IKEA-style H×W×D dimension lines + labels wrapped around the machine (ported from
@@ -556,7 +568,14 @@ function startComposer(){
   // the chip sits where the hint is, so let the hint have the spot first
   setTimeout(() => { hintEl.style.display = 'none'; if (dimsOn) dimchip.style.display = 'block'; }, 2600);
   document.getElementById('topTtl').textContent = 'Position it · then save';
-  if (!started) initThree();
+  // Every call here follows a fresh photo confirmation, so any previous floor mask belongs to
+  // a different picture and must not keep constraining this one. Re-detect automatically --
+  // the customer should never have to find and tap the AI button just to get floor-only
+  // placement; it's the default now, with the button left for a manual retry.
+  floorMask = null;
+  floorLocking = true;
+  if (!started) { initThree(); pendingAutoFloor = true; }   // loadModel() will call runAIPlace() once the model (and so `machine`) exists
+  else runAIPlace();                                        // model's already loaded -- detect this photo's floor right away
   updateDimChip();
   resize();
   drawPhoto();
@@ -638,6 +657,13 @@ function initThree(){
     glCanvas.setPointerCapture(e.pointerId);
     if (machine && hitsMachine(e.clientX, e.clientY)) {
       dragMode = 'turn'; dragStartX = e.clientX; rotBaseDeg = +sRot.value;
+    } else if (floorLocking) {
+      // Floor detection for this photo hasn't finished yet — there's no floorMask to snap to,
+      // so a "move" drag right now would drop the machine wherever, not just on the floor.
+      // Ignoring it (rather than falling through to an unconstrained moveTo) is what makes
+      // "only the floor, never anywhere" hold from the very first frame, not just after the
+      // first AI pass completes.
+      dragMode = null;
     } else {
       dragMode = 'move'; moveTo(e.clientX, e.clientY);
     }
@@ -840,7 +866,7 @@ function matchLighting(){
   } catch (e) {}
 }
 async function runAIPlace(){
-  if (!photoBitmap || !machine) { aiSet('Load a photo first.'); return; }
+  if (!photoBitmap || !machine) { aiSet('Load a photo first.'); floorLocking = false; return; }
   aiBtn.disabled = true;
   try {
     await loadSeg();
@@ -855,7 +881,10 @@ async function runAIPlace(){
     aiSet('Placed on the floor ✓ — it now snaps to the floor when you drag. (Detected: ' + objs + ')');
   } catch (e) {
     aiSet('AI unavailable here — drag + sliders still place it.');
-  } finally { aiBtn.disabled = false; }
+  } finally {
+    aiBtn.disabled = false;
+    floorLocking = false;   // whatever happened, the drag lock was only ever for this one detection pass
+  }
 }
 aiBtn.addEventListener('click', runAIPlace);
 
