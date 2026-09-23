@@ -274,6 +274,10 @@ const DEFAULT_MODEL = 'FL';
 let modelKey = DEFAULT_MODEL;
 let baseScale = 1;          // GLB units → real size for the current machine (set on load)
 let modelSize = null;       // current GLB's size in its own units
+// The virtual camera's simulated distance from the machine, guessed from how much of the photo
+// is floor (see camDistFromFloor()) instead of a single fixed number for every photo -- part of
+// why the same machine could render at inconsistent sizes across different real photos.
+let camZoomDist = 3.0;
 
 // ---- H×W×D dimension lines (IKEA-style, ported from fit.html) ----
 let occluder = null;        // invisible bounding box on the machine — hit-tests both rotate-
@@ -765,8 +769,7 @@ function initThree(){
 function updateCamera(){
   if (!camera) return;
   const ang = THREE.MathUtils.degToRad(+sAng.value); // 0 = eye level looking straight, higher = looking down
-  const dist = 3.0;
-  camera.position.set(0, 0.55 + Math.sin(ang) * dist, Math.cos(ang) * dist);
+  camera.position.set(0, 0.55 + Math.sin(ang) * camZoomDist, Math.cos(ang) * camZoomDist);
   camera.lookAt(0, 0.42, 0);
   needsRender = true;
 }
@@ -960,7 +963,37 @@ function angleFromFloor(){                            // rough camera pitch from
   if (!floorMask) return 12; const { w, h, data } = floorMask; const tops = [];
   for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) if (data[y*w+x]){ tops.push(y/h); break; }
   if (!tops.length) return 12; tops.sort((a,b)=>a-b);
-  return Math.round(Math.min(22, Math.max(10, (0.60 - tops[(tops.length*0.5)|0]) * 80 + 10)));
+  // 40th percentile rather than the exact middle column: a handful of columns where the mask
+  // has a hole, or a stray "floor" pixel high up in the frame (segmentation noise), would drag
+  // a plain median around more than they should.
+  const topFrac = tops[Math.floor(tops.length * 0.4)];
+  // Raised from a 22° cap to 36° (the slider itself goes to 42°) -- the old cap silently
+  // clipped every steep, close-up-to-the-floor shot to the same angle as a much shallower one,
+  // which is exactly the kind of photo-to-photo size mismatch this was about.
+  return Math.round(Math.min(36, Math.max(10, (0.60 - topFrac) * 80 + 10)));
+}
+// Fraction of the whole frame the floor mask covers. Used both to flag a shot as unusable (see
+// isTopDownShot below) and as a proxy for how close the real camera was to the floor.
+function floorCoverage(mask){
+  if (!mask) return 0;
+  let n = 0; for (let i = 0; i < mask.data.length; i++) if (mask.data[i]) n++;
+  return n / (mask.w * mask.h);
+}
+// The renderer's virtual camera distance was a single fixed number for every photo, which is
+// part of why the same machine could come out a different size in two different real photos --
+// nothing about the photo itself fed into how "zoomed in" the render was. More of the frame
+// being floor is a reasonable proxy for the real camera having been closer to (or lower over)
+// the floor, so move the virtual camera in for that and back out when the floor is a small
+// sliver of the frame (a farther-back or a more upright, less-downward shot).
+function camDistFromFloor(mask){
+  return Math.min(4.2, Math.max(2.3, 4.4 - floorCoverage(mask) * 3.4));
+}
+// A photo aimed straight down at the floor has nothing else in frame -- no wall, no furniture,
+// no horizon -- for the AI to have found. There's then no visual cue at all for how far away or
+// how tilted the real camera was, so any angle/size guess for it would just be made up; better
+// to say so than to place the machine against a floor mask that's really "the entire photo".
+function isTopDownShot(mask, labels){
+  return floorCoverage(mask) > 0.85 && !labels.some((l) => /\bwall\b/i.test(l));
 }
 function autoFloorPoint(){                            // floor cell nearest centre & ~70% down = believable size
   if (!floorMask) return { fx: 0.5, fy: 0.72 }; const { w, h, data } = floorMask, tx = w*0.5, ty = h*0.70;
@@ -996,11 +1029,22 @@ async function runAIPlace(){
     const out = await AI.seg(photoInputURL());
     floorMask = buildFloorMask(out);
     if (!floorMask){ aiSet('No clear floor found — place it with drag + the sliders.'); return; }
-    const ang = angleFromFloor(); sAng.value = ang; vAng.textContent = ang + '°'; updateCamera();
+    const labels = [...new Set(out.map(o => o.label))];
+    if (isTopDownShot(floorMask, labels)) {
+      // Nearly the whole frame is "floor" and no wall was found either -- this is a straight-
+      // down shot with no room in it at all, so there's no honest angle or size to guess.
+      // Leaving floorMask set would otherwise let a drag "snap" to what is really just the
+      // entire photo, which isn't a floor constraint at all.
+      floorMask = null;
+      aiSet('That looks like it’s pointing straight down at just the floor — retake it showing some of the room (a wall or furniture) so the size can be judged properly.');
+      return;
+    }
+    const ang = angleFromFloor(); sAng.value = ang; vAng.textContent = ang + '°';
+    camZoomDist = camDistFromFloor(floorMask); updateCamera();
     matchLighting();
     let p = autoFloorPoint();
     placeAtImageCoord(p.fx, p.fy);
-    const objs = [...new Set(out.map(o => o.label))].slice(0, 7).join(', ');
+    const objs = labels.slice(0, 7).join(', ');
     // autoFloorPoint() only picked a single centre point -- re-check with the machine's real
     // width × depth (now that the model, and so modelSize, is loaded) and, if that spot would
     // actually spill it onto whatever's next to the floor, search for the nearest spot on this
