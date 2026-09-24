@@ -185,7 +185,7 @@
         <div class="sliders">
           <div class="slider"><label>Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈85cm</span></div>
           <div class="slider"><label>Rotate</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
-          <div class="slider"><label>Angle</label><input id="sAng" type="range" min="0" max="42" value="14"><span class="val" id="vAng">14°</span></div>
+          <div class="slider"><label>Angle</label><input id="sAng" type="range" min="-10" max="45" value="12"><span class="val" id="vAng">12°</span></div>
         </div>
       </div>
     </div>
@@ -274,11 +274,12 @@ const DEFAULT_MODEL = 'FL';
 let modelKey = DEFAULT_MODEL;
 let baseScale = 1;          // GLB units → real size for the current machine (set on load)
 let modelSize = null;       // current GLB's size in its own units
-// The virtual camera's simulated distance from the machine, guessed from how much of the photo
-// is floor (see camDistFromFloor()) instead of a single fixed number for every photo -- part of
-// why the same machine could render at inconsistent sizes across different real photos.
-let camZoomDist = 3.0;
-let cameraFovDeg = 45;      // virtual camera's vertical FOV — replaced per-photo by readPhotoFov()
+// The virtual camera, modelled on the phone that took the photo: how high it was held (m), how far
+// it was tilted down (°), and its lens as a 35mm-equivalent focal length. calibrateCamera() fits
+// all three per photo; these are the defaults until it has (a phone at chest height, 1x lens).
+const CAM_DEFAULT = { hc: 1.35, pitchDeg: 12, f35: 26 };
+let cam = { ...CAM_DEFAULT };
+let exifF35 = null;         // the photo's own lens, when its EXIF still carries it (see readPhotoLens())
 
 // ---- H×W×D dimension lines (IKEA-style, ported from fit.html) ----
 let occluder = null;        // invisible bounding box on the machine — hit-tests both rotate-
@@ -342,36 +343,24 @@ const applyRotation = () => {
   machine.rotation.y = THREE.MathUtils.degToRad(+sRot.value) + THREE.MathUtils.degToRad(MODELS[modelKey].yawOffsetDeg || 0);
 };
 
-// ---------- camera FOV: match the virtual camera's lens to the real photo's lens ----------
-// The 3D scene used to render through a fixed 45° vertical FOV no matter what the photo was
-// actually shot with. A phone's real FOV varies a lot by lens (ultra-wide vs main vs zoom) and
-// by orientation (portrait vs landscape swaps which physical sensor axis becomes the image's
-// "height"), so a fixed FOV made the machine's rendered size drift from photo to photo even at
-// an identical real placement. This reads the photo's own 35mm-equivalent focal length from
-// EXIF (when present) and derives the correct vertical FOV for how the photo is actually
-// oriented; when EXIF is missing (common for WhatsApp/Instagram-shared or screenshotted photos,
-// which strip it) it falls back to a typical phone main-camera lens (26mm equiv) instead of an
-// arbitrary constant — still orientation-aware, so a fallback portrait photo differs correctly
-// from a fallback landscape one.
-const DEFAULT_F35 = 26; // mm — typical smartphone main-camera 35mm-equivalent focal length
-function fovDegFromFocalLength35(f35, isPortrait){
-  // Full-frame (35mm) sensor is 36×24mm. Held in portrait, the phone's long axis — and so the
-  // sensor's 36mm axis — is vertical, so the image's height maps to the 36mm side; in landscape
-  // it maps to the 24mm side. FOV = 2·atan((sensor size / 2) / focal length).
-  const halfSensorMM = isPortrait ? 18 : 12;
-  return THREE.MathUtils.radToDeg(2 * Math.atan(halfSensorMM / f35));
-}
-async function readPhotoFov(file){
-  const isPortrait = !!photoBitmap && photoBitmap.height >= photoBitmap.width;
-  let f35 = null;
+// ---------- the photo's lens ----------
+// A phone's field of view varies a lot by lens (ultra-wide, 1x, 2x/3x zoom) and by orientation
+// (portrait vs landscape swaps which sensor side becomes the picture's height), and the machine's
+// size on screen depends on it directly. The photo's own EXIF says which lens when it still has
+// the tag; most shared photos (WhatsApp, Instagram, screenshots) have had it stripped, and then
+// calibrateCamera() works the lens out from the room itself, starting from the common 1x lens.
+function photoIsPortrait(){ return !photoBitmap || photoBitmap.height >= photoBitmap.width; }
+// Vertical field of view (radians) of a 35mm-equivalent focal length. Full frame is 36×24mm: held
+// in portrait the photo's height is the 36mm side, in landscape the 24mm side.
+function vfovForLens(f35){ return 2 * Math.atan((photoIsPortrait() ? 18 : 12) / f35); }
+async function readPhotoLens(file){
+  exifF35 = null;
   try {
     const exifr = await import('https://cdn.jsdelivr.net/npm/exifr@7/dist/full.esm.mjs');
     const parse = exifr.parse || (exifr.default && exifr.default.parse);
     const tags = parse ? await parse(file, { pick: ['FocalLengthIn35mmFilm'] }) : null;
-    if (tags && tags.FocalLengthIn35mmFilm) f35 = tags.FocalLengthIn35mmFilm;
-  } catch (e) { /* no network, unsupported, or no EXIF on this photo — use the default lens */ }
-  cameraFovDeg = fovDegFromFocalLength35(f35 || DEFAULT_F35, isPortrait);
-  if (camera) { camera.fov = cameraFovDeg; camera.updateProjectionMatrix(); needsRender = true; }
+    if (tags && tags.FocalLengthIn35mmFilm) exifF35 = tags.FocalLengthIn35mmFilm;
+  } catch (e) { /* no network, unsupported, or no EXIF on this photo — calibration estimates it */ }
 }
 
 // ---------- upload flow ----------
@@ -383,7 +372,7 @@ fileInput.addEventListener('change', async (e) => {
   } catch (err) {
     photoBitmap = await createImageBitmap(f);   // fallback
   }
-  await readPhotoFov(f);   // best-effort: match the virtual camera's lens to this photo's real one
+  await readPhotoLens(f);   // best-effort: the photo's real lens, if its EXIF still says
   preview.src = URL.createObjectURL(f);
   preview.style.display = 'block';
   confirmRow.style.display = 'flex';
@@ -631,6 +620,8 @@ function startComposer(){
   // placement; it's the default now, with the button left for a manual retry.
   floorMask = null;
   obstacleMask = null;
+  cam = { ...CAM_DEFAULT, f35: exifF35 || CAM_DEFAULT.f35 };   // the last photo's fit doesn't apply to this one
+  sAng.value = cam.pitchDeg; vAng.textContent = cam.pitchDeg + '°';
   floorLocking = true;
   if (!started) { initThree(); pendingAutoFloor = true; }   // loadModel() will call runAIPlace() once the model (and so `machine`) exists
   else runAIPlace();                                        // model's already loaded -- detect this photo's floor right away
@@ -653,7 +644,7 @@ function initThree(){
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-  camera = new THREE.PerspectiveCamera(cameraFovDeg, 1, 0.05, 100);
+  camera = new THREE.PerspectiveCamera(50, 1, 0.05, 200);   // fov/aspect/pose all set by updateCamera()
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x445, 0.85));
   const sun = new THREE.DirectionalLight(0xffffff, 2.1);
@@ -665,7 +656,8 @@ function initThree(){
   scene.add(sun);
 
   // shadow-catcher / raycast ground
-  ground = new THREE.Mesh(new THREE.PlaneGeometry(60, 60), new THREE.ShadowMaterial({ opacity: 0.34 }));
+  // big enough to reach the horizon of a near-level shot -- the camera can stand ~15 m back
+  ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShadowMaterial({ opacity: 0.34 }));
   ground.rotateX(-Math.PI / 2);
   ground.receiveShadow = true;
   scene.add(ground);
@@ -802,11 +794,24 @@ function initThree(){
   new ResizeObserver(() => { resize(); drawPhoto(); needsRender = true; }).observe(stageEl);
 }
 
+// Put the virtual camera exactly where the phone was: cam.hc above the floor, tilted down by
+// cam.pitchDeg, seeing through cam.f35's lens. Everything the machine's on-screen size depends on
+// is in those three numbers -- see calibrateCamera() for where they come from.
 function updateCamera(){
   if (!camera) return;
-  const ang = THREE.MathUtils.degToRad(+sAng.value); // 0 = eye level looking straight, higher = looking down
-  camera.position.set(0, 0.55 + Math.sin(ang) * camZoomDist, Math.cos(ang) * camZoomDist);
-  camera.lookAt(0, 0.42, 0);
+  const W = window.innerWidth, H = stageH();
+  // The photo is drawn CONTAIN-fit and centred, so it may not fill the stage's height: the stage's
+  // field of view is the photo's, stretched by how much taller the stage is than the drawn photo.
+  let fov = vfovForLens(cam.f35);
+  if (photoBitmap) { const p = coverParams(); fov = 2 * Math.atan(Math.tan(fov / 2) * H / (photoBitmap.height * p.s)); }
+  camera.fov = THREE.MathUtils.radToDeg(fov);
+  camera.aspect = W / H;
+  // Stand back far enough that the middle of the view lands on the world origin -- where the
+  // machine starts and where the sun's shadow is aimed -- or 5° worth of it for a level shot.
+  const th = THREE.MathUtils.degToRad(cam.pitchDeg);
+  camera.position.set(0, cam.hc, cam.hc / Math.tan(Math.max(th, THREE.MathUtils.degToRad(5))));
+  camera.rotation.set(-th, 0, 0);
+  camera.updateProjectionMatrix();
   needsRender = true;
 }
 
@@ -814,8 +819,8 @@ function resize(){
   const w = window.innerWidth, h = stageH();
   if (renderer) { renderer.setSize(w, h, false); glCanvas.width = w * DPR; glCanvas.height = h * DPR; renderer.setSize(w, h, false); }
   glCanvas.width = w * DPR; glCanvas.height = h * DPR;
-  if (camera) { camera.aspect = w / h; camera.updateProjectionMatrix(); }
   bg.width = w * DPR; bg.height = h * DPR;
+  updateCamera();   // the stage's shape changes how the photo's field of view maps onto it
 }
 
 // draw the photo into #bg with "cover" fit
@@ -855,7 +860,8 @@ sRot.addEventListener('input', () => {
   vRot.textContent = sRot.value + '°';
   applyRotation(); needsRender = true;
 });
-sAng.addEventListener('input', () => { vAng.textContent = sAng.value + '°'; updateCamera(); });
+// Manual override of the fitted tilt (calibrateCamera() sets the slider to what it found)
+sAng.addEventListener('input', () => { vAng.textContent = sAng.value + '°'; cam.pitchDeg = +sAng.value; updateCamera(); });
 
 // ---------- save / share ----------
 document.getElementById('save').addEventListener('click', async () => {
@@ -948,12 +954,17 @@ function footprintCorners(cx, cz){
 }
 // Is the machine's WHOLE footprint on the floor from here, not just the point it's anchored to?
 // Each corner is projected back to a screen point and checked against the floor mask the same
-// way a drag point is -- so "on the floor" means the same thing everywhere it's asked.
+// way a drag point is -- so "on the floor" means the same thing everywhere it's asked. A corner
+// outside the photo isn't on the floor either: isFloorAt() clamps to the nearest edge cell, which
+// used to let the machine sit half off the bottom of the picture.
 function footprintOnFloor(cx, cz){
   if (!floorMask) return true;
   const corners = footprintCorners(cx, cz);
   if (!corners) return true;
-  return corners.every((c) => { const s = worldToScreen(c); const im = screenToImage(s.x, s.y); return isFloorAt(im.fx, im.fy); });
+  return corners.every((c) => {
+    const s = worldToScreen(c), im = screenToImage(s.x, s.y);
+    return im.fx >= 0 && im.fx <= 1 && im.fy >= 0 && im.fy <= 1 && isFloorAt(im.fx, im.fy);
+  });
 }
 // The whole machine box -- floor corners and top corners -- as it lands on the photo, as a convex
 // outline in photo coordinates: the region the renderer will actually paint over the picture.
@@ -1083,34 +1094,230 @@ function nearestFloor(fx, fy){                       // nearest floor cell (imag
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[y*w+x]){ const d = (x-cx)*(x-cx)+(y-cy)*(y-cy); if (d < bd){ bd = d; bx = x; by = y; } }
   return bx < 0 ? { fx, fy } : { fx: (bx+0.5)/w, fy: (by+0.5)/h };
 }
-function angleFromFloor(){                            // rough camera pitch from how high the floor reaches
-  if (!floorMask) return 12; const { w, h, data } = floorMask; const tops = [];
-  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) if (data[y*w+x]){ tops.push(y/h); break; }
-  if (!tops.length) return 12; tops.sort((a,b)=>a-b);
-  // 40th percentile rather than the exact middle column: a handful of columns where the mask
-  // has a hole, or a stray "floor" pixel high up in the frame (segmentation noise), would drag
-  // a plain median around more than they should.
-  const topFrac = tops[Math.floor(tops.length * 0.4)];
-  // Raised from a 22° cap to 36° (the slider itself goes to 42°) -- the old cap silently
-  // clipped every steep, close-up-to-the-floor shot to the same angle as a much shallower one,
-  // which is exactly the kind of photo-to-photo size mismatch this was about.
-  return Math.round(Math.min(36, Math.max(10, (0.60 - topFrac) * 80 + 10)));
-}
-// Fraction of the whole frame the floor mask covers. Used both to flag a shot as unusable (see
-// isTopDownShot below) and as a proxy for how close the real camera was to the floor.
+// Fraction of the whole frame the floor mask covers (see isTopDownShot below)
 function floorCoverage(mask){
   if (!mask) return 0;
   let n = 0; for (let i = 0; i < mask.data.length; i++) if (mask.data[i]) n++;
   return n / (mask.w * mask.h);
 }
-// The renderer's virtual camera distance was a single fixed number for every photo, which is
-// part of why the same machine could come out a different size in two different real photos --
-// nothing about the photo itself fed into how "zoomed in" the render was. More of the frame
-// being floor is a reasonable proxy for the real camera having been closer to (or lower over)
-// the floor, so move the virtual camera in for that and back out when the floor is a small
-// sliver of the frame (a farther-back or a more upright, less-downward shot).
-function camDistFromFloor(mask){
-  return Math.min(4.2, Math.max(2.3, 4.4 - floorCoverage(mask) * 3.4));
+
+// ---------- camera calibration: how high the phone was, how far it tilted, which lens ----------
+// The machine's size on screen comes entirely from the virtual camera: too high or tilted too far
+// down and it renders too big for the room, and vice versa. The camera used to be an orbit rig
+// whose angle and distance were guessed from how much of the frame was floor -- nothing about the
+// actual phone -- and on the test photos that drew the machine 1.5-2x too big wherever walls and a
+// ceiling were in view. Instead, fit the phone's height, tilt and lens to what the photo shows:
+//  1. things of known height standing on the floor -- a wall up to the ceiling, a door, wardrobe,
+//     sofa, kitchen counter or appliance: where one meets the floor says how far away it is, and
+//     where its top is says how tall it looks from there;
+//  2. vertical lines -- door and window frames, wall corners: a phone tilted down makes them lean
+//     together toward a point below the picture, and how fast gives the tilt;
+//  3. what's typical when the photo says nothing else: a phone at ~1.35 m with the 1x lens.
+// A grid search with a robust loss, so one mislabelled object can't drag the answer around.
+
+// H: typical height of the object's highest visible point (m); sig: log-spread of that height;
+// D: how far behind its floor-contact front edge that highest point sits (m) -- seen from above, a
+// counter shows its whole top, so its top edge in the photo is its BACK edge; family: labels
+// allowed at the bottom of the same column (a counter is mostly "cabinet" under its worktop) --
+// anything else there is something standing in front of its base, hiding where it meets the floor.
+const CAM_REFS = [
+  // a glass door's upper part is "windowpane", so only count doors with wall right above them
+  { re: /\bdoor\b/i, H: 2.03, sig: 0.06, D: 0, name: 'door', family: /\bdoor\b/i, above: /\b(wall|ceiling)\b/i },
+  { re: /\bwardrobe\b/i, H: 2.0, sig: 0.12, D: 0.6, name: 'wardrobe', family: /\b(wardrobe|cabinet)\b/i },
+  { re: /\brefrigerator\b/i, H: 1.75, sig: 0.1, D: 0.65, name: 'fridge', family: /\brefrigerator\b/i },
+  { re: /\b(counter|countertop|kitchen island)\b/i, H: 0.91, sig: 0.05, D: 0.6, name: 'kitchen counter', family: /\b(counter|countertop|kitchen island|cabinet)\b/i },
+  { re: /\b(washer|dishwasher)\b/i, H: 0.85, sig: 0.05, D: 0.6, name: 'washing machine', family: /\b(washer|dishwasher|cabinet)\b/i },
+  { re: /\bstove\b/i, H: 0.9, sig: 0.05, D: 0.6, name: 'stove', family: /\b(stove|cabinet|oven)\b/i },
+  { re: /\bsofa\b/i, H: 0.85, sig: 0.12, D: 0.9, name: 'sofa', family: /\bsofa\b/i },
+  // Left out on purpose after testing: chairs (seat, gas lift and base segment as separate pieces),
+  // beds (the top is sometimes the headboard, sometimes the duvet), "table" (coffee tables and
+  // nightstands land in it too) -- each measured anywhere from 0.2 m to 1.2 m on the test photos --
+  // and desks: office desks carry privacy partitions the model also calls "desk", so a 1 m
+  // partition got fitted as a 0.75 m desk and the machine came out 30% too big.
+];
+const WALL_REF = { name: 'wall height', H: 2.75, sig: 0.15, D: 0 };   // floor to ceiling: 2.4-3.05 m in most homes
+// the room itself, not things standing in it
+const CAM_BG = /\b(floor|rug|carpet|mat|wall|ceiling|windowpane|window|sky|building|tree|grass|road|sidewalk|mountain|earth|light|fence|railing)\b/i;
+
+// Top and floor-contact rows of every reference object, one sample per photo column.
+function cameraRefSamples(out){
+  const layers = out.filter((o) => o.mask), grids = layers.map((o) => unionMask([o]));
+  if (!grids.length) return [];
+  const { w, h } = grids[0], lab = new Int16Array(w * h).fill(-1);
+  grids.forEach((g, i) => { for (let k = 0; k < w * h; k++) if (g.data[k]) lab[k] = i; });   // semantic masks don't overlap
+  const L = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? -1 : lab[y * w + x];
+  const is = (re) => (x, y) => { const l = L(x, y); return l >= 0 && re.test(layers[l].label); };
+  const isFloor = is(/\b(floor|rug|carpet|mat)\b/i), isWall = is(/\bwall\b/i), isCeil = is(/\bceiling\b/i);
+  const isBg = (x, y) => { const l = L(x, y); return l < 0 || CAM_BG.test(layers[l].label); };
+  const onFloor = (x, b) => isFloor(x, b + 1) || isFloor(x, b + 2);
+  const raw = [];
+  for (let x = 0; x < w; x++) {
+    // Things standing in the room: a run of non-background cells read top to bottom (bridging gaps
+    // of up to 2 cells), named by its top cell -- the top is what's being measured.
+    for (let y = 0; y < h;) {
+      if (isBg(x, y)) { y++; continue; }
+      const t = y; let b = y;
+      while (y < h) {
+        if (!isBg(x, y)) { b = y; y++; continue; }
+        if (y + 2 < h && (!isBg(x, y + 1) || !isBg(x, y + 2))) { y++; continue; }
+        break;
+      }
+      const ref = CAM_REFS.find((r) => r.re.test(layers[L(x, t)].label));
+      if (!ref || t === 0 || b - t < 2 || !onFloor(x, b)) continue;     // cut off by the top edge, a sliver, or not visibly on the floor
+      if (!ref.family.test(layers[L(x, b)].label)) continue;
+      if (ref.above) { const a = L(x, t - 1); if (a < 0 || !ref.above.test(layers[a].label)) continue; }
+      raw.push({ ref, top: t / h, base: (b + 1) / h, run: b - t + 1 });
+    }
+    // A wall with ceiling right above it and floor right below spans one ceiling height.
+    for (let y = 0; y < h;) {
+      if (!isWall(x, y)) { y++; continue; }
+      const t = y; while (y < h && isWall(x, y)) y++; const b = y - 1;
+      if (b - t < 2 || !(isCeil(x, t - 1) || isCeil(x, t - 2)) || !onFloor(x, b)) continue;
+      raw.push({ ref: WALL_REF, top: t / h, base: (b + 1) / h, run: b - t + 1 });
+    }
+  }
+  const byName = {};
+  for (const s of raw) (byName[s.ref.name] ||= []).push(s);
+  const samples = [];
+  for (const arr of Object.values(byName)) {
+    // A column through a table's legs is a real measurement; one between them is only its top
+    // with floor seen underneath -- drop runs much shorter than the tallest of the same kind.
+    const maxRun = Math.max(...arr.map((s) => s.run));
+    let keep = arr.filter((s) => s.run >= 0.4 * maxRun);
+    if (keep.length < 2) continue;                                   // a fragment, not a measurement
+    // 30 evenly spaced columns is plenty -- each kind of object counts as one observation anyway
+    if (keep.length > 30) keep = Array.from({ length: 30 }, (_, i) => keep[Math.floor(i * keep.length / 30)]);
+    for (const s of keep) samples.push({ ...s, wt: 1 / keep.length, gh: h });
+  }
+  return samples;
+}
+
+// Projection of the phone's camera in photo coordinates: rows are fractions of the photo's height
+// from the top; the phone is hc m up, tilted down th°, vertical field of view phi, centred.
+function photoCam(hc, thDeg, phi){
+  const th = thDeg * Math.PI / 180, c = Math.cos(th), s = Math.sin(th), k = 2 * Math.tan(phi / 2);
+  const row = (d, y) => { const zc = d * c - (y - hc) * s; return zc <= 1e-3 ? null : 0.5 - (d * s + (y - hc) * c) / zc / k; };
+  return {
+    // how far ahead is the floor point seen at row v (null at or above the horizon)
+    floorDist: (v) => { const q = (0.5 - v) * k, den = s - q * c; if (den <= 1e-4) return null; const d = hc / den * (c + q * s); return d > 0 ? d : null; },
+    // row of the highest visible point of something H tall whose front stands d away and whose top
+    // runs D further back (from above you see its back edge, from below its front edge)
+    topRow: (d, H, D) => { const a = row(d, H), b = D ? row(d + D, H) : null; return a === null && b === null ? null : Math.min(a ?? Infinity, b ?? Infinity); },
+  };
+}
+
+// Tilt from the photo's vertical lines. Tilting down makes vertical edges converge toward a point
+// f·cot(tilt) below the centre of the picture; vote over (tilt, roll) for the point that most of
+// the photo's long straight near-vertical edges aim at. Only long straight segments vote -- the
+// thousands of short texture edges that happen to be upright swamp the answer otherwise.
+// Returns r0 = tan(tilt)·tan(phi/2), which doesn't depend on the lens assumed (phi), plus how
+// confident the vote was.
+function tiltFromVerticals(phi){
+  if (!photoBitmap) return null;
+  // Our own box-filter downscale from (near-)native pixels: the browser's drawImage() scaling
+  // differs between its GPU and CPU paths, and that alone flipped the answer between two loads of
+  // the same photo while testing.
+  const sc = Math.min(1, 2400 / Math.max(photoBitmap.width, photoBitmap.height));
+  const iw = Math.round(photoBitmap.width * sc), ih = Math.round(photoBitmap.height * sc);
+  const cv = document.createElement('canvas'); cv.width = iw; cv.height = ih;
+  const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(photoBitmap, 0, 0, iw, ih);
+  const full = cx.getImageData(0, 0, iw, ih).data;
+  const k = Math.max(1, Math.ceil(Math.max(iw, ih) / 640)), W = Math.floor(iw / k), H = Math.floor(ih / k);
+  const g = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let s = 0;
+    for (let yy = 0; yy < k; yy++) for (let xx = 0; xx < k; xx++) { const p = ((y * k + yy) * iw + x * k + xx) * 4; s += 0.299 * full[p] + 0.587 * full[p + 1] + 0.114 * full[p + 2]; }
+    g[y * W + x] = s / (k * k);
+  }
+  // near-vertical edge pixels (Sobel), with the direction of the edge
+  const ang = new Float32Array(W * H).fill(NaN);
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const i = y * W + x;
+    const gx = (g[i - W + 1] + 2 * g[i + 1] + g[i + W + 1]) - (g[i - W - 1] + 2 * g[i - 1] + g[i + W - 1]);
+    const gy = (g[i + W - 1] + 2 * g[i + W] + g[i + W + 1]) - (g[i - W - 1] + 2 * g[i - W] + g[i - W + 1]);
+    if (Math.hypot(gx, gy) < 40) continue;
+    let a = Math.atan2(gx, -gy); if (a < 0) a += Math.PI;             // edge direction, undirected
+    if (Math.abs(a - Math.PI / 2) <= Math.PI / 6) ang[i] = a;          // within 30° of vertical
+  }
+  // grow them into straight segments (neighbours within 8° of the seed's direction)
+  const seen = new Uint8Array(W * H), segs = [];
+  for (let i0 = 0; i0 < W * H; i0++) {
+    if (isNaN(ang[i0]) || seen[i0]) continue;
+    const a0 = ang[i0], pts = [], st = [i0]; seen[i0] = 1;
+    while (st.length) {
+      const i = st.pop(); pts.push(i); const x = i % W, y = (i / W) | 0;
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+        const j = (y + oy) * W + (x + ox);
+        if (!seen[j] && !isNaN(ang[j]) && Math.abs(ang[j] - a0) < Math.PI / 22.5) { seen[j] = 1; st.push(j); }
+      }
+    }
+    if (pts.length < 15) continue;
+    let mx = 0, my = 0; for (const i of pts) { mx += i % W; my += (i / W) | 0; } mx /= pts.length; my /= pts.length;
+    let sxx = 0, syy = 0, sxy = 0; for (const i of pts) { const dx = i % W - mx, dy = ((i / W) | 0) - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+    const t2 = 0.5 * Math.atan2(2 * sxy, sxx - syy), ux = Math.cos(t2), uy = Math.sin(t2);
+    let lo = Infinity, hi = -Infinity, wide = 0;
+    for (const i of pts) { const dx = i % W - mx, dy = ((i / W) | 0) - my, t = dx * ux + dy * uy; lo = Math.min(lo, t); hi = Math.max(hi, t); wide = Math.max(wide, Math.abs(dy * ux - dx * uy)); }
+    const len = hi - lo;
+    if (len < 0.05 * H || len < 6 * (wide + 0.5) || Math.abs(uy) < Math.cos(Math.PI / 6)) continue;   // long, thin, upright
+    segs.push([mx - W / 2, my - H / 2, ux, uy, len]);
+  }
+  if (segs.length < 5) return null;
+  const f = (H / 2) / Math.tan(phi / 2), tol = Math.PI / 180;
+  const score = (thd, rolld) => {
+    const th = thd * Math.PI / 180, r = rolld * Math.PI / 180, sr = Math.sin(r), cr = Math.cos(r);
+    const atInf = Math.abs(th) < 1e-3, dist = atInf ? 0 : f / Math.tan(th);
+    let s = 0;
+    for (const [x, y, dx, dy, len] of segs) {
+      let ex = sr, ey = cr;
+      if (!atInf) { ex = dist * sr - x; ey = dist * cr - y; const n = Math.hypot(ex, ey); ex /= n; ey /= n; }
+      const a = Math.acos(Math.min(1, Math.abs(dx * ex + dy * ey)));
+      if (a < tol) s += len * (1 - (a / tol) ** 2);
+    }
+    return s;
+  };
+  let best = { s: -1 };
+  for (let rolld = -6; rolld <= 6; rolld += 1.5) for (let thd = -20; thd <= 70; thd += 1) { const s = score(thd, rolld); if (s > best.s) best = { s, thd, rolld }; }
+  const b0 = best;
+  for (let rolld = b0.rolld - 1.5; rolld <= b0.rolld + 1.5; rolld += 0.5) for (let thd = b0.thd - 1.5; thd <= b0.thd + 1.5; thd += 0.25) { const s = score(thd, rolld); if (s > best.s) best = { s, thd, rolld }; }
+  const peak = best.s / Math.max(1, score(best.thd - 5, best.rolld), score(best.thd + 5, best.rolld));
+  if (peak < 1.15) return null;                                        // no clear answer
+  // A render that keeps verticals parallel on purpose reads as level here even when it looks down,
+  // so this is evidence the objects can overrule, not a hard constraint.
+  return { r0: Math.tan(best.thd * Math.PI / 180) * Math.tan(phi / 2), sig: peak > 2 ? 3 : 5 };
+}
+
+function cameraFitLoss(samples, hc, thDeg, f35, vp, lens){
+  const phi = vfovForLens(f35), pc = photoCam(hc, thDeg, phi);
+  const a = Math.log(hc / CAM_DEFAULT.hc) / 0.25, b = (thDeg - 15) / 25, c = Math.log(f35 / lens.f) / lens.sig;
+  let L = 0.5 * (a * a + b * b + c * c);
+  if (vp) { const r = (thDeg - Math.atan(vp.r0 / Math.tan(phi / 2)) * 180 / Math.PI) / vp.sig; L += Math.log(1 + r * r); }
+  for (const q of samples) {
+    const d = pc.floorDist(q.base);
+    const v = d === null ? null : pc.topRow(d, q.ref.H, q.ref.D);
+    const hi = d === null ? null : pc.topRow(d, q.ref.H * Math.exp(q.ref.sig), q.ref.D);
+    const lo = d === null ? null : pc.topRow(d, q.ref.H * Math.exp(-q.ref.sig), q.ref.D);
+    if (v === null || hi === null || lo === null) { L += q.wt * 5; continue; }   // seen standing above the horizon: impossible here
+    const r = (v - q.top) / (Math.abs(lo - hi) / 2 + 1 / q.gh);        // height spread in rows, plus one mask cell
+    L += q.wt * Math.log(1 + r * r);                                   // Cauchy: one wild sample can't dominate
+  }
+  return L;
+}
+
+// Fit the phone's height, tilt and lens to the photo; see the section comment above.
+function calibrateCamera(out){
+  // EXIF lens when the photo still has it; otherwise the 1x lens is likeliest, but let the room say
+  const lens = exifF35 ? { f: exifF35, sig: 0.05 } : { f: CAM_DEFAULT.f35, sig: 0.35 };
+  const samples = cameraRefSamples(out);
+  const vp = tiltFromVerticals(vfovForLens(lens.f));
+  const lenses = exifF35 ? [exifF35] : [13, 16, 20, 24, 26, 28, 32, 36, 42, 48, 55, 65, 77];   // ultra-wide … 3x zoom
+  let best = null;
+  const tryAt = (hc, th, f) => { const L = cameraFitLoss(samples, hc, th, f, vp, lens); if (!best || L < best.L) best = { L, hc, th, f }; };
+  for (const f of lenses) for (let hc = 0.5; hc <= 2.5; hc += 0.1) for (let th = -10; th <= 60; th += 2) tryAt(hc, th, f);
+  const b0 = best;
+  for (let f = b0.f * 0.85; f <= b0.f * 1.151; f += b0.f * 0.05)
+    for (let hc = Math.max(0.5, b0.hc - 0.12); hc <= b0.hc + 0.12; hc += 0.02)
+      for (let th = b0.th - 2.5; th <= b0.th + 2.5; th += 0.25) tryAt(hc, th, f);
+  return { hc: best.hc, pitchDeg: best.th, f35: best.f, refs: [...new Set(samples.map((s) => s.ref.name))] };
 }
 // A photo aimed straight down at the floor has nothing else in frame -- no wall, no furniture,
 // no horizon -- for the AI to have found. There's then no visual cue at all for how far away or
@@ -1164,12 +1371,18 @@ async function runAIPlace(){
       aiSet('That looks like it’s pointing straight down at just the floor — retake it showing some of the room (a wall or furniture) so the size can be judged properly.');
       return;
     }
-    const ang = angleFromFloor(); sAng.value = ang; vAng.textContent = ang + '°';
-    camZoomDist = camDistFromFloor(floorMask); updateCamera();
+    const calib = calibrateCamera(out);
+    cam = { hc: calib.hc, pitchDeg: calib.pitchDeg, f35: calib.f35 };
+    sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
+    updateCamera();
     matchLighting();
     let p = autoFloorPoint();
     placeAtImageCoord(p.fx, p.fy);
-    const objs = labels.slice(0, 7).join(', ');
+    // Say what the size was judged from -- or that nothing in view could anchor it.
+    const refs = calib.refs.length > 1 ? calib.refs.slice(0, -1).join(', ') + ' and ' + calib.refs[calib.refs.length - 1] : calib.refs[0];
+    const objs = refs
+      ? 'Sized from the ' + refs + ' in your photo.'
+      : 'No door, ceiling line or furniture of known size in view, so the size is a best estimate.';
     // autoFloorPoint() only picked a single centre point -- re-check with the machine's real
     // size (now that the model, and so modelSize, is loaded) and, if that spot would spill it
     // off the floor or draw it through furniture in front of it, search for the nearest spot on
@@ -1178,12 +1391,12 @@ async function runAIPlace(){
       const fitted = nearestValidFootprint(p.fx, p.fy);
       if (fitted) {
         placeAtImageCoord(fitted.fx, fitted.fy);
-        aiSet('Placed on the floor ✓ — it now snaps to the floor when you drag. (Detected: ' + objs + ')');
+        aiSet('Placed on the floor ✓ — it snaps to the floor as you drag. ' + objs);
       } else {
-        aiSet('Couldn’t find open floor big enough for this machine clear of the furniture — long-press to place it manually. (Detected: ' + objs + ')');
+        aiSet('Couldn’t find open floor big enough for this machine clear of the furniture — long-press to place it manually. ' + objs);
       }
     } else {
-      aiSet('Placed on the floor ✓ — it now snaps to the floor when you drag. (Detected: ' + objs + ')');
+      aiSet('Placed on the floor ✓ — it snaps to the floor as you drag. ' + objs);
     }
   } catch (e) {
     aiSet('AI unavailable here — drag + sliders still place it.');
