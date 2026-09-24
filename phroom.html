@@ -148,8 +148,9 @@
   /* ---------- "working on it" overlay ----------
      Shown over the photo while the machine model and the room AI download and while the AI reads
      the room -- several seconds on a first visit -- so it never looks frozen. Every animation is a
-     transform (or opacity): the AI runs on the main thread and blocks it, and only compositor-driven
-     animations keep moving through that; a background-position or width animation would freeze. */
+     transform (or opacity): the AI itself runs in a worker now, but the camera fit still holds the
+     main thread for a moment, and only compositor-driven animations keep moving through that; a
+     background-position or width animation would freeze. */
   #busy{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;
     background:rgba(10,12,24,.28);opacity:0;visibility:hidden;transition:opacity .35s,visibility 0s .35s}
   #busy.on{opacity:1;visibility:visible;transition:opacity .35s}
@@ -188,6 +189,75 @@
     .busyGlow,.busyEmoji,.busyFill{animation:none}
     .busyScan{display:none}
   }
+
+  /* ---------- dock: calibrate + re-detect side by side ---------- */
+  .dockTop{display:flex;gap:10px;width:100%;max-width:420px}
+  .dockTop .btn{flex:1;padding:12px 8px;font-size:14px;white-space:nowrap}
+  /* pulses when the AI found nothing in the photo to size the machine from */
+  .btn.glow{box-shadow:0 0 0 2px rgba(255,77,87,.75),0 0 18px rgba(255,77,87,.5);animation:glowPulse 1.6s ease-in-out infinite}
+  @keyframes glowPulse{50%{box-shadow:0 0 0 2px rgba(255,77,87,.3),0 0 6px rgba(255,77,87,.15)}}
+
+  /* ---------- calibrate: the customer marks something of known height ---------- */
+  #calib{position:absolute;inset:0;z-index:4;display:none;touch-action:none;cursor:crosshair}
+  #calib.on{display:block}
+  #calibSvg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  /* magnifier over the finger -- on a phone the fingertip hides exactly the spot being marked */
+  #loupe{position:absolute;width:118px;height:118px;border-radius:50%;border:3px solid #fff;display:none;
+    box-shadow:0 8px 24px rgba(0,0,0,.55);pointer-events:none;background:#000}
+  /* Compact, and kept off the marks: it sits at whichever edge of the photo is clear of them (see
+     placeCalBar()), touches go straight through it to the photo, and it all but vanishes while a
+     finger is down -- so no part of the photo is ever unmarkable. */
+  .calBar{position:absolute;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 56px);z-index:6;display:none;
+    align-items:center;gap:10px;padding:9px 10px 9px 13px;border-radius:14px;color:#fff;pointer-events:none;
+    background:rgba(15,18,32,.86);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.18);box-shadow:0 8px 22px rgba(0,0,0,.45);transition:opacity .15s}
+  .calBar .calBtns{pointer-events:auto}
+  .calBar.on{display:flex}
+  .calIcon{flex:none;width:40px;height:40px;overflow:visible}
+  .calBar[data-step="1"] .ciTop,.calBar[data-step="1"] .ciLine{display:none}
+  .calBar[data-step="1"] .ciBase,.calBar[data-step="2"] .ciTop{animation:ciPulse 1.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+  @keyframes ciPulse{50%{transform:scale(1.35)}}
+  @media (prefers-reduced-motion: reduce){ .calIcon *{animation:none!important} }
+  .calBar.bottom{top:auto;bottom:10px}
+  .calBar.dragging{opacity:.12}
+  .calTexts{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+  .calStepNo{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#ff8a92}
+  .calStep{font-size:13px;font-weight:700;line-height:1.3}
+  .calBtns{display:flex;gap:6px;align-items:center;flex:none}
+  .iconBtn{appearance:none;width:34px;height:34px;border-radius:10px;cursor:pointer;color:#fff;font-size:15px;
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25)}
+  .btn.small{padding:9px 14px;font-size:13px;border-radius:11px}
+  .calSheet{position:fixed;left:0;right:0;bottom:0;z-index:35;display:none;flex-direction:column;gap:12px;
+    max-height:78vh;overflow-y:auto;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 16px);
+    background:#151829;border-top:1px solid rgba(255,255,255,.14);border-radius:18px 18px 0 0;
+    box-shadow:0 -12px 34px rgba(0,0,0,.5);color:#fff}
+  .calSheet.open{display:flex}
+  .sheetTitle{font-weight:800;font-size:16px}
+  .sheetSub{font-size:12px;color:var(--muted);line-height:1.4;margin-top:-6px}
+  .chips{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .chip{appearance:none;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;color:#fff;
+    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:10px 11px;font-size:13px}
+  .chip .ce{font-size:20px;flex:none}
+  .chip .cm{display:block;color:rgba(255,255,255,.55);font-size:11.5px}
+  .chip[aria-pressed="true"]{border-color:#e11d2a;background:rgba(225,29,42,.16)}
+  .calInputRow{display:flex;align-items:center;gap:10px;font-size:13.5px}
+  .calInputRow input{width:110px;padding:10px 12px;border-radius:11px;border:1px solid rgba(255,255,255,.25);
+    background:rgba(255,255,255,.08);color:#fff;font-size:16px;font-weight:700}
+  .calHint{font-size:12px;color:#ffb3b8;min-height:0;margin-top:-4px}
+  .calHint:empty{display:none}
+  .calSheetBtns{display:flex;gap:10px}
+  .calSheetBtns .btn{flex:1}
+  /* short notices over the bottom of the photo, sometimes with an Undo */
+  .toast{position:absolute;left:50%;bottom:12px;z-index:7;display:flex;align-items:center;gap:12px;
+    width:max-content;max-width:calc(100% - 24px);padding:10px 12px 10px 15px;border-radius:14px;
+    color:#fff;font-size:13px;font-weight:700;line-height:1.35;background:rgba(20,24,40,.94);
+    border:1px solid rgba(255,255,255,.18);box-shadow:0 10px 26px rgba(0,0,0,.5);
+    opacity:0;visibility:hidden;transform:translate(-50%,10px);transition:opacity .2s,transform .2s,visibility 0s .2s}
+  .toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .2s,transform .2s}
+  .toastBtn{appearance:none;flex:none;border:0;background:none;color:#ff8a92;font-weight:800;font-size:13.5px;cursor:pointer;padding:4px 2px}
+  .btn:disabled{opacity:.45;cursor:default}
+  .dock[inert],.top[inert]{opacity:.4}
+  .linkBtn{appearance:none;background:none;border:0;color:#ff8a92;font-size:12.5px;text-decoration:underline;cursor:pointer;padding:2px;align-self:center}
 </style>
 </head>
 <body>
@@ -260,6 +330,35 @@
     <canvas id="bg"></canvas>
     <canvas id="scan"></canvas>
     <canvas id="gl"></canvas>
+    <!-- calibrate: touch-and-slide markers for the bottom and top of something of known height -->
+    <div id="calib" aria-hidden="true">
+      <svg id="calibSvg"></svg>
+      <canvas id="loupe"></canvas>
+    </div>
+    <div class="calBar" id="calBar" role="status" aria-live="polite" data-step="1">
+      <!-- which two points: bottom front edge on the floor, then the top front edge straight above -->
+      <svg class="calIcon" viewBox="0 0 44 44" aria-hidden="true">
+        <path d="M3 38.5H41" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+        <path d="M9 15.5 16 8.5H36L29 15.5Z" fill="rgba(255,255,255,.1)" stroke="#cfd4ea" stroke-width="1.4" stroke-linejoin="round"/>
+        <path d="M29 15.5 36 8.5V31.5L29 38.5Z" fill="rgba(255,255,255,.05)" stroke="#cfd4ea" stroke-width="1.4" stroke-linejoin="round"/>
+        <rect x="9" y="15.5" width="20" height="23" fill="rgba(255,255,255,.14)" stroke="#fff" stroke-width="1.6"/>
+        <path class="ciLine" d="M19 36V18" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 2.5"/>
+        <circle class="ciTop" cx="19" cy="15.5" r="4" fill="#4aa3ff" stroke="#fff" stroke-width="1.6"/>
+        <circle class="ciBase" cx="19" cy="38.5" r="4" fill="#2ee67b" stroke="#fff" stroke-width="1.6"/>
+      </svg>
+      <div class="calTexts">
+        <span class="calStepNo" id="calStepNo">Step 1 of 3</span>
+        <span class="calStep" id="calStep"></span>
+      </div>
+      <div class="calBtns">
+        <button class="btn small" id="calNext" type="button" hidden>Next →</button>
+        <button class="iconBtn" id="calCancel" type="button" aria-label="Cancel calibration">✕</button>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <span id="toastText"></span>
+      <button class="toastBtn" id="toastBtn" type="button" hidden></button>
+    </div>
     <div id="busy">
       <div class="busyGlow"></div>
       <div class="busyScan"></div>
@@ -276,7 +375,10 @@
 
   <div class="dock" id="dock">
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%">
-      <button class="btn sec" id="aiBtn" style="width:100%;max-width:340px">🔄 Re-detect floor</button>
+      <div class="dockTop">
+        <button class="btn sec" id="calBtn" type="button">📏 Calibrate size</button>
+        <button class="btn sec" id="aiBtn" type="button">🔄 Re-detect</button>
+      </div>
       <span id="aiStatus" style="font-size:11px;color:#cbd0e6;text-align:center;line-height:1.35">AI finds the <b>floor</b> (not furniture) automatically and keeps the machine on it as you drag. Long-press anywhere to place it exactly there instead.</span>
     </div>
     <div class="actions">
@@ -286,6 +388,24 @@
     </div>
   </div>
   <div class="credit">IFB · washing machine composited with three.js</div>
+
+  <!-- calibrate, last step: what was marked, and how tall it is -->
+  <div class="calSheet" id="calSheet" role="dialog" aria-modal="true" aria-labelledby="calSheetTitle">
+    <span class="sheetTitle" id="calSheetTitle">What did you mark?</span>
+    <span class="sheetSub">Pick the closest match, or type its exact height — measured with a tape is best.</span>
+    <div class="chips" id="calChips"></div>
+    <div class="calInputRow">
+      <label for="calCm">Its height</label>
+      <input id="calCm" type="number" inputmode="decimal" min="20" max="400" step="1" placeholder="e.g. 210" />
+      <span>cm</span>
+    </div>
+    <span class="calHint" id="calHint" aria-live="polite"></span>
+    <div class="calSheetBtns">
+      <button class="btn sec" id="calRemark" type="button">Re-mark</button>
+      <button class="btn" id="calApply" type="button" disabled>Apply ✓</button>
+    </div>
+    <button class="linkBtn" id="calReset" type="button" hidden>Remove my measurements (go back to automatic)</button>
+  </div>
 
 <script type="module">
 import * as THREE from 'three';
@@ -371,6 +491,8 @@ const dimchip = document.getElementById('dimchip');
 const dimBtn  = document.getElementById('dimBtn');
 
 let photoBitmap = null;                 // chosen photo (EXIF-corrected)
+let lastSeg = null;                     // this photo's segmentation result (runAIPlace), reused by Calibrate
+let manualRefs = [];                    // [{top, base, H, name}] -- things the customer marked with Calibrate
 let floorMask = null;                   // AI floor mask {w,h,data} — constrains placement to the floor
 let obstacleMask = null;                // AI mask of furniture/people {w,h,data,base} — see blockedByObstacle()
 // Floor detection now runs automatically (see startComposer()) instead of waiting for a button
@@ -568,6 +690,7 @@ function loadModel(key){
     hideBusy('model');
     hintEl.textContent = 'Could not load the ' + label + ' — check connection.'; hintEl.style.display = 'block';
     pendingAutoFloor = false; floorLocking = false;   // nothing to detect on if the model itself never arrived
+    aiBtn.disabled = calBtn.disabled = false;
   });
 }
 
@@ -724,12 +847,14 @@ function startComposer(){
   // placement; it's the default now, with the button left for a manual retry.
   floorMask = null;
   obstacleMask = null;
+  lastSeg = null; manualRefs = []; freePlaced = false; hideToast();   // a new photo: nothing measured on it yet
+  calBtn.classList.remove('glow'); calBtn.textContent = '📏 Calibrate size';
   cam = { ...CAM_DEFAULT, f35: exifF35 || CAM_DEFAULT.f35 };   // the last photo's fit doesn't apply to this one
   sAng.value = cam.pitchDeg; vAng.textContent = cam.pitchDeg + '°';
   floorLocking = true;
   if (!started) initThree();          // normally already done by showUpload()
   if (machine) runAIPlace();          // model's in -- detect this photo's floor right away
-  else pendingAutoFloor = true;       // still downloading: loadModel() starts the run once it's in
+  else { pendingAutoFloor = true; aiBtn.disabled = calBtn.disabled = true; }   // still downloading: loadModel() starts the run once it's in
   updateDimChip();
   resize();
   drawPhoto();
@@ -804,10 +929,12 @@ function initThree(){
     const p = groundHit(x, y);
     if (!p) return;
     machine.position.set(p.x, 0, p.z); needsRender = true;
+    freePlaced = true;
     if (placementOk(p.x, p.z)) { lastValidX = p.x; lastValidZ = p.z; }
   };
   const moveTo = (x, y) => {
     if (!machine) return;
+    freePlaced = false;
     let sx = x, sy = y;
     if (floorMask) {                                   // washing machine goes on the FLOOR only → snap
       const im = screenToImage(x, y);
@@ -876,7 +1003,7 @@ function initThree(){
     if (longPressTimer && Math.hypot(e.clientX - downX, e.clientY - downY) > LONG_PRESS_TOL) clearLongPress();
     if (dragMode === 'move') moveTo(e.clientX, e.clientY);
   });
-  glCanvas.addEventListener('pointerup',     () => { dragMode = null; clearLongPress(); });
+  glCanvas.addEventListener('pointerup',     () => { if (dragMode === 'turn') settlePlacement(); dragMode = null; clearLongPress(); });
   glCanvas.addEventListener('pointercancel', () => { dragMode = null; clearLongPress(); });
 
   // render loop (renders only when something changed)
@@ -931,6 +1058,8 @@ function resize(){
   bg.width = w * DPR; bg.height = h * DPR;
   scanEl.width = w * DPR; scanEl.height = h * DPR;
   drawScan();       // resizing a canvas clears it
+  renderCalib();    // calibration dots are kept in photo coordinates -- redraw them where the photo now is
+  if (cal.on) placeCalBar();
   updateCamera();   // the stage's shape changes how the photo's field of view maps onto it
 }
 
@@ -1303,8 +1432,9 @@ function floorCoverage(mask){
 // allowed at the bottom of the same column (a counter is mostly "cabinet" under its worktop) --
 // anything else there is something standing in front of its base, hiding where it meets the floor.
 const CAM_REFS = [
-  // a glass door's upper part is "windowpane", so only count doors with wall right above them
-  { re: /\bdoor\b/i, H: 2.03, sig: 0.06, D: 0, name: 'door', family: /\bdoor\b/i, above: /\b(wall|ceiling)\b/i },
+  // a glass door's upper part is "windowpane", so only count doors with wall right above them.
+  // 2.05 m sits between India's usual 2.1 m (7 ft) door and the 2.03 m (6'8") common elsewhere.
+  { re: /\bdoor\b/i, H: 2.05, sig: 0.05, D: 0, name: 'door', family: /\bdoor\b/i, above: /\b(wall|ceiling)\b/i },
   { re: /\bwardrobe\b/i, H: 2.0, sig: 0.12, D: 0.6, name: 'wardrobe', family: /\b(wardrobe|cabinet)\b/i },
   { re: /\brefrigerator\b/i, H: 1.75, sig: 0.1, D: 0.65, name: 'fridge', family: /\brefrigerator\b/i },
   { re: /\b(counter|countertop|kitchen island)\b/i, H: 0.91, sig: 0.05, D: 0.6, name: 'kitchen counter', family: /\b(counter|countertop|kitchen island|cabinet)\b/i },
@@ -1317,7 +1447,9 @@ const CAM_REFS = [
   // and desks: office desks carry privacy partitions the model also calls "desk", so a 1 m
   // partition got fitted as a 0.75 m desk and the machine came out 30% too big.
 ];
-const WALL_REF = { name: 'wall height', H: 2.75, sig: 0.15, D: 0 };   // floor to ceiling: 2.4-3.05 m in most homes
+// Floor to ceiling. Indian homes mostly run 2.75-3.05 m (a 3 m floor-to-floor minus the slab);
+// Western ones 2.4-2.7 m. Centred on the Indian range, since that's where this is used.
+const WALL_REF = { name: 'wall height', H: 2.85, sig: 0.12, D: 0 };
 // the room itself, not things standing in it
 const CAM_BG = /\b(floor|rug|carpet|mat|wall|ceiling|windowpane|window|sky|building|tree|grass|road|sidewalk|mountain|earth|light|fence|railing)\b/i;
 
@@ -1485,11 +1617,17 @@ function cameraFitLoss(samples, hc, thDeg, f35, vp, lens){
   return L;
 }
 
-// Fit the phone's height, tilt and lens to the photo; see the section comment above.
-function calibrateCamera(out){
+// Fit the phone's height, tilt and lens to the photo; see the section comment above. `manual` is
+// whatever the customer marked with Calibrate (see manualRefs): measured by a person, so it counts
+// for four automatic kinds of object, and its height is taken as nearly exact.
+function calibrateCamera(out, manual = []){
   // EXIF lens when the photo still has it; otherwise the 1x lens is likeliest, but let the room say
   const lens = exifF35 ? { f: exifF35, sig: 0.05 } : { f: CAM_DEFAULT.f35, sig: 0.35 };
-  const samples = cameraRefSamples(out);
+  const samples = [
+    // D: 0 -- the customer is asked for its front edge, straight above where it meets the floor
+    ...manual.map((m) => ({ ref: { name: m.name ? 'your ' + m.name : 'your measurement', H: m.H, sig: m.sig || 0.02, D: 0 }, top: m.top, base: m.base, wt: 4, gh: 400 })),
+    ...cameraRefSamples(out || []),
+  ];
   const vp = tiltFromVerticals(vfovForLens(lens.f));
   const lenses = exifF35 ? [exifF35] : [13, 16, 20, 24, 26, 28, 32, 36, 42, 48, 55, 65, 77];   // ultra-wide … 3x zoom
   let best = null;
@@ -1499,7 +1637,17 @@ function calibrateCamera(out){
   for (let f = b0.f * 0.85; f <= b0.f * 1.151; f += b0.f * 0.05)
     for (let hc = Math.max(0.5, b0.hc - 0.12); hc <= b0.hc + 0.12; hc += 0.02)
       for (let th = b0.th - 2.5; th <= b0.th + 2.5; th += 0.25) tryAt(hc, th, f);
-  return { hc: best.hc, pitchDeg: best.th, f35: best.f, refs: [...new Set(samples.map((s) => s.ref.name))] };
+  return { hc: best.hc, pitchDeg: best.th, f35: best.f, refs: [...new Set(samples.map((s) => s.ref.name))], manual: manual.length };
+}
+// "Sized from the …" for the status line, or an honest "best estimate" with a pointer to Calibrate
+function sizedFromText(calib){
+  const list = (a) => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0];
+  if (calib.manual) {
+    const m = manualRefs.map((r) => r.name ? 'your ' + r.name + ' (' + Math.round(r.H * 100) + ' cm)' : 'your ' + Math.round(r.H * 100) + ' cm measurement');
+    return 'Sized from ' + list(m) + ' ✓';
+  }
+  if (calib.refs.length) return 'Sized from the ' + list(calib.refs) + ' in your photo.';
+  return 'Nothing of known size in view, so this is a best estimate — tap 📏 Calibrate size for an exact fit.';
 }
 // A photo aimed straight down at the floor has nothing else in frame -- no wall, no furniture,
 // no horizon -- for the AI to have found. There's then no visual cue at all for how far away or
@@ -1535,7 +1683,8 @@ function matchLighting(){
 }
 async function runAIPlace(){
   if (!photoBitmap || !machine) { aiSet('Load a photo first.'); floorLocking = false; return; }
-  aiBtn.disabled = true;
+  aiBtn.disabled = true; calBtn.disabled = true;
+  freePlaced = false;
   // Keep the machine out of sight until it's been sized and placed -- otherwise it sits at a
   // default spot and size for several seconds and then visibly jumps.
   machine.visible = false; needsRender = true;
@@ -1550,6 +1699,7 @@ async function runAIPlace(){
     aiSet('Understanding the room…');
     await nextPaint();
     const out = await AI.seg(photoInputURL());
+    lastSeg = out;                            // kept so Calibrate can refit without re-running the AI
     floorMask = buildFloorMask(out);
     obstacleMask = buildObstacleMask(out);   // same segmentation pass -- no extra model call
     revealScan(out);
@@ -1566,18 +1716,17 @@ async function runAIPlace(){
     }
     setBusy('measure', '📐', 'Measuring your room…', 'Working out the camera height and angle');
     await nextPaint();                        // the fit below blocks for a moment -- show the step first
-    const calib = calibrateCamera(out);
+    const calib = calibrateCamera(out, manualRefs);
     cam = { hc: calib.hc, pitchDeg: calib.pitchDeg, f35: calib.f35 };
     sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
     updateCamera();
     matchLighting();
     let p = autoFloorPoint();
     placeAtImageCoord(p.fx, p.fy);
-    // Say what the size was judged from -- or that nothing in view could anchor it.
-    const refs = calib.refs.length > 1 ? calib.refs.slice(0, -1).join(', ') + ' and ' + calib.refs[calib.refs.length - 1] : calib.refs[0];
-    const objs = refs
-      ? 'Sized from the ' + refs + ' in your photo.'
-      : 'No door, ceiling line or furniture of known size in view, so the size is a best estimate.';
+    // Say what the size was judged from -- or that nothing in view could anchor it, and point at
+    // Calibrate, which is the fix for exactly that case.
+    const objs = sizedFromText(calib);
+    calBtn.classList.toggle('glow', !calib.refs.length);
     // autoFloorPoint() only picked a single centre point -- re-check with the machine's real
     // size (now that the model, and so modelSize, is loaded) and, if that spot would spill it
     // off the floor or draw it through furniture in front of it, search for the nearest spot on
@@ -1596,7 +1745,8 @@ async function runAIPlace(){
   } catch (e) {
     aiSet('AI unavailable here — drag + sliders still place it.');
   } finally {
-    aiBtn.disabled = false;
+    aiBtn.disabled = false; calBtn.disabled = false;
+    calBtn.textContent = manualRefs.length ? '📏 Calibrate again' : '📏 Calibrate size';
     floorLocking = false;   // whatever happened, the drag lock was only ever for this one detection pass
     if (machine) { machine.visible = true; needsRender = true; }
     hideBusy();
@@ -1606,6 +1756,263 @@ async function runAIPlace(){
   }
 }
 aiBtn.addEventListener('click', runAIPlace);
+
+// Where the machine's footprint centre is in the photo -- kept across a refit, so fixing the size
+// never moves the machine to a different spot in the picture.
+function machinePhotoPoint(){
+  const s = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z));
+  return screenToImage(s.x, s.y);
+}
+// After anything that changes the machine's footprint where it stands -- a bigger size, a turn, a
+// refit -- make sure it still fits (whole footprint on the floor, nothing nearer drawn through it),
+// else move it to the nearest spot that does. Skipped when the customer long-pressed it into place:
+// that was a deliberate "put it exactly here", which a slider shouldn't quietly undo.
+let freePlaced = false;
+function settlePlacement(){
+  if (!machine || !floorMask || freePlaced || placementOk(machine.position.x, machine.position.z)) return;
+  const at = machinePhotoPoint();
+  const fitted = nearestValidFootprint(at.fx, at.fy);
+  if (fitted) { placeAtImageCoord(fitted.fx, fitted.fy); needsRender = true; }
+}
+sSize.addEventListener('change', settlePlacement);
+sRot.addEventListener('change', settlePlacement);
+
+// ---------- toast: a short notice over the photo, optionally with one action (Undo) ----------
+const toastEl = document.getElementById('toast'), toastText = document.getElementById('toastText'), toastBtn = document.getElementById('toastBtn');
+let toastTimer = null, toastAction = null;
+function toast(msg, actionLabel = '', action = null, ms = 5000){
+  toastText.textContent = msg;
+  toastBtn.textContent = actionLabel; toastBtn.hidden = !action; toastAction = action;
+  toastEl.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, ms);
+}
+function hideToast(){ clearTimeout(toastTimer); toastEl.classList.remove('on'); toastAction = null; }
+toastBtn.addEventListener('click', () => { const f = toastAction; hideToast(); if (f) f(); });
+
+// ---------- calibrate: the customer marks something of known height ----------
+// The automatic sizing needs a door, counter, wall-to-ceiling line or similar in view; a photo with
+// none of those can only be guessed, and on the test photos that guess was off by 12-30%. This fixes
+// it in three steps: touch the bottom of something (where it meets the floor), touch its top, say
+// what it is. That's one exact reference -- the same kind of evidence calibrateCamera() gets from a
+// detected door, but measured by a person, so it outweighs everything automatic.
+const calBtn = document.getElementById('calBtn');
+const calibEl = document.getElementById('calib'), calibSvg = document.getElementById('calibSvg'), loupe = document.getElementById('loupe');
+const calBar = document.getElementById('calBar'), calStepNo = document.getElementById('calStepNo'), calStep = document.getElementById('calStep');
+const calNext = document.getElementById('calNext'), calCancel = document.getElementById('calCancel');
+const calSheet = document.getElementById('calSheet'), calChips = document.getElementById('calChips'), calCm = document.getElementById('calCm');
+const calApply = document.getElementById('calApply'), calRemark = document.getElementById('calRemark'), calReset = document.getElementById('calReset');
+const calHint = document.getElementById('calHint');
+// Usual heights of things in Indian homes -- a starting point the customer can still edit. sig is
+// how much real ones vary (log-spread); a height typed in by hand is taken as measured (0.02).
+const CAL_PRESETS = [
+  { e: '🚪', name: 'door', label: 'Door', cm: 210, sig: 0.04 },
+  { e: '🍳', name: 'kitchen counter', label: 'Kitchen counter', cm: 90, sig: 0.04 },
+  { e: '🍽️', name: 'dining table', label: 'Dining table', cm: 75, sig: 0.04 },
+  { e: '🗄️', name: 'almirah', label: 'Steel almirah', cm: 198, sig: 0.04 },
+  { e: '🧺', name: 'washing machine', label: 'Front-load washer', cm: 85, sig: 0.03 },
+];
+const cal = { on: false, base: null, top: null, drag: null, preset: null };   // points are photo fractions {fx, fy}
+
+const calScreen = (p) => imageToScreen(p.fx, p.fy);
+function calPhotoPoint(x, y){
+  const im = screenToImage(x, y);
+  return { fx: Math.min(1, Math.max(0, im.fx)), fy: Math.min(1, Math.max(0, im.fy)) };
+}
+function renderCalib(){
+  if (!cal.on || !photoBitmap) { calibSvg.innerHTML = ''; return; }
+  const b = cal.base && calScreen(cal.base), t = cal.top && calScreen(cal.top);
+  let s = '';
+  if (b && t) {
+    s += `<line x1="${b.x}" y1="${b.y}" x2="${t.x}" y2="${t.y}" stroke="rgba(0,0,0,.55)" stroke-width="6" stroke-linecap="round"/>`;
+    s += `<line x1="${b.x}" y1="${b.y}" x2="${t.x}" y2="${t.y}" stroke="#fff" stroke-width="2.5" stroke-dasharray="7 5" stroke-linecap="round"/>`;
+  }
+  // bottom: green, with a short floor line; top: blue
+  if (b) s += `<line x1="${b.x - 20}" y1="${b.y}" x2="${b.x + 20}" y2="${b.y}" stroke="#2ee67b" stroke-width="3" stroke-linecap="round"/>`
+            + `<circle cx="${b.x}" cy="${b.y}" r="10" fill="#2ee67b" stroke="#fff" stroke-width="3"/>`;
+  if (t) s += `<circle cx="${t.x}" cy="${t.y}" r="10" fill="#4aa3ff" stroke="#fff" stroke-width="3"/>`;
+  calibSvg.innerHTML = s;
+}
+// A 3× magnifier just above the finger, with a crosshair on the exact point being marked
+function showLoupe(p){
+  const size = 118, zoom = 3, cp = coverParams(), sc = calScreen(p);
+  loupe.width = loupe.height = Math.round(size * DPR);
+  let x = sc.x - size / 2, y = sc.y - size - 36;
+  if (y < 8) y = sc.y + 36;                                       // near the top: show it below instead
+  x = Math.min(window.innerWidth - size - 6, Math.max(6, x));
+  loupe.style.left = x + 'px'; loupe.style.top = y + 'px'; loupe.style.display = 'block';
+  const ctx = loupe.getContext('2d'), W = loupe.width, src = size / (zoom * cp.s);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, W);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(photoBitmap, p.fx * cp.iw - src / 2, p.fy * cp.ih - src / 2, src, src, 0, 0, W, W);
+  ctx.lineWidth = 3 * DPR; ctx.strokeStyle = 'rgba(0,0,0,.6)';
+  ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, W); ctx.moveTo(0, W / 2); ctx.lineTo(W, W / 2); ctx.stroke();
+  ctx.lineWidth = 1.2 * DPR; ctx.strokeStyle = cal.drag === 'top' ? '#4aa3ff' : '#2ee67b';
+  ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, W); ctx.moveTo(0, W / 2); ctx.lineTo(W, W / 2); ctx.stroke();
+}
+const hideLoupe = () => { loupe.style.display = 'none'; };
+function calUpdateStep(msg){
+  calNext.hidden = true;
+  calBar.dataset.step = !cal.base ? '1' : !cal.top ? '2' : '3';
+  if (!cal.base) {
+    calStepNo.textContent = 'Step 1 of 3';
+    calStep.textContent = msg || 'Touch the bottom front of a door, table, counter or cupboard — where it meets the floor.';
+  } else if (!cal.top) {
+    calStepNo.textContent = 'Step 2 of 3';
+    // the front edge: on anything below eye level the whole top shows, and its back edge sits
+    // higher in the photo -- marking that instead reads a 75 cm desk as ~90 cm
+    calStep.textContent = msg || 'Now touch its top edge nearest you — straight above that point.';
+  } else {
+    calStepNo.textContent = 'Step 3 of 3';
+    calStep.textContent = 'Drag a dot to fine-tune, then tap Next.';
+    calNext.hidden = false;
+  }
+  placeCalBar();
+}
+// The step card goes at the top or the bottom of the photo, whichever is clear of the marks: the
+// top while the customer looks for a bottom point (those are low in the photo), then the bottom
+// unless that bottom point is down there itself, and after that wherever both dots can be seen.
+function placeCalBar(){
+  const H = stageEl.clientHeight, bh = calBar.offsetHeight || 64;
+  const topBand = topBar.offsetHeight + bh + 14, botBand = H - bh - 24;   // stage px covered by the card, plus margin
+  const ys = [cal.base, cal.top].filter(Boolean).map((p) => calScreen(p).y);
+  const clearTop = ys.every((y) => y > topBand), clearBot = ys.every((y) => y < botBand);
+  const atBottom = calBar.classList.contains('bottom');
+  let bottom;
+  if (!cal.base) bottom = false;
+  else if (!cal.top) bottom = clearBot;
+  else bottom = atBottom ? (clearBot || !clearTop) : (!clearTop && clearBot);   // move only when it helps
+  calBar.classList.toggle('bottom', bottom);
+}
+// While marking, everything else is locked (inert): Save would capture the photo without the machine,
+// and Change photo or a model switch would pull the photo out from under the marks.
+const topBar = document.querySelector('.top');
+function openCalib(){
+  if (!photoBitmap || !machine || calBtn.disabled) return;
+  Object.assign(cal, { on: true, base: null, top: null, drag: null, preset: null });
+  machine.visible = false; needsRender = true;                   // out of the way of what's being marked
+  clearTimeout(hintTimer); hintEl.style.display = 'none'; dimchip.style.display = 'none';
+  setMenu(false);
+  dockEl.inert = true; topBar.inert = true;
+  calibEl.classList.add('on'); calBar.classList.add('on');
+  calUpdateStep(); renderCalib();
+}
+function closeCalib(){
+  Object.assign(cal, { on: false, drag: null });
+  calibEl.classList.remove('on'); calBar.classList.remove('on'); calSheet.classList.remove('open');
+  dockEl.inert = false; topBar.inert = false;
+  hideLoupe(); renderCalib();
+  if (machine) { machine.visible = true; needsRender = true; }
+  if (dimsOn && stageEl.style.display === 'block') dimchip.style.display = 'block';
+}
+function openCalSheet(){
+  cal.preset = null; calCm.value = ''; calApply.disabled = true; calHint.textContent = '';
+  [...calChips.children].forEach((c) => c.setAttribute('aria-pressed', 'false'));
+  calReset.hidden = !manualRefs.length;
+  calSheet.classList.add('open');
+}
+const calValid = (v) => v >= 20 && v <= 400;
+function calValidate(){
+  const v = +calCm.value;
+  calApply.disabled = !calValid(v);
+  // feet or inches typed into a cm box is the likely slip
+  calHint.textContent = calCm.value !== '' && !calValid(v) ? 'Heights are in centimetres (20–400) — a door is about 210 cm.' : '';
+}
+// Refit the camera with everything known about this photo (the AI's view plus the customer's marks),
+// keeping the machine at the same spot in the picture.
+function refitCamera(){
+  if (!machine) return;
+  const at = machinePhotoPoint();
+  const calib = calibrateCamera(lastSeg, manualRefs);
+  cam = { hc: calib.hc, pitchDeg: calib.pitchDeg, f35: calib.f35 };
+  sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
+  updateCamera();
+  placeAtImageCoord(at.fx, at.fy);
+  settlePlacement();
+  calBtn.classList.toggle('glow', !calib.refs.length);
+  calBtn.textContent = manualRefs.length ? '📏 Calibrate again' : '📏 Calibrate size';
+  aiSet(sizedFromText(calib));
+  needsRender = true;
+}
+
+calibEl.addEventListener('pointerdown', (e) => {
+  if (!cal.on || calSheet.classList.contains('open')) return;
+  calibEl.setPointerCapture(e.pointerId);
+  const p = calPhotoPoint(e.clientX, e.clientY);
+  const near = (q) => q && Math.hypot(calScreen(q).x - e.clientX, calScreen(q).y - e.clientY) < 30;
+  if (near(cal.top)) cal.drag = 'top';
+  else if (near(cal.base)) cal.drag = 'base';
+  else if (!cal.base) cal.drag = 'base';
+  else if (!cal.top) cal.drag = 'top';
+  else return;                                                   // both set: only the dots move now
+  cal[cal.drag] = p;
+  calBar.classList.add('dragging');
+  renderCalib(); showLoupe(p);
+});
+calibEl.addEventListener('pointermove', (e) => {
+  if (!cal.drag) return;
+  const p = calPhotoPoint(e.clientX, e.clientY);
+  cal[cal.drag] = p; renderCalib(); showLoupe(p);
+});
+const calRelease = () => {
+  if (!cal.drag) return;
+  cal.drag = null; hideLoupe(); calBar.classList.remove('dragging');
+  // the top has to be above the bottom -- anything else can't be a height
+  if (cal.base && cal.top && cal.top.fy > cal.base.fy - 0.02) {
+    cal.top = null; renderCalib();
+    calUpdateStep('That point is below the bottom one — touch the top edge of the same thing, above it.');
+    return;
+  }
+  calUpdateStep();
+};
+calibEl.addEventListener('pointerup', calRelease);
+calibEl.addEventListener('pointercancel', calRelease);
+
+const chipHtml = (i, e, label, sub) => `<button type="button" class="chip" data-i="${i}" aria-pressed="false">` +
+  `<span class="ce">${e}</span><span><b>${label}</b><span class="cm">${sub}</span></span></button>`;
+calChips.innerHTML = CAL_PRESETS.map((p, i) => chipHtml(i, p.e, p.label, p.cm + ' cm')).join('') +
+  chipHtml('other', '✏️', 'Something else', 'type its height below');
+calChips.addEventListener('click', (e) => {
+  const b = e.target.closest('.chip'); if (!b) return;
+  [...calChips.children].forEach((c) => c.setAttribute('aria-pressed', String(c === b)));
+  if (b.dataset.i === 'other') { cal.preset = null; calCm.value = ''; calValidate(); calCm.focus(); return; }
+  cal.preset = CAL_PRESETS[+b.dataset.i];
+  calCm.value = cal.preset.cm; calValidate();
+});
+calCm.addEventListener('input', () => {
+  // a typed height far from the picked chip's means it's something else after all
+  const v = +calCm.value;
+  if (cal.preset && calValid(v) && Math.abs(Math.log(v / cal.preset.cm)) > 0.3) {
+    cal.preset = null; [...calChips.children].forEach((c) => c.setAttribute('aria-pressed', 'false'));
+  }
+  calValidate();
+});
+calCm.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !calApply.disabled) calApply.click(); });
+calBtn.addEventListener('click', openCalib);
+calCancel.addEventListener('click', closeCalib);
+calNext.addEventListener('click', openCalSheet);
+calRemark.addEventListener('click', () => {
+  calSheet.classList.remove('open');
+  Object.assign(cal, { base: null, top: null, preset: null });
+  calUpdateStep(); renderCalib();
+});
+calApply.addEventListener('click', () => {
+  const cm = +calCm.value;
+  if (!calValid(cm) || !cal.base || !cal.top) return;
+  // a chip's usual height is only typical; anything typed in is taken as measured
+  const typical = cal.preset && cm === cal.preset.cm;
+  const mark = { top: cal.top.fy, base: cal.base.fy, H: cm / 100, name: cal.preset ? cal.preset.name : null, sig: typical ? cal.preset.sig : 0.02 };
+  manualRefs.push(mark);
+  closeCalib();
+  refitCamera();
+  toast('Resized to match ' + (mark.name ? 'your ' + mark.name : 'your measurement') + ' ✓', 'Undo', () => {
+    manualRefs = manualRefs.filter((m) => m !== mark); refitCamera();
+  }, 8000);
+});
+calReset.addEventListener('click', () => {
+  manualRefs = []; closeCalib(); refitCamera();
+  toast('Back to automatic sizing');
+});
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cal.on) closeCalib(); });
 
 // ---------- machine chooser + switcher ----------
 const chooser     = document.getElementById('chooser');
@@ -1700,6 +2107,39 @@ dimBtn.addEventListener('click', () => {
   needsRender = true;
 });
 
+
+// ---------- QA hook -- only with ?debug in the URL ----------
+// Lets a tester (or an automated check) read what the app worked out about a photo and drive the
+// placement. Nothing is exposed without the flag.
+if (new URLSearchParams(location.search).has('debug')) {
+  window.__phroomDebug = {
+    cam: () => ({ hc: +cam.hc.toFixed(3), pitchDeg: +cam.pitchDeg.toFixed(2), f35: +cam.f35.toFixed(1) }),
+    labels: () => [...new Set((lastSeg || []).map((o) => o.label))],
+    refs: () => { const n = {}; for (const q of cameraRefSamples(lastSeg || [])) n[q.ref.name] = (n[q.ref.name] || 0) + 1; return n; },
+    manualRefs: () => manualRefs.map((m) => ({ ...m })),
+    // How tall something would have to be, under camera c (default: the fitted one), to meet the
+    // floor at photo row `base` with its top at row `top` -- D is how far back its top edge sits.
+    implied: (top, base, D = 0, c = cam) => {
+      const pc = photoCam(c.hc, c.pitchDeg, vfovForLens(c.f35)), d = pc.floorDist(base);
+      if (d === null) return null;
+      let lo = 0.02, hi = 10;
+      for (let i = 0; i < 50; i++) { const mid = (lo + hi) / 2, v = pc.topRow(d, mid, D); if (v === null || v < top) hi = mid; else lo = mid; }
+      return +((lo + hi) / 2).toFixed(3);
+    },
+    // on-screen height (share of photo height) of the machine standing with its front edge at row v
+    machineAt: (v, c = cam) => {
+      const pc = photoCam(c.hc, c.pitchDeg, vfovForLens(c.f35)), d = pc.floorDist(v);
+      if (d === null || !modelSize) return null;
+      const s = baseScale * (+sSize.value / 100), t = pc.topRow(d, modelSize.y * s, modelSize.z * s);
+      return t === null ? null : +(v - t).toFixed(4);
+    },
+    placeAt: (fx, fy) => { placeAtImageCoord(fx, fy); needsRender = true; return placementOk(machine.position.x, machine.position.z); },
+    machinePhoto: () => { const o = machineOutline(machine.position.x, machine.position.z), at = machinePhotoPoint();
+      return { centre: [+at.fx.toFixed(3), +at.fy.toFixed(3)], top: +Math.min(...o.hull.map((p) => p[1])).toFixed(3), back: +o.backRow.toFixed(3), ok: placementOk(machine.position.x, machine.position.z) }; },
+    // simulate a calibration without the taps: mark rows top/base as an object `cm` tall
+    calibrate: (top, base, cm, name = null, sig = 0.02) => { manualRefs.push({ top, base, H: cm / 100, name, sig }); refitCamera(); return { ...cam }; },
+  };
+}
 
 // test hook: load a real room photo from a CORS-enabled URL (desktop verification)
 window.__loadUrlTest = async (url) => {
