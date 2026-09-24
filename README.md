@@ -11,18 +11,44 @@ pattern Shopify and Amazon use (GLB for web/Android, auto-USDZ for iPhone Quick 
 ## What's here
 ```
 index.html            Product 3D/AR viewer (model-viewer, pinned 4.3.1)
+phroom.html           "See it in your room" — AI places the machine into a room photo at real size
+phroom-ai-worker.js   The room AIs for phroom.html (floor/furniture segmentation, 3D depth), off the main thread
 fit.html               "Will it fit?" live AR — 8th Wall SLAM, place at real scale
-photo.html             "Add to a photo" — drop the machine into a still photo, save/share
-models/IFB_WM1.glb      The 3D washing-machine model (real scale: 85×59×62 cm)
+photo.html             "Add to a photo" — drop the machine into a still photo by hand, save/share
+models/IFB_WM1.glb      The 3D model: IFB Executive MXC 9014, true scale (87.5 cm tall), compressed (3 MB)
+models/source/          The original, uncompressed model (24.5 MB) — edit/re-export from this
 assets/qr.png          QR code to the live site (shown to desktop users)
 .nojekyll              Tells GitHub Pages to serve files as-is
 AR-Washing-Machine-Viewer-Plan.pdf   Project plan & tech guide
 ```
 
+Every page shows the machine at IFB's datasheet size for the Executive MXC 9014:
+**W 59.8 × D 65 × H 87.5 cm** ([ifbappliances.com](https://www.ifbappliances.com/executive-mxc-9014-sslc)).
+
+## phroom.html — "See it in your room" (browser-only, no app)
+Take a photo with the in-app camera or choose one, and the machine appears on your floor at
+its real size:
+- **Finds the floor** (AI segmentation) and keeps the machine on it, clear of furniture in
+  front of it; drag to move, drag the machine to turn it, long-press to place it exactly.
+- **Sizes it from the room**: things of known height in the photo (doors, counters, fridge,
+  stove, sofa, wardrobe, wall-to-ceiling), the photo's lens (EXIF) and its vertical lines.
+- **3D depth scan** when the photo has nothing of known height: a depth AI (Metric3D, 145 MB,
+  WebGPU) measures the room. Downloads by itself on a computer; phones ask first.
+- **📏 Calibrate size** for an exact fit: touch the bottom and top of a door, table, counter or
+  anything you know the height of.
+- **In-app camera** on phones: a level, tilt guidance, and the phone's tilt saved with the
+  photo — the one thing a photo can't tell the sizing by itself.
+- **Save** makes a JPEG at the photo's own resolution (up to 2560 px), ready to share.
+
+Tested on 16 real room photos. On the ones with nothing of known size in view, checked against
+hand-measured objects, the old guess drew the machine 16–62% too small; the depth scan brings
+that to within 1–21%, marking one known object with Calibrate to within ~1–8%, and the in-app
+camera's recorded tilt alone took one of them (my_pg) to within 2.5%.
+
 ## fit.html — "Will it fit?" (AR, browser-only)
 Live camera + 8th Wall in-browser SLAM (works in stock Safari on iPhone and Chrome on
 Android, no app). Aim at the floor → a reticle appears → tap **Place** and the machine is
-**anchored at real 85 cm scale**; drag to rotate, or use **Move / Reset**. Measurement +
+**anchored at its real 87.5 cm size**; drag to rotate, or use **Move / Reset**. Measurement +
 "fits / too tight" verdict are the next milestones.
 
 > **8th Wall license:** the SLAM engine binary is free for commercial use under a limited-use
@@ -60,7 +86,16 @@ git push
 ## Swapping the model
 Replace `models/IFB_WM1.glb` with your own GLB (keep the same filename, or update `src` in
 `index.html`). For accurate AR size, author the GLB in **metres** (1 unit = 1 m) with its
-**origin at the base-centre** so it rests flat on the floor. Keep it compressed (< ~5–10 MB).
+**origin at the base-centre** so it rests flat on the floor. Keep it compressed — the current
+one was made from `models/source/IFB_WM1.glb` with [glTF Transform](https://gltf-transform.dev):
+```
+npx @gltf-transform/cli@4 resize in.glb a.glb --pattern "<front texture>*" --width 2048 --height 2048
+npx @gltf-transform/cli@4 webp a.glb b.glb --slots "baseColorTexture" --quality 90
+npx @gltf-transform/cli@4 meshopt b.glb out.glb --level high
+```
+Every page already loads meshopt-compressed models. For a different machine, also update its
+size: `heightCm`/`specCm` in `phroom.html` and `fit.html`, `SPEC` in `photo.html`,
+`fit-stable.html` and `index.html`.
 
 ## iPhone note
 iPhone AR uses Apple Quick Look; `<model-viewer>` generates the USDZ automatically from the
