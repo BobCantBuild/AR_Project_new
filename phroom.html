@@ -917,6 +917,10 @@ function updateCamera(){
   camera.position.set(0, cam.hc, cam.hc / Math.tan(Math.max(th, THREE.MathUtils.degToRad(5))));
   camera.rotation.set(-th, 0, 0);
   camera.updateProjectionMatrix();
+  // three.js only refreshes the camera's world matrix when it next renders -- and the first
+  // placement on a fresh photo raycasts right after this, before any frame. Without this it aimed
+  // with the previous photo's camera and dropped the machine metres from where it was meant to go.
+  camera.updateMatrixWorld(true);
   needsRender = true;
 }
 
@@ -1105,6 +1109,7 @@ function imageToScreen(fx, fy){ const p = coverParams(); return { x: fx * p.iw *
 // top-level (not just inside initThree()) so runAIPlace()/selectModel() can use it too.
 function groundHit(x, y){
   ndc.set((x / window.innerWidth) * 2 - 1, -((y / stageH()) * 2 - 1));
+  camera.updateMatrixWorld(); ground.updateMatrixWorld();   // current poses, not the last frame's (see updateCamera)
   raycaster.setFromCamera(ndc, camera);
   const hit = raycaster.intersectObject(ground)[0];
   return hit ? { x: hit.point.x, z: hit.point.z } : null;
