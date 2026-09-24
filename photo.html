@@ -111,11 +111,11 @@
     <canvas id="gl"></canvas>
   </section>
   <div class="hint" id="hint">Drag the floor to move it · drag the machine to turn it</div>
-  <div class="dimchip" id="dimchip">IFB washing machine · 85 × 59 × 62 cm</div>
+  <div class="dimchip" id="dimchip">IFB washing machine · 87.5 × 59.8 × 65 cm</div>
 
   <div class="dock" id="dock">
     <div class="sliders">
-      <div class="slider"><label>Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈85cm</span></div>
+      <div class="slider"><label>Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈87.5cm</span></div>
       <div class="slider"><label>Rotate</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
       <div class="slider"><label>Angle</label><input id="sAng" type="range" min="0" max="42" value="14"><span class="val" id="vAng">14°</span></div>
     </div>
@@ -131,8 +131,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
-const MODEL_URL = 'models/IFB_WM1.glb';
+const MODEL_URL = 'models/IFB_WM1.glb';   // meshopt-compressed: needs the decoder (see the load below)
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 
 // DOM
@@ -155,7 +156,10 @@ let started = false;
 // ---- H×W×D dimension lines (same approach as fit.html) ----
 // Product dimensions in cm at size 100%. The labels show these × the current Size slider,
 // so the numbers always match the machine actually on screen.
-const SPEC = { H: 85, W: 59, D: 62 };
+// IFB's datasheet size for the machine in models/IFB_WM1.glb (Executive MXC 9014, W × D × H =
+// 598 × 650 × 875 mm). The GLB itself is scaled to that true 87.5 cm height, so at Size 100% the
+// drawn machine and these labels agree.
+const SPEC = { H: 87.5, W: 59.8, D: 65 };
 let modelSize = null;      // GLB real size (metres) — sets where the dimension lines sit
 let dimGroup = null;       // lines + labels, parented to the machine so they follow it
 let dimSets = [];          // [{name, cands:[…]}] — only the best-facing candidate is shown
@@ -213,9 +217,9 @@ function startComposer(){
 // ---------- H×W×D dimension lines + labels ----------
 const sizeScale = () => +sSize.value / 100;
 const curDims = () => ({
-  H: Math.round(SPEC.H * sizeScale()),
-  W: Math.round(SPEC.W * sizeScale()),
-  D: Math.round(SPEC.D * sizeScale()),
+  H: +(SPEC.H * sizeScale()).toFixed(1),
+  W: +(SPEC.W * sizeScale()).toFixed(1),
+  D: +(SPEC.D * sizeScale()).toFixed(1),
 });
 
 function makeLabel(text){
@@ -370,7 +374,7 @@ function initThree(){
   ndc = new THREE.Vector2();
   _wp = new THREE.Vector3(); _cam = new THREE.Vector3(); _dir = new THREE.Vector3();
 
-  new GLTFLoader().load(MODEL_URL, (gltf) => {
+  new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(MODEL_URL, (gltf) => {
     const g = new THREE.Group();
     gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     const box = new THREE.Box3().setFromObject(gltf.scene);

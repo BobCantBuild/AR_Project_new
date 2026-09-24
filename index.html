@@ -12,6 +12,13 @@
 <meta property="og:description" content="See an IFB washing machine in 3D and place it in your room at real size — no app." />
 <meta property="og:type" content="website" />
 
+<!-- The machine model is meshopt-compressed (24.5 MB -> 3 MB), and <model-viewer> only decodes that
+     when told where the decoder is -- before its script loads. Pinned: meshoptimizer 1.x no longer
+     ships this plain-script build. -->
+<script>
+  self.ModelViewerElement = self.ModelViewerElement || {};
+  self.ModelViewerElement.meshoptDecoderLocation = 'https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_decoder.js';
+</script>
 <!-- Google <model-viewer>, pinned for stability. -->
 <script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.3.1/dist/model-viewer.min.js"></script>
 
@@ -176,16 +183,22 @@
 
   const cm = m => Math.round(m * 100);
 
+  // IFB's datasheet for the machine in models/IFB_WM1.glb (Executive MXC 9014, W × D × H =
+  // 598 × 650 × 875 mm). The GLB is scaled to that real 87.5 cm height, which is what AR shows;
+  // its modelled cabinet runs ~3% wider/deeper than the real one, so the panel quotes the
+  // datasheet rather than the model's bounding box.
+  const SPEC_CM = { H: 87.5, W: 59.8, D: 65 };
   function showDimensions(){
     try{
       const d = mv.getDimensions();           // metres (model's own scale)
-      // washing machine: Height = y, Width = x, Depth = z
-      document.getElementById('dimH').innerHTML = cm(d.y) + '<small> cm</small>';
-      document.getElementById('dimW').innerHTML = cm(d.x) + '<small> cm</small>';
-      document.getElementById('dimD').innerHTML = cm(d.z) + '<small> cm</small>';
-      const looksReal = d.y > 0.4 && d.y < 1.3;   // a real washer is ~85 cm tall
+      const fmt = (v) => (+v.toFixed(1)) + '<small> cm</small>';
+      document.getElementById('dimH').innerHTML = fmt(SPEC_CM.H);
+      document.getElementById('dimW').innerHTML = fmt(SPEC_CM.W);
+      document.getElementById('dimD').innerHTML = fmt(SPEC_CM.D);
+      // the model itself must be at real scale for AR to be true to size
+      const looksReal = Math.abs(cm(d.y) - SPEC_CM.H) <= 2;
       document.getElementById('dimNote').textContent = looksReal
-        ? 'Measured from the 3D model (real-world scale).'
+        ? 'IFB’s official size — the 3D model is to the same real-world scale, so AR shows it true to size.'
         : 'Heads up: the model does not look like real-world metres — its real size in AR may be off. Fix the GLB scale (1 unit = 1 metre) for accurate AR.';
     }catch(e){ /* not loaded yet */ }
   }

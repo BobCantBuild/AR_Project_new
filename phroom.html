@@ -339,7 +339,7 @@
       </button>
       <div class="accBody" id="accStyleBody" hidden>
         <div class="sliders">
-          <div class="slider"><label>Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈85cm</span></div>
+          <div class="slider"><label>Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈87.5cm</span></div>
           <div class="slider"><label>Rotate</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
           <div class="slider"><label>Angle</label><input id="sAng" type="range" min="-10" max="45" value="12"><span class="val" id="vAng">12°</span></div>
         </div>
@@ -436,7 +436,7 @@
     </div>
   </section>
   <div class="hint" id="hint">Drag to move it on the floor · long-press to place it exactly · drag the machine to turn it</div>
-  <div class="dimchip" id="dimchip">IFB washing machine · 85 × 59 × 62 cm</div>
+  <div class="dimchip" id="dimchip">IFB washing machine · 87.5 × 59.8 × 65 cm</div>
 
   <div class="dock" id="dock">
     <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%">
@@ -478,6 +478,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // the models are meshopt-compressed
 
 // Belt-and-suspenders for the 100dvh fix in the <style> block above: sets body's height in
 // px directly from the visual viewport, which is the one thing guaranteed to match what's
@@ -502,15 +503,21 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 // picture matches how the machine actually faces once placed in the photo.
 // ⚠️ WDR reuses FL's photo because it currently reuses FL's GLB too (see url below) -- once
 // there's a real washer-dryer model, re-render assets/thumb-washer-dryer.png from it.
+// heightCm: the real height the machine is drawn at (its width and depth follow the GLB's
+// proportions). specCm: IFB's datasheet size, shown on the H×W×D labels -- the modelled cabinet
+// runs ~3% wider/deeper than the real one, and "62 cm" could tell someone a 60 cm machine won't
+// fit their gap. FL is the IFB Executive MXC 9014 (it says so on the model's control panel):
+// 598 × 650 × 875 mm (W × D × H), ifbappliances.com/executive-mxc-9014-sslc. It used to be drawn
+// at 80 cm -- 8.6% too small. TL's height is still an estimate.
 const MODELS = {
   FL:  { label: 'Front Loader', desc: 'Front-loading washing machine',
-         url: 'models/IFB_WM1.glb', heightCm: 80, yawOffsetDeg: 0,
+         url: 'models/IFB_WM1.glb', heightCm: 87.5, specCm: { H: 87.5, W: 59.8, D: 65 }, yawOffsetDeg: 0,
          thumb: 'assets/thumb-front-loader.png' },
   TL:  { label: 'Top Loader',   desc: 'Top-loading washing machine',
          url: 'models/washing_machine_top_load.glb', heightCm: 95, yawOffsetDeg: 180,
          thumb: 'assets/thumb-top-loader.png' },
   WDR: { label: 'Washer Dryer', desc: 'Washer–dryer combo',
-         url: 'models/IFB_WM1.glb', heightCm: 80, yawOffsetDeg: 0,
+         url: 'models/IFB_WM1.glb', heightCm: 87.5, specCm: { H: 87.5, W: 59.8, D: 65 }, yawOffsetDeg: 0,
          thumb: 'assets/thumb-washer-dryer.png' },
 };
 const DEFAULT_MODEL = 'FL';
@@ -784,7 +791,7 @@ function showUpload(){
   uploadEl.style.display = 'flex';
   document.getElementById('topTtl').textContent = 'Add the ' + machineLabel() + ' to your photo';
   // Get everything slow going while the customer is still choosing a photo, instead of one thing
-  // after another once they've picked it: the 3D view and the machine model (~24 MB), and the
+  // after another once they've picked it: the 3D view and the machine model (~3 MB), and the
   // room AI (~15 MB, loaded and warmed up in its worker). The 3D view goes first on purpose --
   // setting up WebGL while the AI's worker is busy warming up the same GPU stalled the page for
   // 3.6 s in testing. Nothing here is waited on; the AI retries (and reports) later if it fails.
@@ -825,7 +832,7 @@ function loadModel(key){
   const label = cfg.label.toLowerCase(), sub = 'A detailed 3D model — only slow the first time';
   setBusy('model', '🧺', 'Bringing in the ' + label + '…', sub);
 
-  new GLTFLoader().load(cfg.url, (gltf) => {
+  new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(cfg.url, (gltf) => {
     const g = new THREE.Group();
     gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
     const box = new THREE.Box3().setFromObject(gltf.scene);
@@ -852,7 +859,7 @@ function loadModel(key){
     occluder.position.y = modelSize.y / 2;
     machine.add(occluder);
     applyRotation();
-    vSize.textContent = '≈' + Math.round(cfg.heightCm * (+sSize.value / 100)) + 'cm';
+    vSize.textContent = '≈' + curDims().H + 'cm';
     buildDims();
     updateDimChip();
     hideBusy('model');   // a fresh photo's AI run (below) takes the overlay over in the same tick, so no flicker
@@ -922,16 +929,15 @@ const disposeDims = () => {
   dimGroup = null;
 };
 
-// Dimensions are measured off the loaded GLB and scaled the same way the machine is, so the
-// labels always describe what's actually on screen — whichever machine is selected.
+// The datasheet size where there is one (see MODELS), else measured off the loaded GLB -- either
+// way × the Size slider, so the labels track what's on screen. To 0.1 cm: "87.5 × 59.8 × 65" is
+// exactly what IFB's datasheet says.
 const curDims = () => {
   if (!modelSize) return { H: 0, W: 0, D: 0 };
-  const k = baseScale * (+sSize.value / 100) * 100;
-  return {
-    H: Math.round(modelSize.y * k),
-    W: Math.round(modelSize.x * k),
-    D: Math.round(modelSize.z * k),
-  };
+  const s = +sSize.value / 100, sp = MODELS[modelKey].specCm, r = (v) => +v.toFixed(1);
+  if (sp) return { H: r(sp.H * s), W: r(sp.W * s), D: r(sp.D * s) };
+  const k = baseScale * s * 100;
+  return { H: r(modelSize.y * k), W: r(modelSize.x * k), D: r(modelSize.z * k) };
 };
 
 const buildDims = () => {
@@ -1285,7 +1291,7 @@ function drawPhoto(){
 
 // ---------- sliders ----------
 sSize.addEventListener('input', () => {
-  vSize.textContent = '≈' + Math.round(MODELS[modelKey].heightCm * (+sSize.value / 100)) + 'cm';
+  vSize.textContent = '≈' + curDims().H + 'cm';
   if (machine) { machine.scale.setScalar(baseScale * (+sSize.value / 100)); needsRender = true; }
   updateDimChip();
   if (dimGroup) buildDims();   // rebuild so the H/W/D labels show the new numbers

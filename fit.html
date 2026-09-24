@@ -19,8 +19,10 @@
   import * as THREE from 'three';
   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
   import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+  import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
   window.THREE = { ...THREE };
-  window.THREE.GLTFLoader = GLTFLoader;
+  // the machine models are meshopt-compressed (models/IFB_WM1.glb: 24.5 MB -> 3 MB)
+  window.THREE.GLTFLoader = class extends GLTFLoader { constructor(m) { super(m); this.setMeshoptDecoder(MeshoptDecoder); } };
   window.THREE.RoomEnvironment = RoomEnvironment;
 </script>
 
@@ -117,7 +119,7 @@
       <span class="title" id="topTitle">Will it fit? · washing&nbsp;machine in&nbsp;AR</span>
       <button class="ham" id="hamBtn" aria-label="Change machine model" aria-expanded="false"><span></span></button>
     </div>
-    <div class="dimchip" id="dimchip">Washing machine · 85 × 59 × 62 cm</div>
+    <div class="dimchip" id="dimchip">Washing machine · 87.5 × 59.8 × 65 cm</div>
 
     <div class="dock">
       <div class="status" id="status">Move your phone slowly to scan the floor…</div>
@@ -137,7 +139,7 @@
       </div>
       <div class="row" id="rowSize" style="display:none;align-items:center;justify-content:center;gap:14px">
         <button class="btn sec" id="sizeMinus" aria-label="Smaller">−</button>
-        <span id="sizeLbl" style="min-width:120px;text-align:center;color:#fff;font-weight:700">≈ 80 cm tall</span>
+        <span id="sizeLbl" style="min-width:120px;text-align:center;color:#fff;font-weight:700">≈ 87.5 cm tall</span>
         <button class="btn sec" id="sizePlus" aria-label="Bigger">+</button>
       </div>
     </div>
@@ -166,10 +168,13 @@
 /* globals XR8 XRExtras THREE */
 (() => {
   // ---- Machine catalogue -------------------------------------------------------------
-  // heightCm is the real-world height the machine is placed at. Everything else (width,
-  // depth, the H×W×D labels) is measured off the GLB and scaled to match, so the numbers
-  // always describe the machine actually on screen rather than a spec it might not match.
-  // ⚠️ These heights are estimates — replace each with the exact IFB datasheet height.
+  // heightCm is the real-world height the machine is placed at; its width and depth follow from
+  // the GLB's proportions. specCm, where known, is IFB's datasheet size, and the H×W×D labels
+  // show that (× the size setting) -- the modelled cabinet runs ~3% wider/deeper than the real
+  // one, and "62 cm" on screen could tell someone a 60 cm machine won't fit their gap. Without
+  // a spec the labels are measured off the GLB.
+  // FL: IFB Executive MXC 9014 (it says so on the model's control panel), 598 × 650 × 875 mm
+  // (W × D × H) per ifbappliances.com/executive-mxc-9014-sslc. TL's height is still an estimate.
   // yawOffsetDeg corrects for the model's own local "forward" — each GLB was authored by a
   // different source with no shared convention, so a raw rotationY of 0 doesn't necessarily
   // face the same way across models. FL is the reference: its door faces the camera at 0°.
@@ -184,13 +189,13 @@
   // there's a real washer-dryer model, re-render assets/thumb-washer-dryer.png from it.
   const MODELS = {
     FL:  { label: 'Front Loader', desc: 'Front-loading washing machine',
-           url: 'models/IFB_WM1.glb', heightCm: 80, yawOffsetDeg: 0,
+           url: 'models/IFB_WM1.glb', heightCm: 87.5, specCm: { H: 87.5, W: 59.8, D: 65 }, yawOffsetDeg: 0,
            thumb: 'assets/thumb-front-loader.png' },
     TL:  { label: 'Top Loader',   desc: 'Top-loading washing machine',
            url: 'models/washing_machine_top_load.glb', heightCm: 95, yawOffsetDeg: 180,
            thumb: 'assets/thumb-top-loader.png' },
     WDR: { label: 'Washer Dryer', desc: 'Washer–dryer combo',
-           url: 'models/IFB_WM1.glb', heightCm: 80, yawOffsetDeg: 0,
+           url: 'models/IFB_WM1.glb', heightCm: 87.5, specCm: { H: 87.5, W: 59.8, D: 65 }, yawOffsetDeg: 0,
            thumb: 'assets/thumb-washer-dryer.png' },
   };
   const DEFAULT_MODEL = 'FL';
@@ -419,16 +424,15 @@
     dimGroup = null;
   };
 
-  // Dimensions are measured off the loaded GLB and scaled the same way the machine is, so
-  // the labels always describe what's actually on screen — whichever machine is selected.
+  // The datasheet size where there is one (see MODELS), else measured off the loaded GLB --
+  // either way × the current size setting, so the labels track what's on screen. To 0.1 cm:
+  // "87.5 × 59.8 × 65" is exactly what IFB's datasheet says.
   const curDims = () => {
     if (!modelSize) return { H: 0, W: 0, D: 0 };
+    const sp = MODELS[modelKey].specCm, r = (v) => +v.toFixed(1);
+    if (sp) return { H: r(sp.H * sizeScale), W: r(sp.W * sizeScale), D: r(sp.D * sizeScale) };
     const k = baseScale * sizeScale * 100;
-    return {
-      H: Math.round(modelSize.y * k),
-      W: Math.round(modelSize.x * k),
-      D: Math.round(modelSize.z * k),
-    };
+    return { H: r(modelSize.y * k), W: r(modelSize.x * k), D: r(modelSize.z * k) };
   };
 
   const buildDims = () => {
@@ -748,7 +752,7 @@
       XRExtras.RuntimeError.pipelineModule(),
       pipeline(),
     ]);
-    // Real-world scale: 1 three.js unit = 1 metre, so the 0.85 m model shows at TRUE size.
+    // Real-world scale: 1 three.js unit = 1 metre, so the machine shows at TRUE size.
     // (8th Wall defaults to "responsive", which sizes by camera distance and looks too small.)
     XR8.XrController.configure({ scale: 'absolute' });
     XR8.run({canvas: document.getElementById('camerafeed')});

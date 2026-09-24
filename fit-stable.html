@@ -19,8 +19,10 @@
   import * as THREE from 'three';
   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
   import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+  import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
   window.THREE = { ...THREE };
-  window.THREE.GLTFLoader = GLTFLoader;
+  // the machine models are meshopt-compressed (models/IFB_WM1.glb: 24.5 MB -> 3 MB)
+  window.THREE.GLTFLoader = class extends GLTFLoader { constructor(m) { super(m); this.setMeshoptDecoder(MeshoptDecoder); } };
   window.THREE.RoomEnvironment = RoomEnvironment;
 </script>
 
@@ -80,7 +82,7 @@
       <img class="brand" src="assets/IFB%20logo%201.png" alt="IFB" />
       <span class="title">Will it fit? · washing&nbsp;machine in&nbsp;AR</span>
     </div>
-    <div class="dimchip" id="dimchip">Washing machine · 85 × 59 × 62 cm</div>
+    <div class="dimchip" id="dimchip">Washing machine · 87.5 × 59.8 × 65 cm</div>
 
     <div class="dock">
       <div class="status" id="status">Move your phone slowly to scan the floor…</div>
@@ -95,7 +97,7 @@
       </div>
       <div class="row" id="rowSize" style="display:none;align-items:center;justify-content:center;gap:14px">
         <button class="btn sec" id="sizeMinus" aria-label="Smaller">−</button>
-        <span id="sizeLbl" style="min-width:120px;text-align:center;color:#fff;font-weight:700">≈ 80 cm tall</span>
+        <span id="sizeLbl" style="min-width:120px;text-align:center;color:#fff;font-weight:700">≈ 87.5 cm tall</span>
         <button class="btn sec" id="sizePlus" aria-label="Bigger">+</button>
       </div>
     </div>
@@ -113,15 +115,16 @@
   let floorPoint = null;     // latest raycast hit on floor (THREE.Vector3) or null
   let placed = false;
   let rotationY = 0;
-  // The GLB bakes 0.4245 onto its root node, so at scale 1 the machine is 0.85 m tall
-  // (2.0023 × 0.4245). 0.941 therefore shows it at ≈80 cm; − / + fine-tunes from there.
-  const DEFAULT_SIZE_SCALE = 0.941;
+  // models/IFB_WM1.glb is scaled to the real machine's size (IFB Executive MXC 9014: 87.5 cm
+  // tall, feet included), so scale 1 is true size; − / + fine-tunes from there.
+  const DEFAULT_SIZE_SCALE = 1;
   let sizeScale = DEFAULT_SIZE_SCALE;
   let raycaster, centerNDC;   // created in buildScene() — THREE isn't ready at parse time
 
-  // Product dimensions in cm at size 100% (edit to the exact IFB spec). The H×W×D labels show
-  // these × the current − / + size, so the numbers track the size actually shown.
-  const SPEC = { H: 85, W: 59, D: 62 };
+  // Product dimensions in cm at size 100%: IFB's datasheet (Executive MXC 9014, W × D × H =
+  // 598 × 650 × 875 mm). The H×W×D labels show these × the current − / + size, so the numbers
+  // track the size actually shown.
+  const SPEC = { H: 87.5, W: 59.8, D: 65 };
   let modelSize = null;       // GLB real size (metres) — used to lay out the dimension lines
   let dimGroup = null;        // the H/W/D lines + labels, parented to the machine
   let dimSets = [];          // [{name, cands:[{line,label,pts,mid}]}] — show the best-facing candidate
@@ -255,9 +258,9 @@
 
   // Dimensions shown = spec × current − / + size, so the value tracks the size on screen.
   const curDims = () => ({
-    H: Math.round(SPEC.H * sizeScale),
-    W: Math.round(SPEC.W * sizeScale),
-    D: Math.round(SPEC.D * sizeScale),
+    H: +(SPEC.H * sizeScale).toFixed(1),
+    W: +(SPEC.W * sizeScale).toFixed(1),
+    D: +(SPEC.D * sizeScale).toFixed(1),
   });
 
   const buildDims = () => {
@@ -375,7 +378,7 @@
   // Reset: clear the placement entirely and go back to aiming. Setting `placed = false` is
   // what brings the reticle back — onUpdate resumes raycasting the floor on the next frame
   // and shows it again. Unlike Move, this also restores the default size and rotation, so
-  // the user starts from a known ≈80 cm machine rather than whatever they had tuned to.
+  // the user starts from the true-size machine rather than whatever they had tuned to.
   const doReset = () => {
     if (washer) {
       washer.visible = false;
@@ -473,7 +476,7 @@
       XRExtras.RuntimeError.pipelineModule(),
       pipeline(),
     ]);
-    // Real-world scale: 1 three.js unit = 1 metre, so the 0.85 m model shows at TRUE size.
+    // Real-world scale: 1 three.js unit = 1 metre, so the machine shows at TRUE size.
     // (8th Wall defaults to "responsive", which sizes by camera distance and looks too small.)
     XR8.XrController.configure({ scale: 'absolute' });
     XR8.run({canvas: document.getElementById('camerafeed')});
