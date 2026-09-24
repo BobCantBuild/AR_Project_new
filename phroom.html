@@ -278,6 +278,7 @@ let modelSize = null;       // current GLB's size in its own units
 // is floor (see camDistFromFloor()) instead of a single fixed number for every photo -- part of
 // why the same machine could render at inconsistent sizes across different real photos.
 let camZoomDist = 3.0;
+let cameraFovDeg = 45;      // virtual camera's vertical FOV — replaced per-photo by readPhotoFov()
 
 // ---- H×W×D dimension lines (IKEA-style, ported from fit.html) ----
 let occluder = null;        // invisible bounding box on the machine — hit-tests both rotate-
@@ -340,6 +341,38 @@ const applyRotation = () => {
   machine.rotation.y = THREE.MathUtils.degToRad(+sRot.value) + THREE.MathUtils.degToRad(MODELS[modelKey].yawOffsetDeg || 0);
 };
 
+// ---------- camera FOV: match the virtual camera's lens to the real photo's lens ----------
+// The 3D scene used to render through a fixed 45° vertical FOV no matter what the photo was
+// actually shot with. A phone's real FOV varies a lot by lens (ultra-wide vs main vs zoom) and
+// by orientation (portrait vs landscape swaps which physical sensor axis becomes the image's
+// "height"), so a fixed FOV made the machine's rendered size drift from photo to photo even at
+// an identical real placement. This reads the photo's own 35mm-equivalent focal length from
+// EXIF (when present) and derives the correct vertical FOV for how the photo is actually
+// oriented; when EXIF is missing (common for WhatsApp/Instagram-shared or screenshotted photos,
+// which strip it) it falls back to a typical phone main-camera lens (26mm equiv) instead of an
+// arbitrary constant — still orientation-aware, so a fallback portrait photo differs correctly
+// from a fallback landscape one.
+const DEFAULT_F35 = 26; // mm — typical smartphone main-camera 35mm-equivalent focal length
+function fovDegFromFocalLength35(f35, isPortrait){
+  // Full-frame (35mm) sensor is 36×24mm. Held in portrait, the phone's long axis — and so the
+  // sensor's 36mm axis — is vertical, so the image's height maps to the 36mm side; in landscape
+  // it maps to the 24mm side. FOV = 2·atan((sensor size / 2) / focal length).
+  const halfSensorMM = isPortrait ? 18 : 12;
+  return THREE.MathUtils.radToDeg(2 * Math.atan(halfSensorMM / f35));
+}
+async function readPhotoFov(file){
+  const isPortrait = !!photoBitmap && photoBitmap.height >= photoBitmap.width;
+  let f35 = null;
+  try {
+    const exifr = await import('https://cdn.jsdelivr.net/npm/exifr@7/dist/full.esm.mjs');
+    const parse = exifr.parse || (exifr.default && exifr.default.parse);
+    const tags = parse ? await parse(file, { pick: ['FocalLengthIn35mmFilm'] }) : null;
+    if (tags && tags.FocalLengthIn35mmFilm) f35 = tags.FocalLengthIn35mmFilm;
+  } catch (e) { /* no network, unsupported, or no EXIF on this photo — use the default lens */ }
+  cameraFovDeg = fovDegFromFocalLength35(f35 || DEFAULT_F35, isPortrait);
+  if (camera) { camera.fov = cameraFovDeg; camera.updateProjectionMatrix(); needsRender = true; }
+}
+
 // ---------- upload flow ----------
 fileInput.addEventListener('change', async (e) => {
   const f = e.target.files && e.target.files[0];
@@ -349,6 +382,7 @@ fileInput.addEventListener('change', async (e) => {
   } catch (err) {
     photoBitmap = await createImageBitmap(f);   // fallback
   }
+  await readPhotoFov(f);   // best-effort: match the virtual camera's lens to this photo's real one
   preview.src = URL.createObjectURL(f);
   preview.style.display = 'block';
   confirmRow.style.display = 'flex';
@@ -617,7 +651,7 @@ function initThree(){
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-  camera = new THREE.PerspectiveCamera(45, 1, 0.05, 100);
+  camera = new THREE.PerspectiveCamera(cameraFovDeg, 1, 0.05, 100);
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x445, 0.85));
   const sun = new THREE.DirectionalLight(0xffffff, 2.1);
