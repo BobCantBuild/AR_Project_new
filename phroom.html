@@ -1304,25 +1304,58 @@ sRot.addEventListener('input', () => {
 sAng.addEventListener('input', () => { vAng.textContent = sAng.value + '°'; cam.pitchDeg = +sAng.value; updateCamera(); });
 
 // ---------- save / share ----------
-document.getElementById('save').addEventListener('click', async () => {
-  if (!renderer) return;
-  renderer.render(scene, camera);                       // ensure fresh frame
-  const out = document.createElement('canvas');
-  out.width = bg.width; out.height = bg.height;
+// The picture as composed, at the photo's own resolution and cropped to it. It used to be the
+// stage copied at screen size -- blurred side bars and all, and ~750 px wide on a phone however
+// big the photo. Now the photo is drawn from its own pixels and the machine is rendered on top at
+// the same size, through a camera with the photo's exact field of view (the stage's is stretched
+// to cover the bars). Up to 2560 px on the long side: sharp enough to print, and a size phones'
+// GPUs draw without trouble.
+const saveBtn = document.getElementById('save');
+function composePicture(){
+  const gl = renderer.getContext(), vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+  const cap = Math.min(2560, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), vp[0], vp[1]);
+  const iw = photoBitmap.width, ih = photoBitmap.height, k = Math.min(1, cap / Math.max(iw, ih));
+  const W = Math.round(iw * k), H = Math.round(ih * k);
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
   const ctx = out.getContext('2d');
-  ctx.drawImage(bg, 0, 0);                               // photo
-  ctx.drawImage(glCanvas, 0, 0, out.width, out.height);  // machine + shadow
-  out.toBlob(async (blob) => {
-    if (!blob) return;
-    const file = new File([blob], 'IFB-washing-machine-in-my-room.png', { type: 'image/png' });
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(photoBitmap, 0, 0, W, H);
+  // All in one go, so the screen never shows the resized canvas (it's only painted after this).
+  const pr = renderer.getPixelRatio(), size = renderer.getSize(new THREE.Vector2()), fov = camera.fov, aspect = camera.aspect;
+  try {
+    renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+    camera.fov = THREE.MathUtils.radToDeg(vfovForLens(cam.f35)); camera.aspect = W / H; camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+    ctx.drawImage(glCanvas, 0, 0, W, H);                  // machine, shadow and (if on) its dimensions
+  } finally {
+    renderer.setPixelRatio(pr); renderer.setSize(size.x, size.y, false);
+    camera.fov = fov; camera.aspect = aspect; camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+  }
+  return new Promise((r) => out.toBlob(r, 'image/jpeg', 0.92));
+}
+saveBtn.addEventListener('click', async () => {
+  if (!renderer || !photoBitmap || saveBtn.disabled) return;
+  saveBtn.disabled = true;                                // one picture per tap
+  try {
+    const blob = await composePicture();
+    if (!blob) throw new Error('no image');
+    const file = new File([blob], 'IFB-washing-machine-in-my-room.jpg', { type: 'image/jpeg' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: 'IFB Washing Machine' }); return; } catch (e) {}
+      try { await navigator.share({ files: [file], title: 'IFB Washing Machine' }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }   // they closed the share sheet: fine
     }
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-  }, 'image/png');
+    toast('Saved ✓ — check your downloads');
+  } catch (e) {
+    console.warn('Save failed:', e);
+    toast('Couldn’t save the picture — please try again.');
+  } finally {
+    saveBtn.disabled = false;
+  }
 });
 
 // ---------- AI: understand the room (segment objects) → place ONLY on the floor ----------
@@ -2554,6 +2587,7 @@ if (new URLSearchParams(location.search).has('debug')) {
     // the 3D pass: its floor-plane camera for this photo, and a way to run it regardless of mode
     depthFit: () => DEPTH.lastFit && Object.fromEntries(Object.entries(DEPTH.lastFit).map(([k, v]) => [k, +v.toFixed(3)])),
     hasDepth: () => !!lastDepth,
+    picture: () => composePicture(),          // the Save image as a Blob, without saving it
     runDepth: () => refineWithDepth(),
     depthMode: () => depthMode(),
     placeAt: (fx, fy) => { placeAtImageCoord(fx, fy); needsRender = true; return placementOk(machine.position.x, machine.position.z); },
