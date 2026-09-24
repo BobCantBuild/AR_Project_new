@@ -144,6 +144,50 @@
   .accHead[aria-expanded="true"] .accChevron{transform:rotate(180deg)}
   .accBody{padding:11px 2px 2px}
   .accBody[hidden]{display:none}
+
+  /* ---------- "working on it" overlay ----------
+     Shown over the photo while the machine model and the room AI download and while the AI reads
+     the room -- several seconds on a first visit -- so it never looks frozen. Every animation is a
+     transform (or opacity): the AI runs on the main thread and blocks it, and only compositor-driven
+     animations keep moving through that; a background-position or width animation would freeze. */
+  #busy{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;
+    background:rgba(10,12,24,.28);opacity:0;visibility:hidden;transition:opacity .35s,visibility 0s .35s}
+  #busy.on{opacity:1;visibility:visible;transition:opacity .35s}
+  .busyGlow{position:absolute;inset:-60%;opacity:.9;
+    background:radial-gradient(circle at 30% 30%,rgba(225,29,42,.5),transparent 38%),
+               radial-gradient(circle at 72% 58%,rgba(124,77,255,.45),transparent 42%),
+               radial-gradient(circle at 38% 78%,rgba(0,194,255,.4),transparent 40%),
+               radial-gradient(circle at 70% 22%,rgba(46,230,120,.3),transparent 36%);
+    animation:busySpin 7s linear infinite}
+  @keyframes busySpin{from{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.15)}to{transform:rotate(360deg) scale(1)}}
+  .busyScan{position:absolute;left:0;right:0;top:0;height:28%;
+    background:linear-gradient(180deg,transparent,rgba(255,255,255,.14) 42%,rgba(255,255,255,.32) 50%,rgba(255,255,255,.14) 58%,transparent);
+    animation:busySweep 2.4s ease-in-out infinite}
+  @keyframes busySweep{from{transform:translateY(-100%)}to{transform:translateY(360%)}}
+  .busyCard{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;
+    align-items:center;gap:9px;min-width:230px;max-width:86%;padding:16px 20px;border-radius:18px;text-align:center;
+    background:rgba(15,18,32,.78);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.18);box-shadow:0 12px 34px rgba(0,0,0,.45);color:#fff}
+  .busyEmoji{display:inline-block;font-size:36px;line-height:1;animation:busyBob 1.1s ease-in-out infinite}
+  @keyframes busyBob{0%,100%{transform:translateY(0) rotate(-7deg) scale(1)}50%{transform:translateY(-7px) rotate(7deg) scale(1.14)}}
+  .busyText{font-weight:800;font-size:14.5px;line-height:1.35}
+  .busySub{font-size:11.5px;color:rgba(255,255,255,.62);line-height:1.35}
+  .busyBar{width:190px;max-width:100%;height:5px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
+  .busyFill{height:100%;width:38%;border-radius:99px;background:linear-gradient(90deg,#ff4d57,#7c4dff,#00c2ff);
+    animation:busyIndet 1.3s ease-in-out infinite}
+  @keyframes busyIndet{from{transform:translateX(-110%)}to{transform:translateX(300%)}}
+  .busyBar.det .busyFill{animation:none;transform:none;transition:width .25s}
+  /* the AI's view of the room, flashed over the photo once it's done (see revealScan()) */
+  #scan{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity .5s}
+  #scan.show{opacity:1}
+  /* upload screen: while the picked photo is being read */
+  .reading{display:none;align-items:center;gap:8px;color:var(--muted);font-size:13.5px;margin:0}
+  .reading.on{display:flex}
+  .reading .busyEmoji{font-size:20px}
+  @media (prefers-reduced-motion: reduce){
+    .busyGlow,.busyEmoji,.busyFill{animation:none}
+    .busyScan{display:none}
+  }
 </style>
 </head>
 <body>
@@ -198,6 +242,7 @@
     <label class="pick">📷 Take / choose a photo
       <input id="file" type="file" accept="image/*" capture="environment" />
     </label>
+    <p class="reading" id="reading" role="status"><span class="busyEmoji" aria-hidden="true">🖼️</span>Reading your photo…</p>
     <img id="preview" class="preview" alt="Your photo preview" />
     <div class="confirmRow" id="confirmRow">
       <button class="btn sec" id="retake">Choose another</button>
@@ -213,7 +258,18 @@
   <!-- ===== COMPOSER ===== -->
   <section id="stage">
     <canvas id="bg"></canvas>
+    <canvas id="scan"></canvas>
     <canvas id="gl"></canvas>
+    <div id="busy">
+      <div class="busyGlow"></div>
+      <div class="busyScan"></div>
+      <div class="busyCard" role="status" aria-live="polite">
+        <span class="busyEmoji" id="busyEmoji" aria-hidden="true">🧺</span>
+        <span class="busyText" id="busyText">Getting ready…</span>
+        <span class="busySub" id="busySub"></span>
+        <div class="busyBar" id="busyBar"><div class="busyFill" id="busyFill"></div></div>
+      </div>
+    </div>
   </section>
   <div class="hint" id="hint">Drag to move it on the floor · long-press to place it exactly · drag the machine to turn it</div>
   <div class="dimchip" id="dimchip">IFB washing machine · 85 × 59 × 62 cm</div>
@@ -363,16 +419,41 @@ async function readPhotoLens(file){
   } catch (e) { /* no network, unsupported, or no EXIF on this photo — calibration estimates it */ }
 }
 
+// ---------- "working on it" overlay (see the #busy styles) ----------
+const busyEl = document.getElementById('busy'), busyEmoji = document.getElementById('busyEmoji');
+const busyText = document.getElementById('busyText'), busySub = document.getElementById('busySub');
+const busyBar = document.getElementById('busyBar'), busyFill = document.getElementById('busyFill');
+let busyStep = null;   // which step owns the overlay, so one step finishing can't hide another's
+// pct: 0-100 for a download with known size, null for "working, no idea how long"
+function setBusy(step, emoji, text, sub = '', pct = null){
+  if (busyStep !== step) {                   // restart the bob so each new step visibly pops in
+    busyEmoji.style.animation = 'none'; void busyEmoji.offsetWidth; busyEmoji.style.animation = '';
+  }
+  busyStep = step;
+  busyEmoji.textContent = emoji; busyText.textContent = text; busySub.textContent = sub;
+  busyBar.classList.toggle('det', pct !== null);
+  busyFill.style.width = pct === null ? '' : Math.max(4, Math.min(100, pct)) + '%';
+  busyEl.classList.add('on');
+}
+function hideBusy(step){ if (step && busyStep !== step) return; busyStep = null; busyEl.classList.remove('on'); }
+// Resolves once the browser has painted: the AI and the camera fit both block the main thread, so
+// without this a new step's text would never get on screen before the wait it's describing.
+const nextPaint = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
 // ---------- upload flow ----------
+const readingEl = document.getElementById('reading');
 fileInput.addEventListener('change', async (e) => {
   const f = e.target.files && e.target.files[0];
   if (!f) return;
+  readingEl.classList.add('on');   // decoding a 12 MP photo and fetching the EXIF reader takes a moment
+  preview.style.display = 'none'; confirmRow.style.display = 'none';
   try {
     photoBitmap = await createImageBitmap(f, { imageOrientation: 'from-image' });
   } catch (err) {
     photoBitmap = await createImageBitmap(f);   // fallback
   }
   await readPhotoLens(f);   // best-effort: the photo's real lens, if its EXIF still says
+  readingEl.classList.remove('on');
   preview.src = URL.createObjectURL(f);
   preview.style.display = 'block';
   confirmRow.style.display = 'flex';
@@ -388,6 +469,13 @@ function showUpload(){
   dimchip.style.display = 'none';
   uploadEl.style.display = 'flex';
   document.getElementById('topTtl').textContent = 'Add the ' + machineLabel() + ' to your photo';
+  // Get everything slow going while the customer is still choosing a photo, instead of one thing
+  // after another once they've picked it: the 3D view and the machine model (~24 MB), and the
+  // room AI (~15 MB, loaded and warmed up in its worker). The 3D view goes first on purpose --
+  // setting up WebGL while the AI's worker is busy warming up the same GPU stalled the page for
+  // 3.6 s in testing. Nothing here is waited on; the AI retries (and reports) later if it fails.
+  if (!started) initThree();
+  loadSeg().catch(() => {});
 }
 
 // Free the previous machine's GPU memory before swapping in another one — without this,
@@ -420,8 +508,8 @@ function loadModel(key){
   if (!cfg) return;
   const keepPos = machine ? machine.position.clone() : new THREE.Vector3(0, 0, 0);
   disposeModel();
-  hintEl.textContent = 'Loading the ' + cfg.label.toLowerCase() + '…';
-  hintEl.style.display = 'block';
+  const label = cfg.label.toLowerCase(), sub = 'A detailed 3D model — only slow the first time';
+  setBusy('model', '🧺', 'Bringing in the ' + label + '…', sub);
 
   new GLTFLoader().load(cfg.url, (gltf) => {
     const g = new THREE.Group();
@@ -453,8 +541,11 @@ function loadModel(key){
     vSize.textContent = '≈' + Math.round(cfg.heightCm * (+sSize.value / 100)) + 'cm';
     buildDims();
     updateDimChip();
-    hintEl.style.display = 'none';
+    hideBusy('model');   // a fresh photo's AI run (below) takes the overlay over in the same tick, so no flicker
     needsRender = true;
+    // Compile its shaders now, in the background, rather than on the first frame it's drawn --
+    // that first frame can land while the AI worker is busy on the GPU, and then it stalls.
+    if (renderer.compileAsync) renderer.compileAsync(scene, camera).catch(() => {});
     // The very first load for a fresh photo: the machine model just became available, so the
     // auto floor-detect that startComposer() asked for (and was waiting on) can run now.
     if (pendingAutoFloor) {
@@ -469,8 +560,13 @@ function loadModel(key){
       const fitted = nearestValidFootprint(im0.fx, im0.fy);
       if (fitted) placeAtImageCoord(fitted.fx, fitted.fy);
     }
-  }, undefined, () => {
-    hintEl.textContent = 'Could not load the ' + cfg.label.toLowerCase() + ' — check connection.'; hintEl.style.display = 'block';
+  }, (e) => {
+    if (busyStep !== 'model') return;
+    if (e.lengthComputable) setBusy('model', '🧺', 'Bringing in the ' + label + '… ' + Math.round(e.loaded / e.total * 100) + '%', sub, e.loaded / e.total * 100);
+    else setBusy('model', '🧺', 'Bringing in the ' + label + '… ' + (e.loaded / 1048576).toFixed(1) + ' MB', sub);
+  }, () => {
+    hideBusy('model');
+    hintEl.textContent = 'Could not load the ' + label + ' — check connection.'; hintEl.style.display = 'block';
     pendingAutoFloor = false; floorLocking = false;   // nothing to detect on if the model itself never arrived
   });
 }
@@ -606,13 +702,21 @@ function updateDimChip(){
   dimchip.textContent = 'IFB ' + machineLabel() + ' · ' + d.H + ' × ' + d.W + ' × ' + d.D + ' cm';
 }
 
+// How to move it, for a moment, then the dimensions chip in the same spot. Runs once the machine
+// has actually been placed -- telling people to drag something they can't see yet just confuses.
+let hintTimer = null;
+function showDragHint(){
+  hintEl.textContent = 'Drag to move it on the floor · long-press to place it exactly · drag the machine to turn it';
+  hintEl.style.display = 'block'; dimchip.style.display = 'none';
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => { hintEl.style.display = 'none'; if (dimsOn) dimchip.style.display = 'block'; }, 2600);
+}
+
 function startComposer(){
   uploadEl.style.display = 'none';
   stageEl.style.display = 'block';
   dockEl.style.display = 'flex';
-  hintEl.style.display = 'block';
-  // the chip sits where the hint is, so let the hint have the spot first
-  setTimeout(() => { hintEl.style.display = 'none'; if (dimsOn) dimchip.style.display = 'block'; }, 2600);
+  hintEl.style.display = 'none'; dimchip.style.display = 'none';   // shown once the machine is placed (showDragHint)
   document.getElementById('topTtl').textContent = 'Position it · then save';
   // Every call here follows a fresh photo confirmation, so any previous floor mask belongs to
   // a different picture and must not keep constraining this one. Re-detect automatically --
@@ -623,8 +727,9 @@ function startComposer(){
   cam = { ...CAM_DEFAULT, f35: exifF35 || CAM_DEFAULT.f35 };   // the last photo's fit doesn't apply to this one
   sAng.value = cam.pitchDeg; vAng.textContent = cam.pitchDeg + '°';
   floorLocking = true;
-  if (!started) { initThree(); pendingAutoFloor = true; }   // loadModel() will call runAIPlace() once the model (and so `machine`) exists
-  else runAIPlace();                                        // model's already loaded -- detect this photo's floor right away
+  if (!started) initThree();          // normally already done by showUpload()
+  if (machine) runAIPlace();          // model's in -- detect this photo's floor right away
+  else pendingAutoFloor = true;       // still downloading: loadModel() starts the run once it's in
   updateDimChip();
   resize();
   drawPhoto();
@@ -820,6 +925,8 @@ function resize(){
   if (renderer) { renderer.setSize(w, h, false); glCanvas.width = w * DPR; glCanvas.height = h * DPR; renderer.setSize(w, h, false); }
   glCanvas.width = w * DPR; glCanvas.height = h * DPR;
   bg.width = w * DPR; bg.height = h * DPR;
+  scanEl.width = w * DPR; scanEl.height = h * DPR;
+  drawScan();       // resizing a canvas clears it
   updateCamera();   // the stage's shape changes how the photo's field of view maps onto it
 }
 
@@ -888,23 +995,93 @@ document.getElementById('save').addEventListener('click', async () => {
 // ---------- AI: understand the room (segment objects) → place ONLY on the floor ----------
 const aiBtn = document.getElementById('aiBtn');
 const aiStatus = document.getElementById('aiStatus');
-const AI = { seg: null, loading: false };
 const aiSet = (t) => { aiStatus.textContent = t; };
 
-async function loadSeg(){
-  if (AI.seg) return AI.seg;
-  AI.loading = true; aiSet('Loading AI (downloads ~15 MB the first time)…');
-  const tf = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm');
-  tf.env.allowLocalModels = false;
-  const gpu = !!(navigator.gpu);
-  AI.seg = await tf.pipeline('image-segmentation', 'Xenova/segformer-b0-finetuned-ade-512-512', {
-    device: gpu ? 'webgpu' : 'wasm',
-    progress_callback: (p) => { if (p && p.status === 'progress' && p.progress != null) aiSet('Loading AI… ' + Math.round(p.progress) + '%'); },
-  });
-  AI.loading = false; return AI.seg;
+// The AI itself lives in a worker (phroom-ai-worker.js): loading it and running it block for
+// seconds, and on this page that froze taps and the upload screen. AI.seg is set -- to a function
+// that asks the worker to read a photo -- once the model is loaded and warmed up.
+const AI = { seg: null, ready: null, pct: null, worker: null, nextId: 1, pending: new Map() };
+function aiWorker(){
+  if (!AI.worker) {
+    AI.worker = new Worker(new URL('phroom-ai-worker.js', import.meta.url), { type: 'module' });
+    AI.worker.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'progress') { AI.pct = m.pct; if (busyStep === 'ai') showAILoading(); return; }
+      const p = AI.pending.get(m.id);
+      if (!p) return;
+      AI.pending.delete(m.id);
+      if (m.type === 'error') p.reject(new Error(m.message)); else p.resolve(m);
+    };
+    // the worker itself failed (couldn't load, crashed): fail whatever was waiting, start fresh next time
+    AI.worker.onerror = (e) => {
+      for (const p of AI.pending.values()) p.reject(new Error(e.message || 'AI worker failed'));
+      AI.pending.clear(); AI.worker = null; AI.ready = null; AI.seg = null;
+    };
+  }
+  return AI.worker;
+}
+function aiCall(msg){
+  const id = AI.nextId++;
+  return new Promise((resolve, reject) => { AI.pending.set(id, { resolve, reject }); aiWorker().postMessage({ ...msg, id }); });
+}
+// One shared load: showUpload() starts it early and runAIPlace() awaits the same promise, so the
+// ~15 MB model is never fetched twice. A failed load clears itself so the next call can retry.
+function loadSeg(){
+  if (!AI.ready) {
+    AI.ready = aiCall({ type: 'load' })
+      .then(() => (AI.seg = async (url) => (await aiCall({ type: 'segment', image: url })).out))
+      .catch((e) => { AI.ready = null; throw e; });
+  }
+  return AI.ready;
+}
+// Once the file is in, the AI still takes a few seconds to set itself up -- a bar parked at 100%
+// looks stuck, so say what's happening instead.
+function showAILoading(){
+  if (AI.pct !== null && AI.pct >= 100) setBusy('ai', '🧠', 'Getting the room AI ready…', 'Downloaded — setting it up');
+  else setBusy('ai', '🧠', 'Waking up the room AI…' + (AI.pct ? ' ' + AI.pct + '%' : ''), 'About 15 MB, only the first time', AI.pct);
 }
 
-function photoInputURL(max = 1024){
+// The AI's view of the room, flashed over the photo once it's done: floor green, the room's own
+// surfaces muted, furniture in brighter colours. It shows the customer the app really did look at
+// their room -- and it's the same map the placement and sizing are worked out from.
+const scanEl = document.getElementById('scan');
+let scanMap = null;   // the small colour map, kept so resize() can redraw it
+// Paint the map over wherever the photo is drawn. Separate from revealScan() because resize()
+// clears the canvas -- and the stage resizes right as the map appears, when the status line under
+// it changes length -- which used to wipe the map before anyone saw it.
+function drawScan(){
+  if (!scanMap || !photoBitmap) return;
+  const ctx = scanEl.getContext('2d'), p = coverParams();
+  ctx.clearRect(0, 0, scanEl.width, scanEl.height);
+  ctx.imageSmoothingEnabled = true;                       // soft-edged blobs, not the 160-wide grid
+  ctx.drawImage(scanMap, p.ox * DPR, p.oy * DPR, p.iw * p.s * DPR, p.ih * p.s * DPR);
+}
+function revealScan(out){
+  const layers = out.filter((o) => o.mask), grids = layers.map((o) => unionMask([o]));
+  if (!grids.length || !photoBitmap) return;
+  const { w, h } = grids[0], small = document.createElement('canvas'); small.width = w; small.height = h;
+  const sctx = small.getContext('2d'), img = sctx.createImageData(w, h);
+  const FURNITURE = [[255, 196, 40], [0, 200, 255], [255, 120, 40], [255, 90, 200], [150, 255, 90]];
+  layers.forEach((o, i) => {
+    const l = o.label;
+    const rgba = /\b(floor|rug|carpet|mat)\b/i.test(l) ? [46, 230, 120, 150]
+      : /\bwall\b/i.test(l) ? [225, 29, 42, 70]
+      : /\b(ceiling|windowpane|window|sky|building|tree)\b/i.test(l) ? [124, 77, 255, 80]
+      : [...FURNITURE[i % FURNITURE.length], 135];
+    const d = grids[i].data;
+    for (let k = 0; k < w * h; k++) if (d[k]) img.data.set(rgba, k * 4);
+  });
+  sctx.putImageData(img, 0, 0);
+  scanMap = small;
+  drawScan();
+  scanEl.classList.add('show');
+}
+
+// 512, not 1024: the model works at 512×512 whatever it's given, and every mask it returns is
+// scaled back up to the input's size -- which is where most of the time went (hall.jpg: 6.7-8.3 s
+// at 1024 vs 2.4-3.0 s at 512 on WebGPU; 9.5-11 s vs 4.4 s on CPU) for masks this app only ever
+// reads on a 160-wide grid. Same labels found either way.
+function photoInputURL(max = 512){
   const iw = photoBitmap.width, ih = photoBitmap.height, s = Math.min(1, max / Math.max(iw, ih));
   const c = document.createElement('canvas'); c.width = Math.round(iw * s); c.height = Math.round(ih * s);
   c.getContext('2d').drawImage(photoBitmap, 0, 0, c.width, c.height);
@@ -1354,12 +1531,23 @@ function matchLighting(){
 async function runAIPlace(){
   if (!photoBitmap || !machine) { aiSet('Load a photo first.'); floorLocking = false; return; }
   aiBtn.disabled = true;
+  // Keep the machine out of sight until it's been sized and placed -- otherwise it sits at a
+  // default spot and size for several seconds and then visibly jumps.
+  machine.visible = false; needsRender = true;
+  scanEl.classList.remove('show');
   try {
-    await loadSeg();
+    if (!AI.seg) {
+      showAILoading();
+      aiSet('Loading AI (downloads ~15 MB the first time)…');
+      await loadSeg();
+    }
+    setBusy('seg', '🔍', 'Finding the floor and furniture…', 'Reading your photo');
     aiSet('Understanding the room…');
+    await nextPaint();
     const out = await AI.seg(photoInputURL());
     floorMask = buildFloorMask(out);
     obstacleMask = buildObstacleMask(out);   // same segmentation pass -- no extra model call
+    revealScan(out);
     if (!floorMask){ obstacleMask = null; aiSet('No clear floor found — place it with drag + the sliders.'); return; }
     const labels = [...new Set(out.map(o => o.label))];
     if (isTopDownShot(floorMask, labels)) {
@@ -1371,6 +1559,8 @@ async function runAIPlace(){
       aiSet('That looks like it’s pointing straight down at just the floor — retake it showing some of the room (a wall or furniture) so the size can be judged properly.');
       return;
     }
+    setBusy('measure', '📐', 'Measuring your room…', 'Working out the camera height and angle');
+    await nextPaint();                        // the fit below blocks for a moment -- show the step first
     const calib = calibrateCamera(out);
     cam = { hc: calib.hc, pitchDeg: calib.pitchDeg, f35: calib.f35 };
     sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
@@ -1403,6 +1593,11 @@ async function runAIPlace(){
   } finally {
     aiBtn.disabled = false;
     floorLocking = false;   // whatever happened, the drag lock was only ever for this one detection pass
+    if (machine) { machine.visible = true; needsRender = true; }
+    hideBusy();
+    // let the AI's view of the room linger a beat as the machine appears, then fade it
+    setTimeout(() => scanEl.classList.remove('show'), 1400);
+    showDragHint();
   }
 }
 aiBtn.addEventListener('click', runAIPlace);
