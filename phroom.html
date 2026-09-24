@@ -315,6 +315,7 @@ const dimBtn  = document.getElementById('dimBtn');
 
 let photoBitmap = null;                 // chosen photo (EXIF-corrected)
 let floorMask = null;                   // AI floor mask {w,h,data} — constrains placement to the floor
+let obstacleMask = null;                // AI mask of furniture/people {w,h,data,base} — see blockedByObstacle()
 // Floor detection now runs automatically (see startComposer()) instead of waiting for a button
 // tap, so there's a brief window on a fresh photo where floorMask isn't ready yet. floorLocking
 // blocks the move-the-machine drag during that window -- otherwise "only the floor, never
@@ -469,11 +470,11 @@ function loadModel(key){
     // auto floor-detect that startComposer() asked for (and was waiting on) can run now.
     if (pendingAutoFloor) {
       pendingAutoFloor = false; runAIPlace();
-    } else if (floorMask && !footprintOnFloor(machine.position.x, machine.position.z)) {
+    } else if (floorMask && !placementOk(machine.position.x, machine.position.z)) {
       // Not a fresh photo -- a machine-type switch that kept the old position (see keepPos
-      // above). A different model has a different width × depth, so a spot that fully fit the
-      // last machine can spill this one onto furniture next to it. Refit it on the same floor
-      // rather than leaving it overlapping something that isn't the floor.
+      // above). A different model has a different width × depth × height, so a spot that fully
+      // fit the last machine can spill this one onto (or draw it through) furniture next to it.
+      // Refit it on the same floor rather than leaving it overlapping something.
       const sc0 = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z));
       const im0 = screenToImage(sc0.x, sc0.y);
       const fitted = nearestValidFootprint(im0.fx, im0.fy);
@@ -629,6 +630,7 @@ function startComposer(){
   // the customer should never have to find and tap the AI button just to get floor-only
   // placement; it's the default now, with the button left for a manual retry.
   floorMask = null;
+  obstacleMask = null;
   floorLocking = true;
   if (!started) { initThree(); pendingAutoFloor = true; }   // loadModel() will call runAIPlace() once the model (and so `machine`) exists
   else runAIPlace();                                        // model's already loaded -- detect this photo's floor right away
@@ -705,7 +707,7 @@ function initThree(){
     const p = groundHit(x, y);
     if (!p) return;
     machine.position.set(p.x, 0, p.z); needsRender = true;
-    if (footprintOnFloor(p.x, p.z)) { lastValidX = p.x; lastValidZ = p.z; }
+    if (placementOk(p.x, p.z)) { lastValidX = p.x; lastValidZ = p.z; }
   };
   const moveTo = (x, y) => {
     if (!machine) return;
@@ -717,21 +719,21 @@ function initThree(){
     const p = groundHit(sx, sy);
     if (!p) return;
     let { x: tx, z: tz } = p;
-    if (floorMask && !footprintOnFloor(tx, tz)) {
+    if (floorMask && !placementOk(tx, tz)) {
       // The anchor point itself is on the floor, but the machine's real width × depth from here
-      // would spill onto a chair/desk/wall -- slide back toward the last spot that was fully
-      // clear, stopping as soon as the whole footprint fits, instead of dropping it half onto
-      // furniture just because its one anchor point happened to land on carpet.
+      // would spill onto a chair/desk/wall, or be drawn through furniture in front of it -- slide
+      // back toward the last spot that was fully clear, stopping as soon as it isn't, instead of
+      // dropping it half into furniture just because its one anchor point landed on carpet.
       const STEPS = 14;
       let best = { x: lastValidX, z: lastValidZ };
       for (let i = 1; i <= STEPS; i++) {
         const t = i / STEPS, cx = lastValidX + (tx - lastValidX) * t, cz = lastValidZ + (tz - lastValidZ) * t;
-        if (footprintOnFloor(cx, cz)) best = { x: cx, z: cz }; else break;
+        if (placementOk(cx, cz)) best = { x: cx, z: cz }; else break;
       }
       tx = best.x; tz = best.z;
     }
     machine.position.set(tx, 0, tz); needsRender = true;
-    if (!floorMask || footprintOnFloor(tx, tz)) { lastValidX = tx; lastValidZ = tz; }
+    if (!floorMask || placementOk(tx, tz)) { lastValidX = tx; lastValidZ = tz; }
   };
   const clearLongPress = () => { clearTimeout(longPressTimer); longPressTimer = null; };
   // Same mapping as fit.html: a swipe across the full screen width is one full turn. The
@@ -938,8 +940,11 @@ function footprintCorners(cx, cz){
   const s = baseScale * (+sSize.value / 100);
   const hw = (modelSize.x * s) / 2, hd = (modelSize.z * s) / 2;
   const rot = machine.rotation.y, cos = Math.cos(rot), sin = Math.sin(rot);
+  // Same turn three.js applies for rotation.y: x' = x·cos + z·sin, z' = −x·sin + z·cos. (This
+  // used to have both signs flipped -- turning the footprint the opposite way to the machine, so
+  // at the default 20° turn every floor check was testing a mirrored footprint.)
   return [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([lx, lz]) =>
-    new THREE.Vector3(cx + lx * cos - lz * sin, 0, cz + lx * sin + lz * cos));
+    new THREE.Vector3(cx + lx * cos + lz * sin, 0, cz - lx * sin + lz * cos));
 }
 // Is the machine's WHOLE footprint on the floor from here, not just the point it's anchored to?
 // Each corner is projected back to a screen point and checked against the floor mask the same
@@ -950,10 +955,74 @@ function footprintOnFloor(cx, cz){
   if (!corners) return true;
   return corners.every((c) => { const s = worldToScreen(c); const im = screenToImage(s.x, s.y); return isFloorAt(im.fx, im.fy); });
 }
-// Nearest floor cell to (fx,fy) whose full footprint -- not just that one cell -- clears the
-// floor mask. A one-time grid scan (used only for the initial AI placement and a model switch,
-// never per drag frame), so the per-cell cost of the footprint check is fine. Returns null if
-// nothing on the whole detected floor is big enough to fit the machine at its current size.
+// The whole machine box -- floor corners and top corners -- as it lands on the photo, as a convex
+// outline in photo coordinates: the region the renderer will actually paint over the picture.
+// backRow is the photo row of the footprint's farthest edge (farther on the floor = higher up).
+function machineOutline(cx, cz){
+  const base = footprintCorners(cx, cz);
+  if (!base) return null;
+  const top = modelSize.y * baseScale * (+sSize.value / 100);
+  const pts = [...base, ...base.map((v) => new THREE.Vector3(v.x, top, v.z))]
+    .map((v) => { const s = worldToScreen(v); return screenToImage(s.x, s.y); });
+  return { hull: convexHull(pts), backRow: Math.min(...pts.slice(0, 4).map((p) => p.fy)) };
+}
+function convexHull(pts){                             // monotone chain; returns [[fx,fy],...]
+  const p = pts.map((q) => [q.fx, q.fy]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [], upper = [];
+  for (const q of p) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop(); lower.push(q); }
+  for (const q of p.slice().reverse()) { while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop(); upper.push(q); }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
+}
+function insideHull(hull, x, y){
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i + 1) % hull.length];
+    if ((b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]) < 0) return false;
+  }
+  return true;
+}
+// Share of the outline allowed over nearer furniture. Not zero, because mask edges are soft, but
+// small: a drag slides the machine up to the first spot over this limit, so whatever is allowed
+// here is exactly how far it can poke into a nearer desk -- 6% left a visible sliver.
+const OBSTACLE_TOLERANCE = 0.02;
+// How much lower (as a share of photo height) furniture has to meet the floor than the machine's
+// back edge before it counts as nearer. Without it, a machine standing right in front of a desk
+// gets pushed away: the desk mask's soft bottom edge bleeds a row or two past where the desk
+// really ends. Real in-front cases (the bed) clear it by a wide margin.
+const OBSTACLE_DEPTH_MARGIN = 0.02;
+// Would the machine, drawn here, visibly cut through something standing in front of it?
+// footprintOnFloor() only asks whether the floor under the machine is clear; it never looks at
+// the furniture around it. And with no depth for the photo, the renderer always paints the
+// machine over the picture -- right for anything farther back (a machine standing in front of a
+// desk SHOULD cover part of the desk), wrong for anything nearer, which is what made it look sunk
+// into the bed. The one depth cue a single photo gives is where each thing meets the floor:
+// lower in the frame = nearer the camera. So an outline sample only counts against a spot when
+// the furniture under it reaches the floor lower down than the machine's own back edge.
+function blockedByObstacle(cx, cz){
+  if (!obstacleMask) return false;
+  const o = machineOutline(cx, cz);
+  if (!o || o.hull.length < 3) return false;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of o.hull) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+  const { w, h, data, base } = obstacleMask, N = 20;   // 21×21 grid -- fine enough to catch a thin sliver
+  let inside = 0, blocked = 0;
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const fx = minX + (maxX - minX) * i / N, fy = minY + (maxY - minY) * j / N;
+    if (!insideHull(o.hull, fx, fy)) continue;
+    inside++;
+    if (fx < 0 || fx >= 1 || fy < 0 || fy >= 1) continue;
+    const k = ((fy * h) | 0) * w + ((fx * w) | 0);
+    if (data[k] && base[k] > o.backRow + OBSTACLE_DEPTH_MARGIN) blocked++;
+  }
+  return inside > 0 && blocked / inside > OBSTACLE_TOLERANCE;
+}
+// Everything a spot has to satisfy: the whole footprint on the floor, and nothing nearer than the
+// machine drawn through. Used everywhere the footprint check alone used to decide "is this OK".
+function placementOk(cx, cz){ return footprintOnFloor(cx, cz) && !blockedByObstacle(cx, cz); }
+// Nearest floor cell to (fx,fy) where the machine fits -- full footprint on the floor and clear
+// of nearer furniture (see placementOk()). A one-time grid scan (used only for the initial AI
+// placement and a model switch, never per drag frame), so the per-cell cost is fine. Returns null
+// if nothing on the whole detected floor can take the machine at its current size.
 function nearestValidFootprint(fx, fy){
   if (!floorMask || !modelSize) return null;
   const { w, h, data } = floorMask;
@@ -965,23 +1034,44 @@ function nearestValidFootprint(fx, fy){
     if (d >= bd) continue;
     const sc = imageToScreen((x+0.5)/w, (y+0.5)/h);
     const p = groundHit(sc.x, sc.y);
-    if (p && footprintOnFloor(p.x, p.z)) { bd = d; bx = x; by = y; }
+    if (p && placementOk(p.x, p.z)) { bd = d; bx = x; by = y; }
   }
   return bx < 0 ? null : { fx: (bx+0.5)/w, fy: (by+0.5)/h };
 }
 
-// Build a downsampled floor mask (union of floor/rug/carpet) from the segmentation result
-function buildFloorMask(out){
-  const src = out.filter(o => /\b(floor|rug|carpet|mat)\b/i.test(o.label) && o.mask);
-  if (!src.length) return null;
-  const W = src[0].mask.width, H = src[0].mask.height, gw = 160, gh = Math.max(1, Math.round(gw * H / W));
+// Downsampled union of some of the segmentation result's label masks
+function unionMask(layers){
+  if (!layers.length) return null;
+  const W = layers[0].mask.width, H = layers[0].mask.height, gw = 160, gh = Math.max(1, Math.round(gw * H / W));
   const data = new Uint8Array(gw * gh);
-  for (const layer of src){ const m = layer.mask.data;
+  for (const layer of layers){ const m = layer.mask.data;
     for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++){
       const sx = (gx / gw * W) | 0, sy = (gy / gh * H) | 0;
       if (m[sy * W + sx] > 127) data[gy * gw + gx] = 1;
     } }
   return { w: gw, h: gh, data };
+}
+// Build a downsampled floor mask (union of floor/rug/carpet) from the segmentation result
+function buildFloorMask(out){
+  return unionMask(out.filter(o => /\b(floor|rug|carpet|mat)\b/i.test(o.label) && o.mask));
+}
+// Background surfaces (and outdoors, seen through a window) -- everything else the segmenter finds
+// counts as an obstacle. A complement list rather than a list of furniture names, because ADE20K
+// has 150 classes and a hand-picked list would silently miss whatever it forgot (a pouf, a laundry
+// basket, a person) -- exactly the things a machine shouldn't be drawn through.
+const NOT_OBSTACLE = /\b(floor|rug|carpet|mat|wall|ceiling|windowpane|window|door|light|sky|building|tree|grass|road|sidewalk|mountain|earth)\b/i;
+// Obstacle mask plus, per cell, the photo row where that obstacle meets the floor: walk down its
+// column to the bottom of the run it belongs to (one bottom-up pass, not a walk per lookup).
+function buildObstacleMask(out){
+  const m = unionMask(out.filter(o => !NOT_OBSTACLE.test(o.label) && o.mask));
+  if (!m) return null;
+  const { w, h, data } = m, base = new Float32Array(w * h);
+  for (let x = 0; x < w; x++) for (let y = h - 1; y >= 0; y--) {
+    const k = y * w + x;
+    if (data[k]) base[k] = (y + 1 < h && data[k + w]) ? base[k + w] : (y + 1) / h;
+  }
+  m.base = base;
+  return m;
 }
 function isFloorAt(fx, fy){ if (!floorMask) return true; const { w, h, data } = floorMask;
   const gx = Math.min(w-1, Math.max(0, (fx*w)|0)), gy = Math.min(h-1, Math.max(0, (fy*h)|0)); return data[gy*w+gx] === 1; }
@@ -1041,7 +1131,7 @@ function placeAtImageCoord(fx, fy){                   // image-normalised → sc
   const p = groundHit(sc.x, sc.y);
   if (!p) return;
   machine.position.set(p.x, 0, p.z); needsRender = true;
-  if (footprintOnFloor(p.x, p.z)) { lastValidX = p.x; lastValidZ = p.z; }
+  if (placementOk(p.x, p.z)) { lastValidX = p.x; lastValidZ = p.z; }
 }
 function matchLighting(){
   try {
@@ -1062,14 +1152,15 @@ async function runAIPlace(){
     aiSet('Understanding the room…');
     const out = await AI.seg(photoInputURL());
     floorMask = buildFloorMask(out);
-    if (!floorMask){ aiSet('No clear floor found — place it with drag + the sliders.'); return; }
+    obstacleMask = buildObstacleMask(out);   // same segmentation pass -- no extra model call
+    if (!floorMask){ obstacleMask = null; aiSet('No clear floor found — place it with drag + the sliders.'); return; }
     const labels = [...new Set(out.map(o => o.label))];
     if (isTopDownShot(floorMask, labels)) {
       // Nearly the whole frame is "floor" and no wall was found either -- this is a straight-
       // down shot with no room in it at all, so there's no honest angle or size to guess.
       // Leaving floorMask set would otherwise let a drag "snap" to what is really just the
       // entire photo, which isn't a floor constraint at all.
-      floorMask = null;
+      floorMask = null; obstacleMask = null;
       aiSet('That looks like it’s pointing straight down at just the floor — retake it showing some of the room (a wall or furniture) so the size can be judged properly.');
       return;
     }
@@ -1080,16 +1171,16 @@ async function runAIPlace(){
     placeAtImageCoord(p.fx, p.fy);
     const objs = labels.slice(0, 7).join(', ');
     // autoFloorPoint() only picked a single centre point -- re-check with the machine's real
-    // width × depth (now that the model, and so modelSize, is loaded) and, if that spot would
-    // actually spill it onto whatever's next to the floor, search for the nearest spot on this
-    // floor where the whole footprint really does fit.
-    if (!footprintOnFloor(machine.position.x, machine.position.z)) {
+    // size (now that the model, and so modelSize, is loaded) and, if that spot would spill it
+    // off the floor or draw it through furniture in front of it, search for the nearest spot on
+    // this floor where it really does fit.
+    if (!placementOk(machine.position.x, machine.position.z)) {
       const fitted = nearestValidFootprint(p.fx, p.fy);
       if (fitted) {
         placeAtImageCoord(fitted.fx, fitted.fy);
         aiSet('Placed on the floor ✓ — it now snaps to the floor when you drag. (Detected: ' + objs + ')');
       } else {
-        aiSet('Floor found, but it may be too small for this machine here — long-press to place it manually. (Detected: ' + objs + ')');
+        aiSet('Couldn’t find open floor big enough for this machine clear of the furniture — long-press to place it manually. (Detected: ' + objs + ')');
       }
     } else {
       aiSet('Placed on the floor ✓ — it now snaps to the floor when you drag. (Detected: ' + objs + ')');
@@ -1195,6 +1286,7 @@ dimBtn.addEventListener('click', () => {
   dimBtn.setAttribute('aria-pressed', String(dimsOn));
   needsRender = true;
 });
+
 
 // test hook: load a real room photo from a CORS-enabled URL (desktop verification)
 window.__loadUrlTest = async (url) => {
