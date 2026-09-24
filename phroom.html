@@ -2129,16 +2129,16 @@ aiBtn.addEventListener('click', runAIPlace);
 const depthStatusEl = document.getElementById('depthStatus'), depthText = document.getElementById('depthText');
 const depthOfferEl = document.getElementById('depthOffer');
 // 'auto': run it now; 'offer': ask first (a button under the status line); 'off': not on this device.
-// It downloads by itself only where data is cheap: Wi-Fi or wired where the browser says so (Chrome
-// on Android does), else on a computer (mouse-type pointer). A phone on mobile or unknown data is
-// asked first -- 145 MB is real money on a prepaid pack. Once downloaded it's cached and just runs.
+// The first 145 MB download happens by itself only on a computer (mouse-type pointer) that isn't
+// on mobile data. A phone always asks first, even on Wi-Fi: it's real money on a prepaid pack, and
+// a model this size is a lot to spring on a budget phone's memory. Once downloaded it's cached and
+// just runs.
 async function depthMode(){
   const conn = navigator.connection || {};
   if (!navigator.gpu || DEPTH.failed || conn.saveData) return 'off';
   if (navigator.deviceMemory && navigator.deviceMemory < 4) return 'off';   // too big for the phone's memory
   if (DEPTH.loaded || await depthCached()) return 'auto';
-  if (conn.type) return /^(wifi|ethernet)$/.test(conn.type) ? 'auto' : 'offer';
-  return matchMedia('(pointer: fine)').matches ? 'auto' : 'offer';
+  return matchMedia('(pointer: fine)').matches && conn.type !== 'cellular' ? 'auto' : 'offer';
 }
 async function depthCached(){
   try { DEPTH.cached = !!(await (await caches.open('transformers-cache')).match(DEPTH_MODEL_URL)); } catch (e) { DEPTH.cached = false; }
