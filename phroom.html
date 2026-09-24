@@ -258,6 +258,12 @@
   .btn:disabled{opacity:.45;cursor:default}
   .dock[inert],.top[inert]{opacity:.4}
   .linkBtn{appearance:none;background:none;border:0;color:#ff8a92;font-size:12.5px;text-decoration:underline;cursor:pointer;padding:2px;align-self:center}
+  .linkBtn[hidden],.depthStatus[hidden]{display:none}
+  /* the 3D depth pass, working in the background after the machine is already placed */
+  .depthStatus{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;color:#b9c7ff}
+  .spin{width:12px;height:12px;border-radius:50%;border:2px solid rgba(185,199,255,.3);border-top-color:#b9c7ff;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion: reduce){ .spin{animation-duration:2.4s} }
 </style>
 </head>
 <body>
@@ -380,6 +386,8 @@
         <button class="btn sec" id="aiBtn" type="button">🔄 Re-detect</button>
       </div>
       <span id="aiStatus" style="font-size:11px;color:#cbd0e6;text-align:center;line-height:1.35">AI finds the <b>floor</b> (not furniture) automatically and keeps the machine on it as you drag. Long-press anywhere to place it exactly there instead.</span>
+      <span class="depthStatus" id="depthStatus" role="status" aria-live="polite" hidden><span class="spin" aria-hidden="true"></span><span id="depthText"></span></span>
+      <button class="linkBtn" id="depthOffer" type="button" hidden>✨ Or let the 3D AI measure your room (one-time 145 MB download)</button>
     </div>
     <div class="actions">
       <button class="btn sec" id="dimBtn" style="flex:0 0 auto" aria-label="Toggle dimensions" aria-pressed="true">📐</button>
@@ -848,6 +856,7 @@ function startComposer(){
   floorMask = null;
   obstacleMask = null;
   lastSeg = null; manualRefs = []; freePlaced = false; hideToast();   // a new photo: nothing measured on it yet
+  photoToken++; lastDepth = null; DEPTH.pendingApply = false; depthOfferEl.hidden = true; showDepthStatus();
   calBtn.classList.remove('glow'); calBtn.textContent = '📏 Calibrate size';
   cam = { ...CAM_DEFAULT, f35: exifF35 || CAM_DEFAULT.f35 };   // the last photo's fit doesn't apply to this one
   sAng.value = cam.pitchDeg; vAng.textContent = cam.pitchDeg + '°';
@@ -1130,33 +1139,40 @@ const aiBtn = document.getElementById('aiBtn');
 const aiStatus = document.getElementById('aiStatus');
 const aiSet = (t) => { aiStatus.textContent = t; };
 
-// The AI itself lives in a worker (phroom-ai-worker.js): loading it and running it block for
-// seconds, and on this page that froze taps and the upload screen. AI.seg is set -- to a function
-// that asks the worker to read a photo -- once the model is loaded and warmed up.
-const AI = { seg: null, ready: null, pct: null, worker: null, nextId: 1, pending: new Map() };
-function aiWorker(){
-  if (!AI.worker) {
-    AI.worker = new Worker(new URL('phroom-ai-worker.js', import.meta.url), { type: 'module' });
-    AI.worker.onmessage = (e) => {
-      const m = e.data;
-      if (m.type === 'progress') { AI.pct = m.pct; if (busyStep === 'ai') showAILoading(); return; }
-      const p = AI.pending.get(m.id);
-      if (!p) return;
-      AI.pending.delete(m.id);
-      if (m.type === 'error') p.reject(new Error(m.message)); else p.resolve(m);
-    };
-    // the worker itself failed (couldn't load, crashed): fail whatever was waiting, start fresh next time
-    AI.worker.onerror = (e) => {
-      for (const p of AI.pending.values()) p.reject(new Error(e.message || 'AI worker failed'));
-      AI.pending.clear(); AI.worker = null; AI.ready = null; AI.seg = null;
-    };
-  }
-  return AI.worker;
+// The AIs live in workers (phroom-ai-worker.js): loading one and running it block for seconds, and
+// on this page that froze taps and the upload screen. One worker per model, started on first use:
+// two models' GPU sessions can't take turns inside one onnxruntime -- a new photo's room scan that
+// landed during a 3D depth pass failed outright ("Session mismatch").
+function aiChannel(onProgress, onCrash){
+  const ch = { worker: null, nextId: 1, pending: new Map() };
+  const worker = () => {
+    if (!ch.worker) {
+      ch.worker = new Worker(new URL('phroom-ai-worker.js', import.meta.url), { type: 'module' });
+      ch.worker.onmessage = (e) => {
+        const m = e.data;
+        if (m.type === 'progress') { onProgress(m.pct); return; }
+        const p = ch.pending.get(m.id);
+        if (!p) return;
+        ch.pending.delete(m.id);
+        if (m.type === 'error') p.reject(new Error(m.message)); else p.resolve(m);
+      };
+      // the worker itself failed (couldn't load, crashed): fail whatever was waiting, start fresh next time
+      ch.worker.onerror = (e) => {
+        for (const p of ch.pending.values()) p.reject(new Error(e.message || 'AI worker failed'));
+        ch.pending.clear(); ch.worker = null; onCrash();
+      };
+    }
+    return ch.worker;
+  };
+  return (msg) => {
+    const id = ch.nextId++;
+    return new Promise((resolve, reject) => { ch.pending.set(id, { resolve, reject }); worker().postMessage({ ...msg, id }); });
+  };
 }
-function aiCall(msg){
-  const id = AI.nextId++;
-  return new Promise((resolve, reject) => { AI.pending.set(id, { resolve, reject }); aiWorker().postMessage({ ...msg, id }); });
-}
+// The room AI (what's floor, wall, furniture). AI.seg is set -- to a function that asks its worker to
+// read a photo -- once the model is loaded and warmed up.
+const AI = { seg: null, ready: null, pct: null };
+const aiCall = aiChannel((pct) => { AI.pct = pct; if (busyStep === 'ai') showAILoading(); }, () => { AI.ready = null; AI.seg = null; });
 // One shared load: showUpload() starts it early and runAIPlace() awaits the same promise, so the
 // ~15 MB model is never fetched twice. A failed load clears itself so the next call can retry.
 function loadSeg(){
@@ -1434,7 +1450,7 @@ function floorCoverage(mask){
 const CAM_REFS = [
   // a glass door's upper part is "windowpane", so only count doors with wall right above them.
   // 2.05 m sits between India's usual 2.1 m (7 ft) door and the 2.03 m (6'8") common elsewhere.
-  { re: /\bdoor\b/i, H: 2.05, sig: 0.05, D: 0, name: 'door', family: /\bdoor\b/i, above: /\b(wall|ceiling)\b/i },
+  { re: /\bdoor\b/i, H: 2.05, sig: 0.05, D: 0, name: 'door', family: /\bdoor\b/i, above: /\b(wall|ceiling)\b/i, upright: true },
   { re: /\bwardrobe\b/i, H: 2.0, sig: 0.12, D: 0.6, name: 'wardrobe', family: /\b(wardrobe|cabinet)\b/i },
   { re: /\brefrigerator\b/i, H: 1.75, sig: 0.1, D: 0.65, name: 'fridge', family: /\brefrigerator\b/i },
   { re: /\b(counter|countertop|kitchen island)\b/i, H: 0.91, sig: 0.05, D: 0.6, name: 'kitchen counter', family: /\b(counter|countertop|kitchen island|cabinet)\b/i },
@@ -1453,6 +1469,18 @@ const WALL_REF = { name: 'wall height', H: 2.85, sig: 0.12, D: 0 };
 // the room itself, not things standing in it
 const CAM_BG = /\b(floor|rug|carpet|mat|wall|ceiling|windowpane|window|sky|building|tree|grass|road|sidewalk|mountain|earth|light|fence|railing)\b/i;
 
+// A door is taller than it is wide from anywhere in the room -- turning it only makes it look
+// narrower. So a "door" that comes out wider than tall is a piece of one (near_sofa1: the bottom rail
+// of a glass door, 4% of the photo tall, got measured as a 2.05 m door and the machine came out 30%
+// too small). Samples are grouped into side-by-side runs of columns, each checked on its own.
+function uprightOnly(samples){
+  const s = samples.slice().sort((a, b) => a.x - b.x), groups = [];
+  for (const q of s) { const g = groups[groups.length - 1]; if (g && q.x - g[g.length - 1].x <= 3) g.push(q); else groups.push([q]); }
+  return groups.filter((g) => {
+    const runs = g.map((q) => q.run).sort((a, b) => a - b), width = g[g.length - 1].x - g[0].x + 1;
+    return runs[runs.length >> 1] >= width;                         // grid cells are square in the photo
+  }).flat();
+}
 // Top and floor-contact rows of every reference object, one sample per photo column.
 function cameraRefSamples(out){
   const layers = out.filter((o) => o.mask), grids = layers.map((o) => unionMask([o]));
@@ -1480,7 +1508,7 @@ function cameraRefSamples(out){
       if (!ref || t === 0 || b - t < 2 || !onFloor(x, b)) continue;     // cut off by the top edge, a sliver, or not visibly on the floor
       if (!ref.family.test(layers[L(x, b)].label)) continue;
       if (ref.above) { const a = L(x, t - 1); if (a < 0 || !ref.above.test(layers[a].label)) continue; }
-      raw.push({ ref, top: t / h, base: (b + 1) / h, run: b - t + 1 });
+      raw.push({ ref, top: t / h, base: (b + 1) / h, run: b - t + 1, x });
     }
     // A wall with ceiling right above it and floor right below spans one ceiling height.
     for (let y = 0; y < h;) {
@@ -1498,6 +1526,7 @@ function cameraRefSamples(out){
     // with floor seen underneath -- drop runs much shorter than the tallest of the same kind.
     const maxRun = Math.max(...arr.map((s) => s.run));
     let keep = arr.filter((s) => s.run >= 0.4 * maxRun);
+    if (arr[0].ref.upright) keep = uprightOnly(keep);
     if (keep.length < 2) continue;                                   // a fragment, not a measurement
     // 30 evenly spaced columns is plenty -- each kind of object counts as one observation anyway
     if (keep.length > 30) keep = Array.from({ length: 30 }, (_, i) => keep[Math.floor(i * keep.length / 30)]);
@@ -1612,15 +1641,19 @@ function cameraFitLoss(samples, hc, thDeg, f35, vp, lens){
     const lo = d === null ? null : pc.topRow(d, q.ref.H * Math.exp(-q.ref.sig), q.ref.D);
     if (v === null || hi === null || lo === null) { L += q.wt * 5; continue; }   // seen standing above the horizon: impossible here
     const r = (v - q.top) / (Math.abs(lo - hi) / 2 + 1 / q.gh);        // height spread in rows, plus one mask cell
-    L += q.wt * Math.log(1 + r * r);                                   // Cauchy: one wild sample can't dominate
+    // Cauchy: one wild sample can't dominate. Except the depth scan when it's the only evidence --
+    // then it's the one thing known about this photo, and a Cauchy loss would let the "typical
+    // phone height" prior talk it out of a crouched or zoomed shot (kitchen1: 0.52 m up, 44 mm).
+    L += q.wt * (q.gauss ? 0.5 * r * r : Math.log(1 + r * r));
   }
   return L;
 }
 
 // Fit the phone's height, tilt and lens to the photo; see the section comment above. `manual` is
 // whatever the customer marked with Calibrate (see manualRefs): measured by a person, so it counts
-// for four automatic kinds of object, and its height is taken as nearly exact.
-function calibrateCamera(out, manual = []){
+// for four automatic kinds of object, and its height is taken as nearly exact. `depth` is the photo's
+// depth map when the 3D pass has run (see depthSamples): it counts as one more kind of object.
+function calibrateCamera(out, manual = [], depth = null){
   // EXIF lens when the photo still has it; otherwise the 1x lens is likeliest, but let the room say
   const lens = exifF35 ? { f: exifF35, sig: 0.05 } : { f: CAM_DEFAULT.f35, sig: 0.35 };
   const samples = [
@@ -1628,6 +1661,10 @@ function calibrateCamera(out, manual = []){
     ...manual.map((m) => ({ ref: { name: m.name ? 'your ' + m.name : 'your measurement', H: m.H, sig: m.sig || 0.02, D: 0 }, top: m.top, base: m.base, wt: 4, gh: 400 })),
     ...cameraRefSamples(out || []),
   ];
+  // Alone, the depth scan also counts double: the photos with nothing else to go on were 20-60% off
+  // before it, and what's left of that shrank from 5-25% to 2-20% (twice vs once; 4× gained ~1% more).
+  const alone = !samples.length;
+  for (const s of depthSamples(depth)) samples.push({ ...s, gauss: alone, wt: s.wt * (alone ? 2 : 1) });
   const vp = tiltFromVerticals(vfovForLens(lens.f));
   const lenses = exifF35 ? [exifF35] : [13, 16, 20, 24, 26, 28, 32, 36, 42, 48, 55, 65, 77];   // ultra-wide … 3x zoom
   let best = null;
@@ -1646,8 +1683,109 @@ function sizedFromText(calib){
     const m = manualRefs.map((r) => r.name ? 'your ' + r.name + ' (' + Math.round(r.H * 100) + ' cm)' : 'your ' + Math.round(r.H * 100) + ' cm measurement');
     return 'Sized from ' + list(m) + ' ✓';
   }
-  if (calib.refs.length) return 'Sized from the ' + list(calib.refs) + ' in your photo.';
+  const refs = calib.refs.filter((r) => r !== DEPTH_REF.name), depth = refs.length < calib.refs.length;
+  if (refs.length) return 'Sized from the ' + list(refs) + ' in your photo' + (depth ? ', checked with a 3D scan.' : '.');
+  if (depth) return 'Sized from a 3D scan of your room — for an exact fit, 📏 Calibrate size.';
   return 'Nothing of known size in view, so this is a best estimate — tap 📏 Calibrate size for an exact fit.';
+}
+
+// ---------- 3D depth: a second opinion on size when nothing in the photo has a known height ----------
+// Without a door, counter or the like in view, the sizing above is a guess -- 12-34% off on the test
+// photos. A depth AI (Metric3D v2, in phroom-ai-worker.js) says how far away every pixel of the
+// photo is, in metres; a plane fitted to the floor's pixels then gives the phone's height and tilt
+// with no reference at all. On the test photos that halved the guess's error. It's heavy (a 145 MB
+// download, a few seconds on the GPU), so it runs only after the machine is already placed, as a
+// refinement, and only where it's worth it: nothing of known height in view, or only the
+// wall-to-ceiling height, itself just a typical figure. depthMode() says when it may download by
+// itself and when the customer is asked first.
+const DEPTH = { loaded: false, cached: false, failed: false, pct: null, busyToken: null, queue: Promise.resolve(), pendingApply: false, lastFit: null };
+const depthCall = aiChannel((pct) => { DEPTH.pct = pct; showDepthStatus(); }, () => { DEPTH.loaded = false; });
+let lastDepth = null;       // this photo's depth map {width, height, data}, canonical (see depthFloorCamera)
+let photoToken = 0;         // bumped for every new photo, so a late depth result can't land on the next one
+const DEPTH_MODEL_URL = 'https://huggingface.co/onnx-community/metric3d-vit-small/resolve/main/onnx/model.onnx';
+// What the depth scan contributes to calibrateCamera(): virtual 85 cm posts standing on the floor at
+// a few rows, as tall as the scan says they'd look there -- the same form as a detected object, and
+// what matters in the end (how big the machine is drawn at each spot on the floor).
+const DEPTH_REF = { name: '3D depth scan', H: 0.85, sig: 0.12, D: 0 };
+
+// The phone's height, tilt and roll from the depth map. The depth model works in a "canonical"
+// camera with a 1000 px focal length, so metres = depth × (the real focal length in the same pixels)
+// / 1000, which needs a lens: tested at 20-45 mm on the same photo, the machine size it led to moved
+// by only ±3%, so the usual lens will do. Floor pixels are back-projected to 3D, the plane most of
+// them lie on is found (RANSAC, seeded so the same photo always gives the same answer) and then
+// refined over its inliers (PCA). null when the floor didn't come out as one clean plane.
+function depthFloorCamera(dep, f35){
+  const { width: W, height: H, data } = dep;
+  const f = (H / 2) / Math.tan(vfovForLens(f35) / 2), k = f / 1000;
+  const step = Math.max(2, Math.round(Math.sqrt(W * H / 12000)));      // ~12k samples over the frame
+  const pts = [];
+  for (let y = 2; y < H - 2; y += step) for (let x = 2; x < W - 2; x += step) {
+    if (!isFloorAt((x + 0.5) / W, (y + 0.5) / H)) continue;
+    const Z = data[y * W + x] * k;
+    if (Z > 0.05 && Z < 50) pts.push([(x + 0.5 - W / 2) * Z / f, (y + 0.5 - H / 2) * Z / f, Z]);   // x right, y down, z ahead
+  }
+  if (pts.length < 150) return null;
+  const tol = (q) => 0.03 * Math.max(1, q[2] / 2);                    // depth gets less exact further away
+  const dist = (p, q) => Math.abs(p.n[0] * q[0] + p.n[1] * q[1] + p.n[2] * q[2] + p.d);
+  const plane = (a, b, c) => {
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], L = Math.hypot(...n);
+    if (L < 1e-9) return null;
+    const m = n.map((q) => q / L);
+    return { n: m, d: -(m[0] * a[0] + m[1] * a[1] + m[2] * a[2]) };
+  };
+  let seed = 12345, best = null;
+  const pick = () => pts[(seed = (seed * 1103515245 + 12345) & 0x7fffffff) % pts.length];
+  for (let it = 0; it < 300; it++) {
+    const p = plane(pick(), pick(), pick()); if (!p) continue;
+    let n = 0; for (const q of pts) if (dist(p, q) < tol(q)) n++;
+    if (!best || n > best.inl) best = { ...p, inl: n };
+  }
+  if (!best) return null;
+  const inl = pts.filter((q) => dist(best, q) < tol(q));
+  // least-squares plane through the inliers: the normal is the covariance's smallest eigenvector,
+  // by inverse iteration from the RANSAC normal
+  const c = [0, 0, 0]; for (const q of inl) for (let i = 0; i < 3; i++) c[i] += q[i] / inl.length;
+  const C = [[1e-6, 0, 0], [0, 1e-6, 0], [0, 0, 1e-6]];
+  for (const q of inl) { const e = [q[0] - c[0], q[1] - c[1], q[2] - c[2]]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i][j] += e[i] * e[j]; }
+  const solve = (M, b) => {                                             // Gaussian elimination, 3×3
+    const m = M.map((r, i) => [...r, b[i]]);
+    for (let i = 0; i < 3; i++) {
+      let p = i; for (let r = i + 1; r < 3; r++) if (Math.abs(m[r][i]) > Math.abs(m[p][i])) p = r;
+      [m[i], m[p]] = [m[p], m[i]];
+      for (let r = 0; r < 3; r++) if (r !== i) { const g = m[r][i] / m[i][i]; for (let j = i; j < 4; j++) m[r][j] -= g * m[i][j]; }
+    }
+    return m.map((r, i) => r[3] / r[i]);
+  };
+  let n = best.n.slice();
+  for (let it = 0; it < 30; it++) { n = solve(C, n); const L = Math.hypot(...n); n = n.map((q) => q / L); }
+  if (n[1] > 0) n = n.map((q) => -q);                                   // point it up (image y runs down)
+  const hc = Math.abs(n[0] * c[0] + n[1] * c[1] + n[2] * c[2]);         // the camera is at the origin
+  const fit = { hc, pitchDeg: Math.asin(-n[2]) * 180 / Math.PI, rollDeg: Math.atan2(n[0], -n[1]) * 180 / Math.PI, inliers: inl.length / pts.length, points: pts.length };
+  // A floor that isn't one clean plane (mirror, glass, clutter the segmenter called floor), or a
+  // camera no phone photo comes from: don't use it.
+  const ok = fit.inliers >= 0.8 && fit.hc > 0.4 && fit.hc < 3 && fit.pitchDeg > -10 && fit.pitchDeg < 75 && Math.abs(fit.rollDeg) < 15;
+  return ok ? fit : null;
+}
+// n photo rows spread over where the floor is in view (rows at least 10% floor) -- where the machine can stand
+function floorRows(n){
+  const { w, h, data } = floorMask, rows = [];
+  for (let y = 0; y < h; y++) { let c = 0; for (let x = 0; x < w; x++) c += data[y * w + x]; if (c >= 0.1 * w) rows.push(y); }
+  if (rows.length < 3) return [];
+  const lo = rows[0], hi = rows[rows.length - 1] + 1;
+  return Array.from({ length: n }, (_, i) => (lo + (hi - lo) * (i + 0.5) / n) / h);
+}
+function depthSamples(dep){
+  if (!dep || !floorMask) return [];
+  const f35 = exifF35 || CAM_DEFAULT.f35, fit = depthFloorCamera(dep, f35);
+  DEPTH.lastFit = fit;
+  if (!fit) return [];
+  const pc = photoCam(fit.hc, fit.pitchDeg, vfovForLens(f35)), rows = floorRows(5), out = [];
+  for (const v of rows) {
+    const d = pc.floorDist(v), t = d === null ? null : pc.topRow(d, DEPTH_REF.H, 0);
+    if (t !== null) out.push({ ref: DEPTH_REF, top: t, base: v, wt: 1 / rows.length, gh: 400 });
+  }
+  return out.length >= 3 ? out : [];
 }
 // A photo aimed straight down at the floor has nothing else in frame -- no wall, no furniture,
 // no horizon -- for the AI to have found. There's then no visual cue at all for how far away or
@@ -1685,6 +1823,7 @@ async function runAIPlace(){
   if (!photoBitmap || !machine) { aiSet('Load a photo first.'); floorLocking = false; return; }
   aiBtn.disabled = true; calBtn.disabled = true;
   freePlaced = false;
+  let depthCheck = null;
   // Keep the machine out of sight until it's been sized and placed -- otherwise it sits at a
   // default spot and size for several seconds and then visibly jumps.
   machine.visible = false; needsRender = true;
@@ -1716,11 +1855,12 @@ async function runAIPlace(){
     }
     setBusy('measure', '📐', 'Measuring your room…', 'Working out the camera height and angle');
     await nextPaint();                        // the fit below blocks for a moment -- show the step first
-    const calib = calibrateCamera(out, manualRefs);
+    const calib = calibrateCamera(out, manualRefs, lastDepth);
     cam = { hc: calib.hc, pitchDeg: calib.pitchDeg, f35: calib.f35 };
     sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
     updateCamera();
     matchLighting();
+    depthCheck = calib;                       // see finally: once the machine is showing, maybe a 3D pass
     let p = autoFloorPoint();
     placeAtImageCoord(p.fx, p.fy);
     // Say what the size was judged from -- or that nothing in view could anchor it, and point at
@@ -1743,6 +1883,7 @@ async function runAIPlace(){
       aiSet('Placed on the floor ✓ — it snaps to the floor as you drag. ' + objs);
     }
   } catch (e) {
+    console.warn('Room AI failed:', e);
     aiSet('AI unavailable here — drag + sliders still place it.');
   } finally {
     aiBtn.disabled = false; calBtn.disabled = false;
@@ -1753,9 +1894,94 @@ async function runAIPlace(){
     // let the AI's view of the room linger a beat as the machine appears, then fade it
     setTimeout(() => scanEl.classList.remove('show'), 1400);
     showDragHint();
+    if (depthCheck) maybeDepth(depthCheck);
   }
 }
 aiBtn.addEventListener('click', runAIPlace);
+
+// ---------- 3D depth pass: when it runs, and what the customer sees (see depthFloorCamera) ----------
+const depthStatusEl = document.getElementById('depthStatus'), depthText = document.getElementById('depthText');
+const depthOfferEl = document.getElementById('depthOffer');
+// 'auto': run it now; 'offer': ask first (a button under the status line); 'off': not on this device.
+// It downloads by itself only where data is cheap: Wi-Fi or wired where the browser says so (Chrome
+// on Android does), else on a computer (mouse-type pointer). A phone on mobile or unknown data is
+// asked first -- 145 MB is real money on a prepaid pack. Once downloaded it's cached and just runs.
+async function depthMode(){
+  const conn = navigator.connection || {};
+  if (!navigator.gpu || DEPTH.failed || conn.saveData) return 'off';
+  if (navigator.deviceMemory && navigator.deviceMemory < 4) return 'off';   // too big for the phone's memory
+  if (DEPTH.loaded || await depthCached()) return 'auto';
+  if (conn.type) return /^(wifi|ethernet)$/.test(conn.type) ? 'auto' : 'offer';
+  return matchMedia('(pointer: fine)').matches ? 'auto' : 'offer';
+}
+async function depthCached(){
+  try { DEPTH.cached = !!(await (await caches.open('transformers-cache')).match(DEPTH_MODEL_URL)); } catch (e) { DEPTH.cached = false; }
+  return DEPTH.cached;
+}
+// After the automatic placement: is a depth pass worth it for this photo, and may it run by itself?
+async function maybeDepth(calib){
+  depthOfferEl.hidden = true;
+  if (lastDepth || manualRefs.length) return;                   // done already / the customer's own marks win
+  if (calib.refs.some((r) => r !== WALL_REF.name)) return;      // a door, counter, sofa... already sized it
+  const token = photoToken, mode = await depthMode();
+  if (token !== photoToken) return;
+  if (mode === 'auto') refineWithDepth();
+  else if (mode === 'offer' && !calib.refs.length) depthOfferEl.hidden = false;
+}
+depthOfferEl.addEventListener('click', () => refineWithDepth());
+function showDepthStatus(){
+  const on = DEPTH.busyToken !== null && DEPTH.busyToken === photoToken;
+  depthStatusEl.hidden = !on;
+  // (a cached model reports "progress" too, while it's read back from disk)
+  if (on) depthText.textContent = DEPTH.pct !== null && DEPTH.pct < 100
+    ? (DEPTH.cached ? 'Loading the 3D AI… ' : 'Downloading the 3D AI (one time only)… ') + DEPTH.pct + '%'
+    : 'Measuring your room in 3D…';
+}
+function refineWithDepth(){
+  const token = photoToken, url = photoInputURL(768);   // the model reads ~518 px anyway
+  depthOfferEl.hidden = true;
+  DEPTH.busyToken = token; DEPTH.pct = null; showDepthStatus();
+  // one photo at a time: a second run can't share the model while the first is on it
+  const job = DEPTH.queue.then(() => depthCall({ type: 'depth', image: url }));
+  DEPTH.queue = job.catch(() => {});
+  job.then((r) => {
+    DEPTH.loaded = true;
+    if (token !== photoToken) return;                           // they've moved on to another photo
+    lastDepth = { width: r.width, height: r.height, data: r.data };
+    if (cal.on) DEPTH.pendingApply = true; else applyDepth();   // not while they're marking points
+  }).catch((e) => {
+    console.warn('3D scan failed:', e);
+    DEPTH.fails = (DEPTH.fails || 0) + 1;
+    if (/no-webgpu/.test(e.message) || DEPTH.fails >= 2) DEPTH.failed = true;   // don't keep trying (and saying so) every photo
+    if (token === photoToken) toast('The 3D scan couldn’t run here — 📏 Calibrate size gives an exact fit.', '', null, 6000);
+  }).finally(() => {
+    if (DEPTH.busyToken === token) DEPTH.busyToken = null;
+    showDepthStatus();
+  });
+}
+// Refit with the scan and say what it did. Nothing changes if the floor didn't scan cleanly.
+function applyDepth(){
+  DEPTH.pendingApply = false;
+  if (!machine || !lastDepth) return;
+  const h0 = machineHeightAt(machinePhotoPoint().fy);
+  const calib = refitCamera();
+  if (!calib) return;
+  if (!calib.refs.includes(DEPTH_REF.name)) {
+    toast('The 3D scan couldn’t read this floor clearly — 📏 Calibrate size gives an exact fit.', '', null, 6000);
+    return;
+  }
+  const h1 = machineHeightAt(machinePhotoPoint().fy);
+  const change = h0 && h1 ? h1 / h0 - 1 : 0;
+  toast(Math.abs(change) < 0.03 ? 'A 3D scan of your room agrees with this size ✓' : 'Size fine-tuned with a 3D scan of your room ✓');
+}
+// On-screen height (share of the photo's height) of the machine standing with its front edge at row
+// v, under camera c -- what the sizing is ultimately about.
+function machineHeightAt(v, c = cam){
+  const pc = photoCam(c.hc, c.pitchDeg, vfovForLens(c.f35)), d = pc.floorDist(v);
+  if (d === null || !modelSize) return null;
+  const s = baseScale * (+sSize.value / 100), t = pc.topRow(d, modelSize.y * s, modelSize.z * s);
+  return t === null ? null : v - t;
+}
 
 // Where the machine's footprint centre is in the photo -- kept across a refit, so fixing the size
 // never moves the machine to a different spot in the picture.
@@ -1903,6 +2129,7 @@ function closeCalib(){
   hideLoupe(); renderCalib();
   if (machine) { machine.visible = true; needsRender = true; }
   if (dimsOn && stageEl.style.display === 'block') dimchip.style.display = 'block';
+  if (DEPTH.pendingApply) applyDepth();        // the 3D scan finished while they were marking
 }
 function openCalSheet(){
   cal.preset = null; calCm.value = ''; calApply.disabled = true; calHint.textContent = '';
@@ -1920,9 +2147,9 @@ function calValidate(){
 // Refit the camera with everything known about this photo (the AI's view plus the customer's marks),
 // keeping the machine at the same spot in the picture.
 function refitCamera(){
-  if (!machine) return;
+  if (!machine) return null;
   const at = machinePhotoPoint();
-  const calib = calibrateCamera(lastSeg, manualRefs);
+  const calib = calibrateCamera(lastSeg, manualRefs, lastDepth);
   cam = { hc: calib.hc, pitchDeg: calib.pitchDeg, f35: calib.f35 };
   sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
   updateCamera();
@@ -1932,6 +2159,7 @@ function refitCamera(){
   calBtn.textContent = manualRefs.length ? '📏 Calibrate again' : '📏 Calibrate size';
   aiSet(sizedFromText(calib));
   needsRender = true;
+  return calib;
 }
 
 calibEl.addEventListener('pointerdown', (e) => {
@@ -2115,6 +2343,8 @@ if (new URLSearchParams(location.search).has('debug')) {
   window.__phroomDebug = {
     cam: () => ({ hc: +cam.hc.toFixed(3), pitchDeg: +cam.pitchDeg.toFixed(2), f35: +cam.f35.toFixed(1) }),
     labels: () => [...new Set((lastSeg || []).map((o) => o.label))],
+    seg: () => lastSeg,
+    refSamples: () => cameraRefSamples(lastSeg || []).map((s) => ({ name: s.ref.name, top: +s.top.toFixed(3), base: +s.base.toFixed(3) })),
     refs: () => { const n = {}; for (const q of cameraRefSamples(lastSeg || [])) n[q.ref.name] = (n[q.ref.name] || 0) + 1; return n; },
     manualRefs: () => manualRefs.map((m) => ({ ...m })),
     // How tall something would have to be, under camera c (default: the fitted one), to meet the
@@ -2127,12 +2357,12 @@ if (new URLSearchParams(location.search).has('debug')) {
       return +((lo + hi) / 2).toFixed(3);
     },
     // on-screen height (share of photo height) of the machine standing with its front edge at row v
-    machineAt: (v, c = cam) => {
-      const pc = photoCam(c.hc, c.pitchDeg, vfovForLens(c.f35)), d = pc.floorDist(v);
-      if (d === null || !modelSize) return null;
-      const s = baseScale * (+sSize.value / 100), t = pc.topRow(d, modelSize.y * s, modelSize.z * s);
-      return t === null ? null : +(v - t).toFixed(4);
-    },
+    machineAt: (v, c = cam) => { const h = machineHeightAt(v, c); return h === null ? null : +h.toFixed(4); },
+    // the 3D pass: its floor-plane camera for this photo, and a way to run it regardless of mode
+    depthFit: () => DEPTH.lastFit && Object.fromEntries(Object.entries(DEPTH.lastFit).map(([k, v]) => [k, +v.toFixed(3)])),
+    hasDepth: () => !!lastDepth,
+    runDepth: () => refineWithDepth(),
+    depthMode: () => depthMode(),
     placeAt: (fx, fy) => { placeAtImageCoord(fx, fy); needsRender = true; return placementOk(machine.position.x, machine.position.z); },
     machinePhoto: () => { const o = machineOutline(machine.position.x, machine.position.z), at = machinePhotoPoint();
       return { centre: [+at.fx.toFixed(3), +at.fy.toFixed(3)], top: +Math.min(...o.hull.map((p) => p[1])).toFixed(3), back: +o.backRow.toFixed(3), ok: placementOk(machine.position.x, machine.position.z) }; },
