@@ -48,22 +48,58 @@
   .ttl{color:#fff;font-size:13px;opacity:.92}
 
   /* ---------- upload screen ---------- */
+  /* safe center + scroll, like #chooser: tips, a preview and notes can outgrow a small phone */
   #upload{position:fixed;inset:0;z-index:15;display:flex;flex-direction:column;align-items:center;
-    justify-content:center;gap:18px;padding:24px;text-align:center;
+    justify-content:safe center;gap:16px;padding:calc(env(safe-area-inset-top,0px) + 64px) 22px 24px;text-align:center;overflow-y:auto;
     background:radial-gradient(900px 600px at 50% 0%, #1a1f36, #0f1220 60%)}
   #upload h1{font-size:22px;margin:0}
   #upload p{color:var(--muted);font-size:14px;max-width:340px;margin:0;line-height:1.5}
-  .pick{display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:16px;color:#fff;
+  .pickRow{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px}
+  .pickRow[hidden]{display:none}
+  .pick{display:flex;align-items:center;justify-content:center;gap:10px;font-weight:800;font-size:16px;color:#fff;
     background:linear-gradient(180deg,var(--brand2),var(--brand));padding:15px 22px;border-radius:16px;
-    box-shadow:0 10px 26px rgba(225,29,42,.4);cursor:pointer;border:0}
-  #file{display:none}
+    box-shadow:0 10px 26px rgba(225,29,42,.4);cursor:pointer;border:0;font-family:inherit}
+  .pick[hidden]{display:none}
+  /* with the camera button shown, choosing from the gallery is the second option */
+  .pick.sec{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);box-shadow:none;font-size:15px;padding:13px 20px}
+  #file,#fileCam{display:none}
   .preview{max-width:min(88vw,420px);max-height:44vh;border-radius:14px;border:1px solid var(--line);display:none}
-  .confirmRow{display:none;gap:10px}
+  .confirmRow{display:none;gap:10px;width:100%;max-width:420px}
+  .confirmRow .btn{flex:1;white-space:nowrap;padding:14px 10px;font-size:14.5px}
+  @media (max-width: 360px){ .confirmRow .btn{font-size:13px;padding:12px 8px} }
+  .tips{display:flex;flex-direction:column;gap:6px;width:100%;max-width:340px;text-align:left;font-size:12.5px;line-height:1.4;
+    color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .tips b{color:var(--ink);font-size:13px}
+  .tips[hidden]{display:none}
+  /* heads-ups about the picked photo -- advice, never a block */
+  .qnotes{display:flex;flex-direction:column;gap:6px;width:100%;max-width:420px}
+  .qnotes:empty{display:none}
+  .qnote{font-size:12.5px;line-height:1.4;text-align:left;color:#ffe2a8;background:rgba(255,190,60,.1);
+    border:1px solid rgba(255,190,60,.35);border-radius:12px;padding:8px 11px}
+  .qnote.good{color:#b8f5cf;background:rgba(46,230,120,.08);border-color:rgba(46,230,120,.35)}
+
+  /* ---------- in-app camera ---------- */
+  #camView{position:fixed;inset:0;z-index:60;background:#000}
+  #camView[hidden]{display:none}
+  /* contain, not cover: what's on screen is exactly what the photo will hold */
+  #camVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+  .camHorizon{position:absolute;left:14%;right:14%;top:50%;height:0;border-top:2px solid rgba(255,255,255,.85);
+    filter:drop-shadow(0 0 1px rgba(0,0,0,.8));pointer-events:none;display:none;transition:border-color .15s}
+  .camHorizon.on{display:block}
+  .camHorizon.level{border-top-color:#2ee67b}
+  .camTop{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:12px;
+    padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 26px;background:linear-gradient(180deg,rgba(0,0,0,.65),transparent)}
+  .camHint{color:#fff;font-size:14px;font-weight:700;line-height:1.3;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+  .camBottom{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:space-between;
+    padding:26px 24px calc(env(safe-area-inset-bottom,0px) + 22px);background:linear-gradient(0deg,rgba(0,0,0,.65),transparent)}
+  .camTilt{width:44px;color:#fff;font-size:12px;font-weight:800;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+  .shutter{appearance:none;width:76px;height:76px;border-radius:50%;border:5px solid #fff;background:rgba(255,255,255,.22);
+    cursor:pointer;box-shadow:0 0 0 2px rgba(0,0,0,.35);transition:transform .1s,background .1s}
+  .shutter:active{transform:scale(.93);background:rgba(255,255,255,.6)}
+  .shutter:disabled{opacity:.4}
   .btn{appearance:none;border:0;cursor:pointer;font-weight:800;font-size:15px;color:#fff;border-radius:14px;
     padding:14px 20px;background:linear-gradient(180deg,var(--brand2),var(--brand));box-shadow:0 8px 22px rgba(225,29,42,.4)}
   .btn.sec{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);box-shadow:none}
-  .steps{color:var(--muted);font-size:12.5px;line-height:1.8;text-align:left}
-  .steps b{color:var(--ink)}
 
   /* ---------- composer ----------
      #stage used to be position:fixed;inset:0 (full viewport) with .dock floating on top of it
@@ -315,21 +351,44 @@
   <section id="upload">
     <h1>See it in your room — from a photo</h1>
     <p id="introP">Take a photo of your space (or pick one), then drop the IFB washing machine into it and save the picture.</p>
-    <label class="pick">📷 Take / choose a photo
-      <input id="file" type="file" accept="image/*" capture="environment" />
-    </label>
+    <div class="pickRow" id="pickRow">
+      <button class="pick" id="takeBtn" type="button" hidden>📷 Take a photo</button>
+      <label class="pick" id="galleryBtn">🖼️ Choose a photo
+        <input id="file" type="file" accept="image/*" />
+      </label>
+      <!-- the phone's own camera app: the fallback when the in-app camera can't open -->
+      <input id="fileCam" type="file" accept="image/*" capture="environment" hidden />
+    </div>
     <p class="reading" id="reading" role="status"><span class="busyEmoji" aria-hidden="true">🖼️</span>Reading your photo…</p>
     <img id="preview" class="preview" alt="Your photo preview" />
+    <div class="qnotes" id="qnotes" role="status" aria-live="polite"></div>
     <div class="confirmRow" id="confirmRow">
-      <button class="btn sec" id="retake">Choose another</button>
-      <button class="btn" id="usephoto">Use this photo →</button>
+      <button class="btn sec" id="retake" type="button">↩ Another photo</button>
+      <button class="btn" id="usephoto" type="button">Use this photo →</button>
     </div>
-    <div class="steps">
-      <div>① <b>Take or choose</b> a photo of your laundry space</div>
-      <div>② <b>Position</b> the machine — drag it, resize, rotate</div>
-      <div>③ <b>Save</b> or share the final picture</div>
+    <div class="tips" id="tips">
+      <b>For a true-to-size result</b>
+      <span>🧍 Stand 2–3 m back, phone at chest height</span>
+      <span>🔍 Normal 1× lens — no zoom, no ultra-wide</span>
+      <span>🚪 Show the floor, and a door, counter or cupboard if you can</span>
+      <span>💡 Good light, phone held straight</span>
     </div>
   </section>
+
+  <!-- ===== IN-APP CAMERA: live view + a level, and the phone's tilt recorded with the photo ===== -->
+  <div id="camView" hidden>
+    <video id="camVideo" playsinline autoplay muted></video>
+    <div class="camHorizon" id="camHorizon" aria-hidden="true"></div>
+    <div class="camTop">
+      <button class="iconBtn" id="camClose" type="button" aria-label="Close the camera">✕</button>
+      <span class="camHint" id="camHint" role="status" aria-live="polite">Show the floor where the machine would go</span>
+    </div>
+    <div class="camBottom">
+      <span class="camTilt" id="camTilt"></span>
+      <button class="shutter" id="shutter" type="button" aria-label="Take the photo"></button>
+      <button class="iconBtn" id="camGallery" type="button" aria-label="Choose from your photos instead">🖼️</button>
+    </div>
+  </div>
 
   <!-- ===== COMPOSER ===== -->
   <section id="stage">
@@ -571,26 +630,151 @@ function hideBusy(step){ if (step && busyStep !== step) return; busyStep = null;
 const nextPaint = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 
 // ---------- upload flow ----------
-const readingEl = document.getElementById('reading');
-fileInput.addEventListener('change', async (e) => {
-  const f = e.target.files && e.target.files[0];
+const readingEl = document.getElementById('reading'), qnotesEl = document.getElementById('qnotes');
+const pickRow = document.getElementById('pickRow'), tipsEl = document.getElementById('tips');
+const takeBtn = document.getElementById('takeBtn'), galleryBtn = document.getElementById('galleryBtn');
+const fileCam = document.getElementById('fileCam');
+let sensorPitch = null;      // how far the phone was tilted down when the in-app camera took this photo (°), else null
+let previewURL = null;
+
+// Every photo, whichever way it came in: decode it, read its lens, look it over, show it to confirm.
+async function takePhotoFile(f, pitch = null){
   if (!f) return;
+  sensorPitch = pitch;
   readingEl.classList.add('on');   // decoding a 12 MP photo and fetching the EXIF reader takes a moment
-  preview.style.display = 'none'; confirmRow.style.display = 'none';
+  preview.style.display = 'none'; confirmRow.style.display = 'none'; qnotesEl.replaceChildren();
+  pickRow.hidden = true; tipsEl.hidden = true;
   try {
-    photoBitmap = await createImageBitmap(f, { imageOrientation: 'from-image' });
+    try { photoBitmap = await createImageBitmap(f, { imageOrientation: 'from-image' }); }
+    catch (err) { photoBitmap = await createImageBitmap(f); }
   } catch (err) {
-    photoBitmap = await createImageBitmap(f);   // fallback
+    // e.g. a HEIC photo on a browser that can't open them
+    readingEl.classList.remove('on'); resetPicker();
+    showNotes([{ text: '😕 Couldn’t open that photo. Try another one — a JPG or PNG works best.' }]);
+    return;
   }
   await readPhotoLens(f);   // best-effort: the photo's real lens, if its EXIF still says
   readingEl.classList.remove('on');
-  preview.src = URL.createObjectURL(f);
+  const notes = photoNotes(photoBitmap);
+  if (sensorPitch !== null) notes.push({ good: true, text: '📐 Your phone’s tilt (' + Math.round(sensorPitch) + '° down) was recorded with the photo — it helps get the size right.' });
+  showNotes(notes);
+  if (previewURL) URL.revokeObjectURL(previewURL);
+  preview.src = previewURL = URL.createObjectURL(f);
   preview.style.display = 'block';
   confirmRow.style.display = 'flex';
-});
-document.getElementById('retake').addEventListener('click', () => fileInput.click());
-document.getElementById('change').addEventListener('click', () => { showUpload(); });
+}
+function showNotes(notes){
+  qnotesEl.replaceChildren(...notes.map((n) => Object.assign(document.createElement('div'), { className: 'qnote' + (n.good ? ' good' : ''), textContent: n.text })));
+}
+// Heads-ups about a photo that make the AI's job harder. Advice only -- it's the customer's photo.
+// Thresholds from the 16 test photos: sharp ones scored 778-5853 on the sharpness measure below and
+// even a slight blur dropped them to 8-47; their average brightness ran 0.33-0.57.
+function photoNotes(bm){
+  const notes = [], long = Math.max(bm.width, bm.height);
+  if (long < 700) notes.push({ text: '🔎 This photo is quite small (' + bm.width + ' × ' + bm.height + ') — the full-size photo from your camera lets the AI see more.' });
+  const s = 256 / long, w = Math.max(3, Math.round(bm.width * s)), h = Math.max(3, Math.round(bm.height * s));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(bm, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data, g = new Float32Array(w * h);
+  let bright = 0, lit = 0;
+  for (let i = 0; i < w * h; i++) { g[i] = (0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]) / 255; bright += g[i]; if (g[i] > 0.45) lit++; }
+  // dark all over -- not just a dark sofa in a lit room
+  if (bright / (w * h) < 0.18 && lit < 0.1 * w * h) notes.push({ text: '💡 It’s quite dark — the AI finds the floor and furniture much better in good light.' });
+  // sharpness: how much fine detail there is (variance of the Laplacian, in 0-255 units)
+  let m = 0, m2 = 0, n = 0;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x, L = 255 * (4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w]);
+    m += L; m2 += L * L; n++;
+  }
+  if (n && m2 / n - (m / n) ** 2 < 100) notes.push({ text: '🤳 It looks blurry — hold the phone still (or tap to focus) and try again.' });
+  return notes;
+}
+// Back to "take or choose", clearing the inputs so picking the same file again still counts
+function resetPicker(){
+  preview.style.display = 'none'; confirmRow.style.display = 'none'; qnotesEl.replaceChildren();
+  readingEl.classList.remove('on');
+  pickRow.hidden = false; tipsEl.hidden = false;
+  fileInput.value = ''; fileCam.value = '';
+}
+fileInput.addEventListener('change', (e) => takePhotoFile(e.target.files && e.target.files[0]));
+fileCam.addEventListener('change', (e) => takePhotoFile(e.target.files && e.target.files[0]));
+document.getElementById('retake').addEventListener('click', resetPicker);
+document.getElementById('change').addEventListener('click', () => { resetPicker(); showUpload(); });
 document.getElementById('usephoto').addEventListener('click', () => startComposer());
+
+// ---------- in-app camera: live view, a level, and the phone's tilt saved with the photo ----------
+// The one thing a photo can't say about itself -- how far the phone was tilted -- the phone's motion
+// sensor knows exactly, and it's what the sizing most often has to guess. Phones only: a computer's
+// webcam faces the wrong way for this. Anywhere it can't open (no permission, an in-app browser),
+// the phone's own camera app takes over through a plain file input.
+const camView = document.getElementById('camView'), camVideo = document.getElementById('camVideo');
+const camHint = document.getElementById('camHint'), camTilt = document.getElementById('camTilt');
+const camHorizon = document.getElementById('camHorizon'), shutter = document.getElementById('shutter');
+const tilt = { pitch: null, roll: null, hist: [] };
+let camStream = null;
+if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && matchMedia('(pointer: coarse)').matches) {
+  takeBtn.hidden = false; galleryBtn.classList.add('sec');
+}
+// Device orientation -> how far the back camera points below the horizon, and how far the picture
+// is rolled. The phone's "up" in its own frame is (-cosβ·sinγ, sinβ, cosβ·cosγ); the back camera looks
+// along -z, so its down-tilt is asin(cosβ·cosγ) -- the same in portrait and landscape.
+function onOrient(e){
+  if (e.beta == null || e.gamma == null) return;
+  const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
+  const ux = -Math.cos(b) * Math.sin(g), uy = Math.sin(b), uz = Math.cos(b) * Math.cos(g);
+  const scr = (screen.orientation && screen.orientation.angle) || +window.orientation || 0;
+  tilt.pitch = Math.asin(Math.max(-1, Math.min(1, uz))) * 180 / Math.PI;
+  tilt.roll = ((Math.atan2(ux, uy) * 180 / Math.PI - scr) % 360 + 540) % 360 - 180;   // vs the screen's own up
+  tilt.hist.push(tilt.pitch); if (tilt.hist.length > 12) tilt.hist.shift();         // ~0.2 s, for a steady reading
+  const level = Math.abs(tilt.roll) < 2;
+  camHorizon.classList.add('on'); camHorizon.classList.toggle('level', level);
+  camHorizon.style.transform = 'rotate(' + tilt.roll.toFixed(1) + 'deg)';           // stays level with the room
+  camTilt.textContent = Math.round(tilt.pitch) + '°';
+  camHint.textContent = tilt.pitch < -3 ? 'Tilt the phone down a little — show the floor'
+    : tilt.pitch > 45 ? 'Tilt up a little — show some wall too, not just floor'
+    : Math.abs(tilt.roll) > 3 ? 'Hold the phone straight — line up the level'
+    : '✓ Good angle — take the photo';
+}
+async function openCamera(){
+  // iPhones ask before sharing motion data, and only from a tap -- this is that tap
+  try { if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') await DeviceOrientationEvent.requestPermission(); } catch (e) {}
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
+      facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1920 }, aspectRatio: { ideal: 4 / 3 } } });
+  } catch (e) {
+    camStream = null;
+    showNotes([{ text: '📷 The camera didn’t open here — take the photo with your camera app, then choose it.' }]);
+    fileCam.click();
+    return;
+  }
+  Object.assign(tilt, { pitch: null, roll: null, hist: [] });
+  camHint.textContent = 'Show the floor where the machine would go';
+  camTilt.textContent = ''; camHorizon.classList.remove('on');
+  camVideo.srcObject = camStream;
+  camView.hidden = false;
+  window.addEventListener('deviceorientation', onOrient);
+  camVideo.play().catch(() => {});
+}
+function closeCamera(){
+  window.removeEventListener('deviceorientation', onOrient);
+  if (camStream) camStream.getTracks().forEach((t) => t.stop());
+  camStream = null; camVideo.srcObject = null; camView.hidden = true;
+}
+takeBtn.addEventListener('click', () => { qnotesEl.replaceChildren(); openCamera(); });
+document.getElementById('camClose').addEventListener('click', closeCamera);
+document.getElementById('camGallery').addEventListener('click', () => { closeCamera(); fileInput.click(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && camStream) closeCamera(); });
+shutter.addEventListener('click', async () => {
+  const w = camVideo.videoWidth, h = camVideo.videoHeight;
+  if (!w || !h) return;
+  shutter.disabled = true;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d').drawImage(camVideo, 0, 0, w, h);
+  const pitch = tilt.hist.length ? tilt.hist.reduce((a, b) => a + b, 0) / tilt.hist.length : null;
+  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
+  closeCamera(); shutter.disabled = false;
+  if (blob) takePhotoFile(new File([blob], 'my-room.jpg', { type: 'image/jpeg' }), pitch);
+});
 
 function showUpload(){
   stageEl.style.display = 'none';
@@ -858,8 +1042,9 @@ function startComposer(){
   lastSeg = null; manualRefs = []; freePlaced = false; hideToast();   // a new photo: nothing measured on it yet
   photoToken++; lastDepth = null; DEPTH.pendingApply = false; depthOfferEl.hidden = true; showDepthStatus();
   calBtn.classList.remove('glow'); calBtn.textContent = '📏 Calibrate size';
-  cam = { ...CAM_DEFAULT, f35: exifF35 || CAM_DEFAULT.f35 };   // the last photo's fit doesn't apply to this one
-  sAng.value = cam.pitchDeg; vAng.textContent = cam.pitchDeg + '°';
+  // the last photo's fit doesn't apply to this one (the phone's measured tilt does, if there is one)
+  cam = { ...CAM_DEFAULT, f35: exifF35 || CAM_DEFAULT.f35, pitchDeg: sensorPitch ?? CAM_DEFAULT.pitchDeg };
+  sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
   floorLocking = true;
   if (!started) initThree();          // normally already done by showUpload()
   if (machine) runAIPlace();          // model's in -- detect this photo's floor right away
@@ -1629,11 +1814,13 @@ function tiltFromVerticals(phi){
   return { r0: Math.tan(best.thd * Math.PI / 180) * Math.tan(phi / 2), sig: peak > 2 ? 3 : 5 };
 }
 
-function cameraFitLoss(samples, hc, thDeg, f35, vp, lens){
+function cameraFitLoss(samples, hc, thDeg, f35, vp, lens, sensor = null){
   const phi = vfovForLens(f35), pc = photoCam(hc, thDeg, phi);
   const a = Math.log(hc / CAM_DEFAULT.hc) / 0.25, b = (thDeg - 15) / 25, c = Math.log(f35 / lens.f) / lens.sig;
   let L = 0.5 * (a * a + b * b + c * c);
   if (vp) { const r = (thDeg - Math.atan(vp.r0 / Math.tan(phi / 2)) * 180 / Math.PI) / vp.sig; L += Math.log(1 + r * r); }
+  // the phone's own motion sensor, when the in-app camera took the photo: good to a degree or two
+  if (sensor !== null) { const r = (thDeg - sensor) / 1.5; L += 0.5 * r * r; }
   for (const q of samples) {
     const d = pc.floorDist(q.base);
     const v = d === null ? null : pc.topRow(d, q.ref.H, q.ref.D);
@@ -1668,7 +1855,7 @@ function calibrateCamera(out, manual = [], depth = null){
   const vp = tiltFromVerticals(vfovForLens(lens.f));
   const lenses = exifF35 ? [exifF35] : [13, 16, 20, 24, 26, 28, 32, 36, 42, 48, 55, 65, 77];   // ultra-wide … 3x zoom
   let best = null;
-  const tryAt = (hc, th, f) => { const L = cameraFitLoss(samples, hc, th, f, vp, lens); if (!best || L < best.L) best = { L, hc, th, f }; };
+  const tryAt = (hc, th, f) => { const L = cameraFitLoss(samples, hc, th, f, vp, lens, sensorPitch); if (!best || L < best.L) best = { L, hc, th, f }; };
   for (const f of lenses) for (let hc = 0.5; hc <= 2.5; hc += 0.1) for (let th = -10; th <= 60; th += 2) tryAt(hc, th, f);
   const b0 = best;
   for (let f = b0.f * 0.85; f <= b0.f * 1.151; f += b0.f * 0.05)
