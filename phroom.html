@@ -16,77 +16,117 @@
 </script>
 
 <style>
-  :root{--brand:#e11d2a;--brand2:#ff4d57;--ink:#eef1f8;--muted:#aab0c8;--panel:#171a2b;--line:#2b3050}
+  /* Look and feel after the IFB AR/VR viewer: near-black, the product and the photo filling the
+     screen, big clear buttons in one bar at the bottom -- green for the main action, yellow for
+     the rest -- and small pill badges over the picture. IFB red stays in the logo. */
+  :root{--bg:#0b0b0b;--panel:rgba(14,14,14,.97);--card:#161616;--line:rgba(255,255,255,.1);
+    --ink:#fff;--muted:rgba(255,255,255,.62);--go:#00ff99;--accent:#ffcc00;--warn:#ff6b5e}
   *{box-sizing:border-box}
-  /* height:100% here means "100% of the layout viewport", which on a phone is not the same
-     as the actually-visible area once the browser's address bar is on screen -- so #stage
-     and .dock (below) could compute their combined height against a viewport taller than
-     what's really visible, pushing .dock off the bottom with no way to scroll to it (see
-     overflow:hidden). 100dvh (the *dynamic* viewport height, updates live as the address bar
-     shows/hides) is what actually matches the visible area; kept behind the 100% so a browser
-     old enough not to understand dvh just ignores that line and keeps the previous behaviour. */
-  html,body{margin:0;height:100%;height:100dvh;overflow:hidden;background:#0f1220;color:var(--ink);
+  [hidden]{display:none!important}
+  /* 100dvh is the part of a phone's screen actually visible under the address bar -- 100% alone
+     includes the area behind it, which pushed the bottom bar off screen. The 100% stays for
+     browsers that predate dvh. */
+  html,body{margin:0;height:100%;height:100dvh;overflow:hidden;background:var(--bg);color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
-  /* #stage and .dock are the only in-flow (non position:fixed) direct children of body -- every
-     other screen (.top, #chooser, #menu, #upload, .hint, .credit) is its own fixed overlay and
-     is untouched by this: fixed/absolute elements sit outside normal flow, so a flex container
-     has no effect on them. This column is what keeps the dock from sitting on top of the photo:
-     #stage takes whatever height is left over, .dock takes its own natural height below it. */
+  /* #stage and the composer's bar are the only in-flow children: the photo gets whatever the bar
+     leaves, so the controls never sit on top of it. Every other screen is its own fixed layer. */
   body{display:flex;flex-direction:column}
+  button,input{font-family:inherit}
 
-  /* ---------- top bar ---------- */
+  /* ---------- buttons ---------- */
+  .btn{appearance:none;flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;
+    padding:12px 10px;border:0;border-radius:12px;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer;
+    color:#000;background:var(--accent);transition:transform .1s,opacity .15s}
+  .btn:active{transform:scale(.97)}
+  .btn.go{background:var(--go)}
+  .btn.dark{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.18)}
+  .btn:disabled{opacity:.4;cursor:default;transform:none}
+  .btn .ic{font-size:17px;line-height:1}
+  .btn.small{flex:none;min-height:38px;padding:8px 14px;font-size:13.5px;border-radius:10px}
+  /* Measure pulses when nothing in the photo could size the machine */
+  .btn.glow{animation:glow 1.6s ease-in-out infinite}
+  @keyframes glow{50%{box-shadow:0 0 0 5px rgba(255,204,0,.3)}}
+  .round{appearance:none;flex:none;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    padding:0;color:#fff;cursor:pointer;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.22);
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);transition:background .15s,color .15s,border-color .15s}
+  .round svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .round[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#000}
+  .linkBtn{appearance:none;background:none;border:0;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;padding:4px;align-self:center}
+  /* one bar of actions along the bottom of the photo screen and of the composer */
+  .bar{flex:none;display:flex;gap:10px;padding:12px 12px calc(env(safe-area-inset-bottom,0px) + 12px);
+    background:var(--panel);border-top:1px solid var(--line)}
+  /* on a wide screen the buttons stay button-sized, centred, rather than stretching edge to edge */
+  @media (min-width:700px){ .bar{padding-left:calc(50% - 300px);padding-right:calc(50% - 300px)} }
+  @media (max-width:350px){ .btn{font-size:13.5px;gap:6px} .bar{gap:8px;padding-left:10px;padding-right:10px} }
+
+  /* ---------- top bar (photo screen and composer) ---------- */
   .top{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:10px;
-    padding:calc(env(safe-area-inset-top,0px) + 10px) 14px 12px;
-    background:linear-gradient(180deg,rgba(0,0,0,.55),rgba(0,0,0,0))}
-  .back{color:#fff;text-decoration:none;font-weight:800;font-size:17px;background:rgba(0,0,0,.4);
-    border:1px solid rgba(255,255,255,.28);border-radius:10px;width:34px;height:34px;
-    display:flex;align-items:center;justify-content:center}
-  /* The logo PNG already carries the red ground and white wordmark, so the chip that used to
-     fake it drops its own background and padding — otherwise it's red on red. */
+    padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 12px;background:linear-gradient(180deg,rgba(0,0,0,.72),rgba(0,0,0,0))}
   .brand{display:block;width:30px;height:30px;border-radius:7px;flex:none}
-  .ttl{color:#fff;font-size:13px;opacity:.92}
+  .machineChip{appearance:none;display:flex;align-items:center;gap:7px;min-width:0;padding:8px 13px;border-radius:999px;cursor:pointer;
+    color:#fff;font-size:13px;font-weight:700;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.22);
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  .machineChip .mc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .machineChip .chev{flex:none;opacity:.7;font-size:10px}
+  .grow{flex:1}
+  .top[inert]{opacity:.35}
 
-  /* ---------- upload screen ---------- */
-  /* safe center + scroll, like #chooser: tips, a preview and notes can outgrow a small phone */
-  #upload{position:fixed;inset:0;z-index:15;display:flex;flex-direction:column;align-items:center;
-    justify-content:safe center;gap:16px;padding:calc(env(safe-area-inset-top,0px) + 64px) 22px 24px;text-align:center;overflow-y:auto;
-    background:radial-gradient(900px 600px at 50% 0%, #1a1f36, #0f1220 60%)}
-  #upload h1{font-size:22px;margin:0}
-  #upload p{color:var(--muted);font-size:14px;max-width:340px;margin:0;line-height:1.5}
-  .pickRow{display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px}
-  .pickRow[hidden]{display:none}
-  .pick{display:flex;align-items:center;justify-content:center;gap:10px;font-weight:800;font-size:16px;color:#fff;
-    background:linear-gradient(180deg,var(--brand2),var(--brand));padding:15px 22px;border-radius:16px;
-    box-shadow:0 10px 26px rgba(225,29,42,.4);cursor:pointer;border:0;font-family:inherit}
-  .pick[hidden]{display:none}
-  /* with the camera button shown, choosing from the gallery is the second option */
-  .pick.sec{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);box-shadow:none;font-size:15px;padding:13px 20px}
-  #file,#fileCam{display:none}
-  .preview{max-width:min(88vw,420px);max-height:44vh;border-radius:14px;border:1px solid var(--line);display:none}
-  .confirmRow{display:none;gap:10px;width:100%;max-width:420px}
-  .confirmRow .btn{flex:1;white-space:nowrap;padding:14px 10px;font-size:14.5px}
-  @media (max-width: 360px){ .confirmRow .btn{font-size:13px;padding:12px 8px} }
-  .tips{display:flex;flex-direction:column;gap:6px;width:100%;max-width:340px;text-align:left;font-size:12.5px;line-height:1.4;
-    color:var(--muted);background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
-  .tips b{color:var(--ink);font-size:13px}
-  .tips[hidden]{display:none}
-  /* heads-ups about the picked photo -- advice, never a block */
-  .qnotes{display:flex;flex-direction:column;gap:6px;width:100%;max-width:420px}
+  /* ---------- 1. choose the machine ---------- */
+  #chooser{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:22px;
+    padding:calc(env(safe-area-inset-top,0px) + 28px) 18px calc(env(safe-area-inset-bottom,0px) + 28px);overflow-y:auto;background:var(--bg)}
+  .ch-brand{display:block;width:46px;height:46px;border-radius:11px}
+  #chooser h1{margin:0;font-size:23px;font-weight:800;letter-spacing:-.01em}
+  .choices{display:flex;flex-direction:column;gap:12px;width:100%;max-width:380px}
+  .choice{appearance:none;display:flex;align-items:center;gap:16px;width:100%;padding:12px 16px 12px 12px;border-radius:16px;
+    text-align:left;color:#fff;cursor:pointer;background:var(--card);border:1px solid var(--line);transition:border-color .15s}
+  .choice:hover,.choice:focus-visible{border-color:var(--accent);outline:none}
+  .choice .thumb{flex:none;width:80px;height:92px;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:5px;
+    background:radial-gradient(circle at 50% 40%,#6a6a6a,#2a2a2a 78%)}
+  .choice .thumb img{width:100%;height:100%;object-fit:contain}
+  .choice .txt{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+  .choice .cn{font-weight:800;font-size:17px}
+  .choice .cd{color:var(--muted);font-size:13px}
+  .choice .end{flex:none;color:rgba(255,255,255,.4);font-size:24px;line-height:1}
+  .choice[aria-checked="true"]{border-color:var(--go)}
+  #menuList .choice .end{visibility:hidden;color:var(--go);font-size:18px}
+  #menuList .choice[aria-checked="true"] .end{visibility:visible}
+  #menuList .choice .thumb{width:56px;height:64px}
+
+  /* ---------- 2. the photo ---------- */
+  #upload{position:fixed;inset:0;z-index:15;display:none;flex-direction:column;background:var(--bg)}
+  .upMain{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:16px;
+    padding:calc(env(safe-area-inset-top,0px) + 66px) 22px 16px;text-align:center;overflow-y:auto}
+  .intro{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .upArt{width:150px;height:120px;flex:none}
+  #upload h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.01em}
+  #upload .lead{margin:0;max-width:300px;color:var(--muted);font-size:14.5px;line-height:1.5}
+  .tips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:360px;margin-top:6px}
+  .tip{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;font-size:12.5px;font-weight:600;
+    color:rgba(255,255,255,.88);background:var(--card);border:1px solid var(--line)}
+  /* once a photo is picked it fills the screen, above Retake / Use photo */
+  #upload.picked .intro{display:none}
+  #upload.picked .upMain{justify-content:flex-start;padding:calc(env(safe-area-inset-top,0px) + 64px) 10px 12px}
+  .preview{display:none;flex:1;min-height:0;max-width:100%;object-fit:contain;border-radius:12px}
+  #upload.picked .preview{display:block}
+  .reading{display:none;align-items:center;gap:10px;color:var(--muted);font-size:14px;margin:0}
+  .reading.on{display:flex}
+  .qnotes{display:flex;flex-direction:column;gap:6px;width:100%;max-width:440px;flex:none}
   .qnotes:empty{display:none}
-  .qnote{font-size:12.5px;line-height:1.4;text-align:left;color:#ffe2a8;background:rgba(255,190,60,.1);
-    border:1px solid rgba(255,190,60,.35);border-radius:12px;padding:8px 11px}
-  .qnote.good{color:#b8f5cf;background:rgba(46,230,120,.08);border-color:rgba(46,230,120,.35)}
+  .qnote{font-size:12.5px;line-height:1.4;text-align:left;color:#ffe7a3;background:rgba(255,204,0,.1);
+    border:1px solid rgba(255,204,0,.35);border-radius:12px;padding:8px 11px}
+  .qnote.good{color:#b3ffd9;background:rgba(0,255,153,.08);border-color:rgba(0,255,153,.35)}
+  #file,#fileCam{display:none}
+  .confirmRow{display:none}
 
   /* ---------- in-app camera ---------- */
   #camView{position:fixed;inset:0;z-index:60;background:#000}
-  #camView[hidden]{display:none}
   /* contain, not cover: what's on screen is exactly what the photo will hold */
   #camVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
   .camHorizon{position:absolute;left:14%;right:14%;top:50%;height:0;border-top:2px solid rgba(255,255,255,.85);
     filter:drop-shadow(0 0 1px rgba(0,0,0,.8));pointer-events:none;display:none;transition:border-color .15s}
   .camHorizon.on{display:block}
-  .camHorizon.level{border-top-color:#2ee67b}
+  .camHorizon.level{border-top-color:var(--go)}
   .camTop{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:12px;
     padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 26px;background:linear-gradient(180deg,rgba(0,0,0,.65),transparent)}
   .camHint{color:#fff;font-size:14px;font-weight:700;line-height:1.3;text-shadow:0 1px 3px rgba(0,0,0,.7)}
@@ -97,143 +137,104 @@
     cursor:pointer;box-shadow:0 0 0 2px rgba(0,0,0,.35);transition:transform .1s,background .1s}
   .shutter:active{transform:scale(.93);background:rgba(255,255,255,.6)}
   .shutter:disabled{opacity:.4}
-  .btn{appearance:none;border:0;cursor:pointer;font-weight:800;font-size:15px;color:#fff;border-radius:14px;
-    padding:14px 20px;background:linear-gradient(180deg,var(--brand2),var(--brand));box-shadow:0 8px 22px rgba(225,29,42,.4)}
-  .btn.sec{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);box-shadow:none}
 
-  /* ---------- composer ----------
-     #stage used to be position:fixed;inset:0 (full viewport) with .dock floating on top of it
-     as a bottom overlay -- so the AI/Change photo/Save controls sat directly over the photo.
-     #stage is now a normal flex item that only gets the space .dock doesn't take, so the photo
-     frame and the controls below it never overlap. */
-  #stage{position:relative;flex:1;min-height:0;z-index:5;display:none}
+  /* ---------- 3. the composer ---------- */
+  #stage{position:relative;flex:1;min-height:0;z-index:5;display:none;background:#000}
   #bg,#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
   #gl{touch-action:none}
-  .hint{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 52px);transform:translateX(-50%);
-    z-index:16;color:#fff;font-size:12px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);
-    border-radius:999px;padding:6px 12px;display:none;white-space:nowrap}
-
-  .dimchip{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 52px);transform:translateX(-50%);
-    z-index:15;color:#fff;font-size:12px;font-weight:700;background:rgba(0,0,0,.5);
-    border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:6px 13px;display:none;white-space:nowrap}
-
-  /* Last-resort safety net: if the viewport-height fixes above ever fall short on some real
-     device, this makes the difference between "the Save button is unreachable" and "the
-     customer can scroll the dock a little to reach it" -- not a substitute for those fixes,
-     just insurance against the failure mode actually reported (a cropped, unreachable dock). */
-  .dock{flex:none;display:none;flex-direction:column;gap:12px;
-    max-height:70vh;overflow-y:auto;
-    padding:14px 16px calc(env(safe-area-inset-bottom,0px) + 14px);
-    background:var(--panel);border-top:1px solid var(--line)}
-  .sliders{display:flex;flex-direction:column;gap:9px}
-  .slider{display:flex;align-items:center;gap:12px;color:#fff;font-size:12px}
-  .slider label{width:52px;opacity:.85;flex:none}
-  .slider .val{width:52px;text-align:right;opacity:.7;flex:none;font-variant-numeric:tabular-nums}
-  input[type=range]{flex:1;accent-color:var(--brand2);height:26px}
-  .actions{display:flex;gap:10px}
-  .actions .btn{flex:1}
-  .credit{position:fixed;left:0;right:0;bottom:0;text-align:center;color:rgba(255,255,255,.35);
-    font-size:9px;z-index:5;padding-bottom:2px}
-
-  /* ---------- model chooser (first screen) + switcher menu — same pattern as fit.html ---------- */
-  #upload{display:none}   /* the chooser is the true landing screen now; startWith() reveals this */
-  /* safe center + scroll: on a short screen (small phone, or landscape) plain centring would
-     clip the logo off the top with no way to reach it. */
-  #chooser{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;
-    justify-content:safe center;gap:18px;padding:26px 22px;text-align:center;overflow-y:auto;
-    background:radial-gradient(900px 620px at 50% 0%,#241417,#0d0b0c 62%)}
-  #chooser .ch-brand{display:block;width:46px;height:46px;border-radius:11px;flex:none}
-  #chooser h1{color:#fff;font-size:22px;margin:0;font-weight:800;letter-spacing:-.01em}
-  #chooser .sub{color:rgba(255,255,255,.62);font-size:13.5px;margin:0;max-width:330px;line-height:1.5}
-  .choices{display:flex;flex-direction:column;gap:10px;width:100%;max-width:340px}
-  .choice{appearance:none;cursor:pointer;text-align:left;display:flex;align-items:center;gap:14px;
-    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:16px;
-    padding:15px 17px;color:#fff;transition:border-color .15s,background .15s}
-  .choice:hover,.choice:focus-visible{background:rgba(255,255,255,.12);border-color:#e11d2a;outline:none}
-  .choice .thumb{flex:none;width:66px;height:88px;border-radius:10px;background:rgba(255,255,255,.05);
-    border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;
-    padding:6px;overflow:hidden}
-  .choice .thumb img{width:100%;height:100%;object-fit:contain}
-  .choice .txt{display:flex;flex-direction:column;gap:3px;min-width:0}
-  .choice .cn{display:block;font-weight:800;font-size:15.5px;line-height:1.2}
-  .choice .cd{display:block;color:rgba(255,255,255,.55);font-size:12px;line-height:1.35}
-
-  .ham{margin-left:auto;color:#fff;background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.28);
-    border-radius:10px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;
-    pointer-events:auto;cursor:pointer;padding:0;flex:none}
-  .ham span{display:block;width:15px;height:1.8px;background:#fff;border-radius:2px;box-shadow:0 5px 0 #fff,0 -5px 0 #fff}
-
-  #menu{position:fixed;inset:0;z-index:30;display:none;background:rgba(0,0,0,.55);
-    -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
-  #menu.open{display:block}
-  #menu .sheet{position:absolute;left:0;right:0;top:0;background:#141011;border-bottom:1px solid rgba(255,255,255,.12);
-    padding:calc(env(safe-area-inset-top,0px) + 58px) 16px 18px;display:flex;flex-direction:column;gap:9px}
-  #menu .choice[aria-checked="true"]{border-color:#e11d2a;background:rgba(225,29,42,.14)}
-  #menu .choice[aria-checked="true"] .cn::after{content:" ✓";color:#ff6069}
-
-  /* ---------- collapsible sections inside the switcher (Model Select / Style It) ---------- */
-  .accHead{appearance:none;width:100%;display:flex;align-items:center;justify-content:space-between;
-    gap:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.14);border-radius:12px;
-    padding:13px 15px;color:#fff;font-weight:800;font-size:14.5px;cursor:pointer;text-align:left}
-  .accHead:hover,.accHead:focus-visible{border-color:#e11d2a;outline:none}
-  .accChevron{flex:none;opacity:.65;font-size:13px;transition:transform .18s}
-  .accHead[aria-expanded="true"] .accChevron{transform:rotate(180deg)}
-  .accBody{padding:11px 2px 2px}
-  .accBody[hidden]{display:none}
+  #dock{display:none}
+  #dock[inert]{opacity:.35}
+  /* How the machine's size was worked out: the one status on the photo, and -- when it's only an
+     estimate -- the way to make it exact. */
+  .sizePill{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 62px);transform:translateX(-50%);z-index:8;
+    appearance:none;display:flex;align-items:center;gap:8px;max-width:calc(100% - 24px);padding:8px 14px;border-radius:999px;
+    color:#fff;font-size:12.5px;font-weight:700;white-space:nowrap;cursor:default;
+    background:rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.2);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  .sizePill .t{overflow:hidden;text-overflow:ellipsis}
+  .sizePill .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--go);box-shadow:0 0 8px var(--go)}
+  .sizePill.est .dot{background:var(--accent);box-shadow:0 0 8px var(--accent)}
+  .sizePill.warn .dot{background:var(--warn);box-shadow:none}
+  .sizePill .spin{display:none}
+  .sizePill.work .dot{display:none}
+  .sizePill.work .spin{display:block}
+  .sizePill.tap{cursor:pointer;border-color:rgba(255,204,0,.55)}
+  .sizePill .more{flex:none;color:var(--accent)}
+  .spin{flex:none;width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:7;display:none;max-width:calc(100% - 24px);
+    color:#fff;font-size:12.5px;font-weight:600;background:rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.2);
+    border-radius:999px;padding:8px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  .srOnly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
   /* ---------- "working on it" overlay ----------
-     Shown over the photo while the machine model and the room AI download and while the AI reads
-     the room -- several seconds on a first visit -- so it never looks frozen. Every animation is a
-     transform (or opacity): the AI itself runs in a worker now, but the camera fit still holds the
-     main thread for a moment, and only compositor-driven animations keep moving through that; a
-     background-position or width animation would freeze. */
+     Over the photo while the machine and the room AI download and while the AI reads the room --
+     several seconds on a first visit -- so it never looks frozen. Every animation is a transform
+     (or opacity): the AI runs in a worker, but the camera fit still holds the main thread for a
+     moment, and only compositor-driven animations keep moving through that. */
   #busy{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;
-    background:rgba(10,12,24,.28);opacity:0;visibility:hidden;transition:opacity .35s,visibility 0s .35s}
+    background:rgba(0,0,0,.3);opacity:0;visibility:hidden;transition:opacity .35s,visibility 0s .35s}
   #busy.on{opacity:1;visibility:visible;transition:opacity .35s}
-  .busyGlow{position:absolute;inset:-60%;opacity:.9;
-    background:radial-gradient(circle at 30% 30%,rgba(225,29,42,.5),transparent 38%),
-               radial-gradient(circle at 72% 58%,rgba(124,77,255,.45),transparent 42%),
-               radial-gradient(circle at 38% 78%,rgba(0,194,255,.4),transparent 40%),
-               radial-gradient(circle at 70% 22%,rgba(46,230,120,.3),transparent 36%);
+  .busyGlow{position:absolute;inset:-60%;opacity:.8;
+    background:radial-gradient(circle at 30% 30%,rgba(255,204,0,.38),transparent 38%),
+               radial-gradient(circle at 72% 58%,rgba(0,255,153,.3),transparent 42%),
+               radial-gradient(circle at 38% 78%,rgba(0,194,255,.3),transparent 40%),
+               radial-gradient(circle at 70% 22%,rgba(225,29,42,.3),transparent 36%);
     animation:busySpin 7s linear infinite}
   @keyframes busySpin{from{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.15)}to{transform:rotate(360deg) scale(1)}}
   .busyScan{position:absolute;left:0;right:0;top:0;height:28%;
-    background:linear-gradient(180deg,transparent,rgba(255,255,255,.14) 42%,rgba(255,255,255,.32) 50%,rgba(255,255,255,.14) 58%,transparent);
+    background:linear-gradient(180deg,transparent,rgba(255,255,255,.12) 42%,rgba(255,255,255,.28) 50%,rgba(255,255,255,.12) 58%,transparent);
     animation:busySweep 2.4s ease-in-out infinite}
   @keyframes busySweep{from{transform:translateY(-100%)}to{transform:translateY(360%)}}
   .busyCard{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;
     align-items:center;gap:9px;min-width:230px;max-width:86%;padding:16px 20px;border-radius:18px;text-align:center;
-    background:rgba(15,18,32,.78);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
-    border:1px solid rgba(255,255,255,.18);box-shadow:0 12px 34px rgba(0,0,0,.45);color:#fff}
+    background:rgba(12,12,12,.82);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.16);box-shadow:0 12px 34px rgba(0,0,0,.5);color:#fff}
   .busyEmoji{display:inline-block;font-size:36px;line-height:1;animation:busyBob 1.1s ease-in-out infinite}
   @keyframes busyBob{0%,100%{transform:translateY(0) rotate(-7deg) scale(1)}50%{transform:translateY(-7px) rotate(7deg) scale(1.14)}}
   .busyText{font-weight:800;font-size:14.5px;line-height:1.35}
-  .busySub{font-size:11.5px;color:rgba(255,255,255,.62);line-height:1.35}
+  .busySub{font-size:11.5px;color:var(--muted);line-height:1.35}
   .busyBar{width:190px;max-width:100%;height:5px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
-  .busyFill{height:100%;width:38%;border-radius:99px;background:linear-gradient(90deg,#ff4d57,#7c4dff,#00c2ff);
+  .busyFill{height:100%;width:38%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--go));
     animation:busyIndet 1.3s ease-in-out infinite}
   @keyframes busyIndet{from{transform:translateX(-110%)}to{transform:translateX(300%)}}
   .busyBar.det .busyFill{animation:none;transform:none;transition:width .25s}
   /* the AI's view of the room, flashed over the photo once it's done (see revealScan()) */
   #scan{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity .5s}
   #scan.show{opacity:1}
-  /* upload screen: while the picked photo is being read */
-  .reading{display:none;align-items:center;gap:8px;color:var(--muted);font-size:13.5px;margin:0}
-  .reading.on{display:flex}
-  .reading .busyEmoji{font-size:20px}
+  .reading .busyEmoji{font-size:22px}
   @media (prefers-reduced-motion: reduce){
-    .busyGlow,.busyEmoji,.busyFill{animation:none}
+    .busyGlow,.busyEmoji,.busyFill,.btn.glow{animation:none}
     .busyScan{display:none}
+    .spin{animation-duration:2.4s}
   }
 
-  /* ---------- dock: calibrate + re-detect side by side ---------- */
-  .dockTop{display:flex;gap:10px;width:100%;max-width:420px}
-  .dockTop .btn{flex:1;padding:12px 8px;font-size:14px;white-space:nowrap}
-  /* pulses when the AI found nothing in the photo to size the machine from */
-  .btn.glow{box-shadow:0 0 0 2px rgba(255,77,87,.75),0 0 18px rgba(255,77,87,.5);animation:glowPulse 1.6s ease-in-out infinite}
-  @keyframes glowPulse{50%{box-shadow:0 0 0 2px rgba(255,77,87,.3),0 0 6px rgba(255,77,87,.15)}}
+  /* ---------- bottom sheets: machine, adjust, exact size ---------- */
+  .sheetWrap{position:fixed;inset:0;z-index:30;display:none;background:rgba(0,0,0,.55)}
+  .sheetWrap.open{display:block}
+  .sheet{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:14px;max-height:86vh;overflow-y:auto;
+    padding:10px 16px calc(env(safe-area-inset-bottom,0px) + 18px);background:#141414;border-top:1px solid var(--line);
+    border-radius:20px 20px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.5)}
+  .sheet::before{content:"";flex:none;align-self:center;width:40px;height:4px;border-radius:4px;background:rgba(255,255,255,.22)}
+  /* Adjust keeps the photo clear and live: sliders turn and size the machine while you watch, and
+     it can still be dragged about behind the sheet. */
+  #adjust{background:transparent;pointer-events:none}
+  #adjust .sheet{pointer-events:auto}
+  .sheetHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .sheetTitle{font-weight:800;font-size:17px}
+  .sheetSub{font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:-8px}
+  .slider{display:flex;align-items:center;gap:12px;font-size:13.5px}
+  .slider label{width:84px;color:var(--muted);flex:none}
+  .slider .val{width:62px;text-align:right;font-weight:700;flex:none;font-variant-numeric:tabular-nums}
+  input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:30px}
+  .sheetBtns{display:flex;gap:10px}
+  .option{appearance:none;display:flex;align-items:center;gap:14px;width:100%;padding:14px;border-radius:14px;text-align:left;cursor:pointer;
+    color:#fff;background:var(--card);border:1px solid var(--line)}
+  .option:hover,.option:focus-visible{border-color:var(--accent);outline:none}
+  .option .oi{flex:none;font-size:24px}
+  .option b{display:block;font-size:15px}
+  .option small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
 
-  /* ---------- calibrate: the customer marks something of known height ---------- */
+  /* ---------- Measure: the customer marks something of known height ---------- */
   #calib{position:absolute;inset:0;z-index:4;display:none;touch-action:none;cursor:crosshair}
   #calib.on{display:block}
   #calibSvg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
@@ -245,8 +246,8 @@
      finger is down -- so no part of the photo is ever unmarkable. */
   .calBar{position:absolute;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 56px);z-index:6;display:none;
     align-items:center;gap:10px;padding:9px 10px 9px 13px;border-radius:14px;color:#fff;pointer-events:none;
-    background:rgba(15,18,32,.86);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
-    border:1px solid rgba(255,255,255,.18);box-shadow:0 8px 22px rgba(0,0,0,.45);transition:opacity .15s}
+    background:rgba(12,12,12,.88);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(0,0,0,.45);transition:opacity .15s}
   .calBar .calBtns{pointer-events:auto}
   .calBar.on{display:flex}
   .calIcon{flex:none;width:40px;height:40px;overflow:visible}
@@ -257,121 +258,108 @@
   .calBar.bottom{top:auto;bottom:10px}
   .calBar.dragging{opacity:.12}
   .calTexts{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
-  .calStepNo{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#ff8a92}
+  .calStepNo{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
   .calStep{font-size:13px;font-weight:700;line-height:1.3}
   .calBtns{display:flex;gap:6px;align-items:center;flex:none}
   .iconBtn{appearance:none;width:34px;height:34px;border-radius:10px;cursor:pointer;color:#fff;font-size:15px;
     background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25)}
-  .btn.small{padding:9px 14px;font-size:13px;border-radius:11px}
   .calSheet{position:fixed;left:0;right:0;bottom:0;z-index:35;display:none;flex-direction:column;gap:12px;
-    max-height:78vh;overflow-y:auto;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 16px);
-    background:#151829;border-top:1px solid rgba(255,255,255,.14);border-radius:18px 18px 0 0;
+    max-height:80vh;overflow-y:auto;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 16px);
+    background:#141414;border-top:1px solid var(--line);border-radius:20px 20px 0 0;
     box-shadow:0 -12px 34px rgba(0,0,0,.5);color:#fff}
   .calSheet.open{display:flex}
-  .sheetTitle{font-weight:800;font-size:16px}
-  .sheetSub{font-size:12px;color:var(--muted);line-height:1.4;margin-top:-6px}
   .chips{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .chip{appearance:none;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;color:#fff;
-    background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:10px 11px;font-size:13px}
+    background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 11px;font-size:13px}
   .chip .ce{font-size:20px;flex:none}
-  .chip .cm{display:block;color:rgba(255,255,255,.55);font-size:11.5px}
-  .chip[aria-pressed="true"]{border-color:#e11d2a;background:rgba(225,29,42,.16)}
+  .chip .cm{display:block;color:var(--muted);font-size:11.5px}
+  .chip[aria-pressed="true"]{border-color:var(--accent);background:rgba(255,204,0,.12)}
   .calInputRow{display:flex;align-items:center;gap:10px;font-size:13.5px}
   .calInputRow input{width:110px;padding:10px 12px;border-radius:11px;border:1px solid rgba(255,255,255,.25);
     background:rgba(255,255,255,.08);color:#fff;font-size:16px;font-weight:700}
-  .calHint{font-size:12px;color:#ffb3b8;min-height:0;margin-top:-4px}
+  .calHint{font-size:12px;color:#ffb3aa;margin-top:-4px}
   .calHint:empty{display:none}
-  .calSheetBtns{display:flex;gap:10px}
-  .calSheetBtns .btn{flex:1}
+
   /* short notices over the bottom of the photo, sometimes with an Undo */
-  .toast{position:absolute;left:50%;bottom:12px;z-index:7;display:flex;align-items:center;gap:12px;
+  .toast{position:absolute;left:50%;bottom:12px;z-index:9;display:flex;align-items:center;gap:12px;
     width:max-content;max-width:calc(100% - 24px);padding:10px 12px 10px 15px;border-radius:14px;
-    color:#fff;font-size:13px;font-weight:700;line-height:1.35;background:rgba(20,24,40,.94);
-    border:1px solid rgba(255,255,255,.18);box-shadow:0 10px 26px rgba(0,0,0,.5);
+    color:#fff;font-size:13px;font-weight:700;line-height:1.35;background:rgba(18,18,18,.95);
+    border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 26px rgba(0,0,0,.5);
     opacity:0;visibility:hidden;transform:translate(-50%,10px);transition:opacity .2s,transform .2s,visibility 0s .2s}
   .toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .2s,transform .2s}
-  .toastBtn{appearance:none;flex:none;border:0;background:none;color:#ff8a92;font-weight:800;font-size:13.5px;cursor:pointer;padding:4px 2px}
-  .btn:disabled{opacity:.45;cursor:default}
-  .dock[inert],.top[inert]{opacity:.4}
-  .linkBtn{appearance:none;background:none;border:0;color:#ff8a92;font-size:12.5px;text-decoration:underline;cursor:pointer;padding:2px;align-self:center}
-  .linkBtn[hidden],.depthStatus[hidden]{display:none}
-  /* the 3D depth pass, working in the background after the machine is already placed */
-  .depthStatus{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;color:#b9c7ff}
-  .spin{width:12px;height:12px;border-radius:50%;border:2px solid rgba(185,199,255,.3);border-top-color:#b9c7ff;animation:spin .8s linear infinite}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  @media (prefers-reduced-motion: reduce){ .spin{animation-duration:2.4s} }
+  .toastBtn{appearance:none;flex:none;border:0;background:none;color:var(--accent);font-weight:800;font-size:13.5px;cursor:pointer;padding:4px 2px}
 </style>
 </head>
 <body>
-  <!-- top bar (shared) -->
-  <div class="top">
-    <a class="back" href="index.html" aria-label="Back">&larr;</a>
+  <!-- top bar: back, the machine (tap to switch), and -- in the composer -- dimensions on/off -->
+  <div class="top" id="topBar">
+    <button class="round" id="backBtn" type="button" aria-label="Back">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
     <img class="brand" src="assets/IFB%20logo%201.png" alt="IFB" />
-    <span class="ttl" id="topTtl">Add the washing machine to your photo</span>
-    <button class="ham" id="hamBtn" aria-label="Change machine model" aria-expanded="false"><span></span></button>
+    <button class="machineChip" id="machineChip" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Change machine">
+      <span class="mc" id="machineChipText">Front Loader</span><span class="chev" aria-hidden="true">▼</span>
+    </button>
+    <span class="grow"></span>
+    <button class="round" id="dimBtn" type="button" aria-pressed="true" aria-label="Hide dimensions" title="Dimensions" hidden>
+      <svg viewBox="0 0 24 24"><path d="M3 12h18M3 7.5v9M21 7.5v9M7 9l-3 3 3 3M17 9l3 3-3 3"/></svg>
+    </button>
   </div>
 
-  <!-- ===== First screen: pick the machine type, before anything else is shown. ===== -->
+  <!-- ===== 1. Choose the machine ===== -->
   <section id="chooser">
     <img class="ch-brand" src="assets/IFB%20logo%201.png" alt="IFB" />
-    <h1>Which machine?</h1>
-    <p class="sub">Pick the type you're considering — we'll drop it into your photo at its real size.</p>
+    <h1>Choose your machine</h1>
     <div class="choices" id="chooserList"></div>
-    <p class="sub" style="font-size:11.5px;opacity:.5">You can switch machines any time from the menu.</p>
   </section>
 
-  <!-- ===== Switcher, opened from the hamburger. Model choice and the position sliders both
-       live here now, each under its own collapsible section, so the composer screen itself
-       stays clear of controls and only shows the photo + machine. ===== -->
-  <div id="menu">
-    <div class="sheet">
-      <button class="accHead" id="accModelHead" aria-expanded="false" aria-controls="accModelBody" type="button">
-        <span class="accTitle">Model Select</span>
-        <span class="accChevron">⌄</span>
-      </button>
-      <div class="accBody" id="accModelBody" hidden>
-        <div class="choices" id="menuList" role="radiogroup" aria-label="Machine type"></div>
-      </div>
-
-      <button class="accHead" id="accStyleHead" aria-expanded="false" aria-controls="accStyleBody" type="button">
-        <span class="accTitle">Style It</span>
-        <span class="accChevron">⌄</span>
-      </button>
-      <div class="accBody" id="accStyleBody" hidden>
-        <div class="sliders">
-          <div class="slider"><label>Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈87.5cm</span></div>
-          <div class="slider"><label>Rotate</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
-          <div class="slider"><label>Angle</label><input id="sAng" type="range" min="-10" max="45" value="12"><span class="val" id="vAng">12°</span></div>
-        </div>
-      </div>
+  <!-- machine switcher (from the machine name in the top bar) -->
+  <div class="sheetWrap" id="menu">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+      <div class="sheetHead"><span class="sheetTitle" id="menuTitle">Machine</span></div>
+      <div class="choices" id="menuList" role="radiogroup" aria-label="Machine"></div>
     </div>
   </div>
 
-  <!-- ===== UPLOAD SCREEN ===== -->
+  <!-- ===== 2. The photo ===== -->
   <section id="upload">
-    <h1>See it in your room — from a photo</h1>
-    <p id="introP">Take a photo of your space (or pick one), then drop the IFB washing machine into it and save the picture.</p>
-    <div class="pickRow" id="pickRow">
-      <button class="pick" id="takeBtn" type="button" hidden>📷 Take a photo</button>
-      <label class="pick" id="galleryBtn">🖼️ Choose a photo
+    <div class="upMain">
+      <div class="intro">
+        <!-- a phone framing the spot, with the machine standing on the floor -->
+        <svg class="upArt" viewBox="0 0 150 120" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="38" y="3" width="74" height="114" rx="14" stroke="rgba(255,255,255,.55)" stroke-width="2.2"/>
+          <path d="M44 20h62" stroke="rgba(255,255,255,.12)" stroke-width="1.5"/>
+          <path d="M58 22v44M92 22v44" stroke="rgba(255,255,255,.22)" stroke-width="1.6"/>
+          <path d="M42 80l16-14h34l16 14" stroke="rgba(255,255,255,.35)" stroke-width="1.6"/>
+          <path d="M48 106h54" stroke="rgba(255,255,255,.22)" stroke-width="1.6" stroke-dasharray="3 5"/>
+          <rect x="62" y="58" width="26" height="36" rx="3.5" stroke="#ffcc00" stroke-width="2.4"/>
+          <path d="M62 66h26" stroke="#ffcc00" stroke-width="1.8"/>
+          <circle cx="75" cy="80" r="8.5" stroke="#ffcc00" stroke-width="2.2"/>
+          <ellipse cx="75" cy="97" rx="17" ry="3" stroke="#00ff99" stroke-width="1.8"/>
+        </svg>
+        <h1>Photograph the spot</h1>
+        <p class="lead" id="introP">Take a photo of the floor where the machine will go — it appears there at its real size.</p>
+        <div class="tips">
+          <span class="tip">↔️ Stand 2–3 m back</span>
+          <span class="tip">⬇️ Show the floor</span>
+          <span class="tip">🚪 A door or counter in view</span>
+        </div>
+      </div>
+      <p class="reading" id="reading" role="status"><span class="busyEmoji" aria-hidden="true">🖼️</span>Reading your photo…</p>
+      <img id="preview" class="preview" alt="Your photo" />
+      <div class="qnotes" id="qnotes" role="status" aria-live="polite"></div>
+    </div>
+    <div class="bar" id="pickRow">
+      <button class="btn go" id="takeBtn" type="button" hidden><span class="ic">📷</span>Take photo</button>
+      <label class="btn go" id="galleryBtn"><span class="ic">🖼️</span><span id="galleryLabel">Choose a photo</span>
         <input id="file" type="file" accept="image/*" />
       </label>
       <!-- the phone's own camera app: the fallback when the in-app camera can't open -->
       <input id="fileCam" type="file" accept="image/*" capture="environment" hidden />
     </div>
-    <p class="reading" id="reading" role="status"><span class="busyEmoji" aria-hidden="true">🖼️</span>Reading your photo…</p>
-    <img id="preview" class="preview" alt="Your photo preview" />
-    <div class="qnotes" id="qnotes" role="status" aria-live="polite"></div>
-    <div class="confirmRow" id="confirmRow">
-      <button class="btn sec" id="retake" type="button">↩ Another photo</button>
-      <button class="btn" id="usephoto" type="button">Use this photo →</button>
-    </div>
-    <div class="tips" id="tips">
-      <b>For a true-to-size result</b>
-      <span>🧍 Stand 2–3 m back, phone at chest height</span>
-      <span>🔍 Normal 1× lens — no zoom, no ultra-wide</span>
-      <span>🚪 Show the floor, and a door, counter or cupboard if you can</span>
-      <span>💡 Good light, phone held straight</span>
+    <div class="bar confirmRow" id="confirmRow">
+      <button class="btn dark" id="retake" type="button"><span class="ic">↩</span>Retake</button>
+      <button class="btn go" id="usephoto" type="button">Use photo<span class="ic">→</span></button>
     </div>
   </section>
 
@@ -390,12 +378,19 @@
     </div>
   </div>
 
-  <!-- ===== COMPOSER ===== -->
+  <!-- ===== 3. The composer ===== -->
   <section id="stage">
     <canvas id="bg"></canvas>
     <canvas id="scan"></canvas>
     <canvas id="gl"></canvas>
-    <!-- calibrate: touch-and-slide markers for the bottom and top of something of known height -->
+    <!-- how the size was worked out; taps through to making it exact when it's only an estimate -->
+    <button class="sizePill" id="sizePill" type="button" hidden>
+      <span class="dot" aria-hidden="true"></span><span class="spin" aria-hidden="true"></span>
+      <span class="t" id="sizePillText"></span><span class="more" id="sizePillMore" hidden>Fix&nbsp;›</span>
+    </button>
+    <span class="srOnly" id="aiStatus" role="status" aria-live="polite"></span>
+    <div class="hint" id="hint">Drag to move · drag the machine to turn it</div>
+    <!-- Measure: touch-and-slide markers for the bottom and top of something of known height -->
     <div id="calib" aria-hidden="true">
       <svg id="calibSvg"></svg>
       <canvas id="loupe"></canvas>
@@ -416,8 +411,8 @@
         <span class="calStep" id="calStep"></span>
       </div>
       <div class="calBtns">
-        <button class="btn small" id="calNext" type="button" hidden>Next →</button>
-        <button class="iconBtn" id="calCancel" type="button" aria-label="Cancel calibration">✕</button>
+        <button class="btn small go" id="calNext" type="button" hidden>Next →</button>
+        <button class="iconBtn" id="calCancel" type="button" aria-label="Cancel measuring">✕</button>
       </div>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite">
@@ -435,28 +430,40 @@
       </div>
     </div>
   </section>
-  <div class="hint" id="hint">Drag to move it on the floor · long-press to place it exactly · drag the machine to turn it</div>
-  <div class="dimchip" id="dimchip">IFB washing machine · 87.5 × 59.8 × 65 cm</div>
 
-  <div class="dock" id="dock">
-    <div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:100%">
-      <div class="dockTop">
-        <button class="btn sec" id="calBtn" type="button">📏 Calibrate size</button>
-        <button class="btn sec" id="aiBtn" type="button">🔄 Re-detect</button>
+  <div class="bar" id="dock">
+    <button class="btn" id="calBtn" type="button"><span class="ic">📏</span>Measure</button>
+    <button class="btn" id="adjustBtn" type="button" aria-haspopup="dialog"><span class="ic">⚙️</span>Adjust</button>
+    <button class="btn go" id="save" type="button"><span class="ic">💾</span>Save</button>
+  </div>
+
+  <!-- Adjust: turn / size / camera tilt by hand, or put it back where the AI placed it -->
+  <div class="sheetWrap" id="adjust">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="adjustTitle">
+      <div class="sheetHead">
+        <span class="sheetTitle" id="adjustTitle">Adjust</span>
+        <button class="btn small" id="adjustDone" type="button">Done</button>
       </div>
-      <span id="aiStatus" style="font-size:11px;color:#cbd0e6;text-align:center;line-height:1.35">AI finds the <b>floor</b> (not furniture) automatically and keeps the machine on it as you drag. Long-press anywhere to place it exactly there instead.</span>
-      <span class="depthStatus" id="depthStatus" role="status" aria-live="polite" hidden><span class="spin" aria-hidden="true"></span><span id="depthText"></span></span>
-      <button class="linkBtn" id="depthOffer" type="button" hidden>✨ Or let the 3D AI measure your room (one-time 145 MB download)</button>
-    </div>
-    <div class="actions">
-      <button class="btn sec" id="dimBtn" style="flex:0 0 auto" aria-label="Toggle dimensions" aria-pressed="true">📐</button>
-      <button class="btn sec" id="change">Change photo</button>
-      <button class="btn" id="save">💾 Save</button>
+      <div class="slider"><label for="sRot">Turn</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
+      <div class="slider"><label for="sSize">Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈87.5cm</span></div>
+      <div class="slider"><label for="sAng">Camera tilt</label><input id="sAng" type="range" min="-10" max="45" value="12"><span class="val" id="vAng">12°</span></div>
+      <button class="btn dark" id="aiBtn" type="button"><span class="ic">↺</span>Reset position</button>
     </div>
   </div>
-  <div class="credit">IFB · washing machine composited with three.js</div>
 
-  <!-- calibrate, last step: what was marked, and how tall it is -->
+  <!-- the exact size: offered when the photo gave nothing to size the machine from -->
+  <div class="sheetWrap" id="improve">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="improveTitle">
+      <div class="sheetHead"><span class="sheetTitle" id="improveTitle">Get the exact size</span></div>
+      <span class="sheetSub">Nothing in this photo has a size the app knows, so the machine's size is a best guess.</span>
+      <button class="option" id="improveMeasure" type="button"><span class="oi">📏</span>
+        <span><b>Measure something</b><small>Mark a door, table or counter in the photo — exact</small></span></button>
+      <button class="option" id="depthOffer" type="button"><span class="oi">✨</span>
+        <span><b>3D-scan my room</b><small>Automatic · one-time 145 MB download</small></span></button>
+    </div>
+  </div>
+
+  <!-- Measure, last step: what was marked, and how tall it is -->
   <div class="calSheet" id="calSheet" role="dialog" aria-modal="true" aria-labelledby="calSheetTitle">
     <span class="sheetTitle" id="calSheetTitle">What did you mark?</span>
     <span class="sheetSub">Pick the closest match, or type its exact height — measured with a tape is best.</span>
@@ -467,9 +474,9 @@
       <span>cm</span>
     </div>
     <span class="calHint" id="calHint" aria-live="polite"></span>
-    <div class="calSheetBtns">
-      <button class="btn sec" id="calRemark" type="button">Re-mark</button>
-      <button class="btn" id="calApply" type="button" disabled>Apply ✓</button>
+    <div class="sheetBtns">
+      <button class="btn dark" id="calRemark" type="button">Re-mark</button>
+      <button class="btn go" id="calApply" type="button" disabled>Apply ✓</button>
     </div>
     <button class="linkBtn" id="calReset" type="button" hidden>Remove my measurements (go back to automatic)</button>
   </div>
@@ -510,13 +517,13 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   
 // 598 × 650 × 875 mm (W × D × H), ifbappliances.com/executive-mxc-9014-sslc. It used to be drawn
 // at 80 cm -- 8.6% too small. TL's height is still an estimate.
 const MODELS = {
-  FL:  { label: 'Front Loader', desc: 'Front-loading washing machine',
+  FL:  { label: 'Front Loader', desc: 'Front loading',
          url: 'models/IFB_WM1.glb', heightCm: 87.5, specCm: { H: 87.5, W: 59.8, D: 65 }, yawOffsetDeg: 0,
          thumb: 'assets/thumb-front-loader.png' },
-  TL:  { label: 'Top Loader',   desc: 'Top-loading washing machine',
+  TL:  { label: 'Top Loader',   desc: 'Top loading',
          url: 'models/washing_machine_top_load.glb', heightCm: 95, yawOffsetDeg: 180,
          thumb: 'assets/thumb-top-loader.png' },
-  WDR: { label: 'Washer Dryer', desc: 'Washer–dryer combo',
+  WDR: { label: 'Washer Dryer', desc: 'Washes and dries',
          url: 'models/IFB_WM1.glb', heightCm: 87.5, specCm: { H: 87.5, W: 59.8, D: 65 }, yawOffsetDeg: 0,
          thumb: 'assets/thumb-washer-dryer.png' },
 };
@@ -558,11 +565,10 @@ const stageH = () => stageEl.clientHeight || window.innerHeight;
 const hintEl    = document.getElementById('hint');
 const bg        = document.getElementById('bg');
 const glCanvas  = document.getElementById('gl');
-const introP    = document.getElementById('introP');
 const sSize=document.getElementById('sSize'), sRot=document.getElementById('sRot'), sAng=document.getElementById('sAng');
 const vSize=document.getElementById('vSize'), vRot=document.getElementById('vRot'), vAng=document.getElementById('vAng');
-const dimchip = document.getElementById('dimchip');
 const dimBtn  = document.getElementById('dimBtn');
+const machineChipText = document.getElementById('machineChipText');
 
 let photoBitmap = null;                 // chosen photo (EXIF-corrected)
 let lastSeg = null;                     // this photo's segmentation result (runAIPlace), reused by Calibrate
@@ -638,7 +644,7 @@ const nextPaint = () => new Promise((r) => requestAnimationFrame(() => requestAn
 
 // ---------- upload flow ----------
 const readingEl = document.getElementById('reading'), qnotesEl = document.getElementById('qnotes');
-const pickRow = document.getElementById('pickRow'), tipsEl = document.getElementById('tips');
+const pickRow = document.getElementById('pickRow');
 const takeBtn = document.getElementById('takeBtn'), galleryBtn = document.getElementById('galleryBtn');
 const fileCam = document.getElementById('fileCam');
 let sensorPitch = null;      // how far the phone was tilted down when the in-app camera took this photo (°), else null
@@ -649,8 +655,9 @@ async function takePhotoFile(f, pitch = null){
   if (!f) return;
   sensorPitch = pitch;
   readingEl.classList.add('on');   // decoding a 12 MP photo and fetching the EXIF reader takes a moment
+  uploadEl.classList.add('picked');                     // the intro gives way to the photo
   preview.style.display = 'none'; confirmRow.style.display = 'none'; qnotesEl.replaceChildren();
-  pickRow.hidden = true; tipsEl.hidden = true;
+  pickRow.hidden = true;
   try {
     try { photoBitmap = await createImageBitmap(f, { imageOrientation: 'from-image' }); }
     catch (err) { photoBitmap = await createImageBitmap(f); }
@@ -667,7 +674,7 @@ async function takePhotoFile(f, pitch = null){
   showNotes(notes);
   if (previewURL) URL.revokeObjectURL(previewURL);
   preview.src = previewURL = URL.createObjectURL(f);
-  preview.style.display = 'block';
+  preview.style.display = '';                           // shown by #upload.picked
   confirmRow.style.display = 'flex';
 }
 function showNotes(notes){
@@ -698,16 +705,22 @@ function photoNotes(bm){
 }
 // Back to "take or choose", clearing the inputs so picking the same file again still counts
 function resetPicker(){
-  preview.style.display = 'none'; confirmRow.style.display = 'none'; qnotesEl.replaceChildren();
+  uploadEl.classList.remove('picked');
+  preview.style.display = ''; confirmRow.style.display = 'none'; qnotesEl.replaceChildren();
   readingEl.classList.remove('on');
-  pickRow.hidden = false; tipsEl.hidden = false;
+  pickRow.hidden = false;
   fileInput.value = ''; fileCam.value = '';
 }
 fileInput.addEventListener('change', (e) => takePhotoFile(e.target.files && e.target.files[0]));
 fileCam.addEventListener('change', (e) => takePhotoFile(e.target.files && e.target.files[0]));
 document.getElementById('retake').addEventListener('click', resetPicker);
-document.getElementById('change').addEventListener('click', () => { resetPicker(); showUpload(); });
 document.getElementById('usephoto').addEventListener('click', () => startComposer());
+// Back: from the composer to a new photo, from the photo screen to the choice of machine
+document.getElementById('backBtn').addEventListener('click', () => {
+  if (cal.on) { closeCalib(); return; }
+  if (stageEl.style.display === 'block') { resetPicker(); showUpload(); }
+  else { resetPicker(); chooser.style.display = ''; }
+});
 
 // ---------- in-app camera: live view, a level, and the phone's tilt saved with the photo ----------
 // The one thing a photo can't say about itself -- how far the phone was tilted -- the phone's motion
@@ -719,8 +732,11 @@ const camHint = document.getElementById('camHint'), camTilt = document.getElemen
 const camHorizon = document.getElementById('camHorizon'), shutter = document.getElementById('shutter');
 const tilt = { pitch: null, roll: null, hist: [] };
 let camStream = null;
+// With the camera on offer it's the main button and the gallery the second; otherwise (a computer)
+// choosing a photo is the main button.
 if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && matchMedia('(pointer: coarse)').matches) {
-  takeBtn.hidden = false; galleryBtn.classList.add('sec');
+  takeBtn.hidden = false; galleryBtn.classList.remove('go');
+  document.getElementById('galleryLabel').textContent = 'Gallery';
 }
 // Device orientation -> how far the back camera points below the horizon, and how far the picture
 // is rolled. The phone's "up" in its own frame is (-cosβ·sinγ, sinβ, cosβ·cosγ); the back camera looks
@@ -787,9 +803,11 @@ function showUpload(){
   stageEl.style.display = 'none';
   dockEl.style.display = 'none';
   hintEl.style.display = 'none';
-  dimchip.style.display = 'none';
+  dimBtn.hidden = true;                    // dimensions only mean something once the machine's there
+  closeSheets(); hideToast();
+  photoToken++;                            // a 3D scan still running for the last photo is dropped
   uploadEl.style.display = 'flex';
-  document.getElementById('topTtl').textContent = 'Add the ' + machineLabel() + ' to your photo';
+  updateDimChip();
   // Get everything slow going while the customer is still choosing a photo, instead of one thing
   // after another once they've picked it: the 3D view and the machine model (~3 MB), and the
   // room AI (~15 MB, loaded and warmed up in its worker). The 3D view goes first on purpose --
@@ -1018,27 +1036,29 @@ const updateDimOcclusion = () => {
   }
 };
 
+// The machine's name and height in the top bar -- the height follows the Size setting
 function updateDimChip(){
   const d = curDims();
-  dimchip.textContent = 'IFB ' + machineLabel() + ' · ' + d.H + ' × ' + d.W + ' × ' + d.D + ' cm';
+  machineChipText.textContent = MODELS[modelKey].label + (d.H ? ' · ' + d.H + ' cm' : '');
 }
 
-// How to move it, for a moment, then the dimensions chip in the same spot. Runs once the machine
-// has actually been placed -- telling people to drag something they can't see yet just confuses.
+// How to move it, for a moment. Runs once the machine has actually been placed -- telling people
+// to drag something they can't see yet just confuses.
 let hintTimer = null;
 function showDragHint(){
-  hintEl.textContent = 'Drag to move it on the floor · long-press to place it exactly · drag the machine to turn it';
-  hintEl.style.display = 'block'; dimchip.style.display = 'none';
+  hintEl.textContent = 'Drag to move · drag the machine to turn it';
+  hintEl.style.display = 'block';
   clearTimeout(hintTimer);
-  hintTimer = setTimeout(() => { hintEl.style.display = 'none'; if (dimsOn) dimchip.style.display = 'block'; }, 2600);
+  hintTimer = setTimeout(() => { hintEl.style.display = 'none'; }, 3500);
 }
 
 function startComposer(){
   uploadEl.style.display = 'none';
   stageEl.style.display = 'block';
   dockEl.style.display = 'flex';
-  hintEl.style.display = 'none'; dimchip.style.display = 'none';   // shown once the machine is placed (showDragHint)
-  document.getElementById('topTtl').textContent = 'Position it · then save';
+  dimBtn.hidden = false;
+  hintEl.style.display = 'none';           // shown once the machine is placed (showDragHint)
+  setPill(null);                           // and so is how it was sized
   // Every call here follows a fresh photo confirmation, so any previous floor mask belongs to
   // a different picture and must not keep constraining this one. Re-detect automatically --
   // the customer should never have to find and tap the AI button just to get floor-only
@@ -1046,8 +1066,8 @@ function startComposer(){
   floorMask = null;
   obstacleMask = null;
   lastSeg = null; manualRefs = []; freePlaced = false; hideToast();   // a new photo: nothing measured on it yet
-  photoToken++; lastDepth = null; DEPTH.pendingApply = false; depthOfferEl.hidden = true; showDepthStatus();
-  calBtn.classList.remove('glow'); calBtn.textContent = '📏 Calibrate size';
+  photoToken++; lastDepth = null; DEPTH.pendingApply = false; DEPTH.offer = false; lastCalib = null;
+  calBtn.classList.remove('glow');
   // the last photo's fit doesn't apply to this one (the phone's measured tilt does, if there is one)
   cam = { ...CAM_DEFAULT, f35: exifF35 || CAM_DEFAULT.f35, pitchDeg: sensorPitch ?? CAM_DEFAULT.pitchDeg };
   sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
@@ -1193,7 +1213,7 @@ function initThree(){
       dragMode = 'free';
       placeRaw(downX, downY);
       if (navigator.vibrate) try { navigator.vibrate(15); } catch (err) {}
-      aiSet('Placed exactly there ✓ — drag normally to go back to snapping to the floor.');
+      toast('Placed exactly there ✓ — drag it to snap back to the floor');
     }, LONG_PRESS_MS);
   });
   glCanvas.addEventListener('pointermove', (e) => {
@@ -1903,18 +1923,6 @@ function calibrateCamera(out, manual = [], depth = null){
   return { hc: best.hc, pitchDeg: best.th, f35: best.f, refs: [...new Set(samples.map((s) => s.ref.name))], manual: manual.length };
 }
 // "Sized from the …" for the status line, or an honest "best estimate" with a pointer to Calibrate
-function sizedFromText(calib){
-  const list = (a) => a.length > 1 ? a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1] : a[0];
-  if (calib.manual) {
-    const m = manualRefs.map((r) => r.name ? 'your ' + r.name + ' (' + Math.round(r.H * 100) + ' cm)' : 'your ' + Math.round(r.H * 100) + ' cm measurement');
-    return 'Sized from ' + list(m) + ' ✓';
-  }
-  const refs = calib.refs.filter((r) => r !== DEPTH_REF.name), depth = refs.length < calib.refs.length;
-  if (refs.length) return 'Sized from the ' + list(refs) + ' in your photo' + (depth ? ', checked with a 3D scan.' : '.');
-  if (depth) return 'Sized from a 3D scan of your room — for an exact fit, 📏 Calibrate size.';
-  return 'Nothing of known size in view, so this is a best estimate — tap 📏 Calibrate size for an exact fit.';
-}
-
 // ---------- 3D depth: a second opinion on size when nothing in the photo has a known height ----------
 // Without a door, counter or the like in view, the sizing above is a guess -- 12-34% off on the test
 // photos. A depth AI (Metric3D v2, in phroom-ai-worker.js) says how far away every pixel of the
@@ -1924,7 +1932,7 @@ function sizedFromText(calib){
 // refinement, and only where it's worth it: nothing of known height in view, or only the
 // wall-to-ceiling height, itself just a typical figure. depthMode() says when it may download by
 // itself and when the customer is asked first.
-const DEPTH = { loaded: false, cached: false, failed: false, pct: null, busyToken: null, queue: Promise.resolve(), pendingApply: false, lastFit: null };
+const DEPTH = { loaded: false, cached: false, failed: false, offer: false, pct: null, busyToken: null, queue: Promise.resolve(), pendingApply: false, lastFit: null };
 const depthCall = aiChannel((pct) => { DEPTH.pct = pct; showDepthStatus(); }, () => { DEPTH.loaded = false; });
 let lastDepth = null;       // this photo's depth map {width, height, data}, canonical (see depthFloorCamera)
 let photoToken = 0;         // bumped for every new photo, so a late depth result can't land on the next one
@@ -2068,7 +2076,11 @@ async function runAIPlace(){
     floorMask = buildFloorMask(out);
     obstacleMask = buildObstacleMask(out);   // same segmentation pass -- no extra model call
     revealScan(out);
-    if (!floorMask){ obstacleMask = null; aiSet('No clear floor found — place it with drag + the sliders.'); return; }
+    if (!floorMask){
+      obstacleMask = null;
+      warnPill('No floor found', 'Couldn’t find the floor in this photo — drag the machine into place, or retake it showing more floor.');
+      return;
+    }
     const labels = [...new Set(out.map(o => o.label))];
     if (isTopDownShot(floorMask, labels)) {
       // Nearly the whole frame is "floor" and no wall was found either -- this is a straight-
@@ -2076,7 +2088,7 @@ async function runAIPlace(){
       // Leaving floorMask set would otherwise let a drag "snap" to what is really just the
       // entire photo, which isn't a floor constraint at all.
       floorMask = null; obstacleMask = null;
-      aiSet('That looks like it’s pointing straight down at just the floor — retake it showing some of the room (a wall or furniture) so the size can be judged properly.');
+      warnPill('Only floor in view', 'This points straight down at the floor — retake it showing some of the room (a wall or furniture) so the size can be judged.');
       return;
     }
     setBusy('measure', '📐', 'Measuring your room…', 'Working out the camera height and angle');
@@ -2089,9 +2101,9 @@ async function runAIPlace(){
     depthCheck = calib;                       // see finally: once the machine is showing, maybe a 3D pass
     let p = autoFloorPoint();
     placeAtImageCoord(p.fx, p.fy);
-    // Say what the size was judged from -- or that nothing in view could anchor it, and point at
-    // Calibrate, which is the fix for exactly that case.
-    const objs = sizedFromText(calib);
+    // Say what the size was judged from -- or that nothing in view could anchor it, with Measure
+    // (which fixes exactly that case) pulsing.
+    showSizeStatus(calib);
     calBtn.classList.toggle('glow', !calib.refs.length);
     // autoFloorPoint() only picked a single centre point -- re-check with the machine's real
     // size (now that the model, and so modelSize, is loaded) and, if that spot would spill it
@@ -2099,21 +2111,14 @@ async function runAIPlace(){
     // this floor where it really does fit.
     if (!placementOk(machine.position.x, machine.position.z)) {
       const fitted = nearestValidFootprint(p.fx, p.fy);
-      if (fitted) {
-        placeAtImageCoord(fitted.fx, fitted.fy);
-        aiSet('Placed on the floor ✓ — it snaps to the floor as you drag. ' + objs);
-      } else {
-        aiSet('Couldn’t find open floor big enough for this machine clear of the furniture — long-press to place it manually. ' + objs);
-      }
-    } else {
-      aiSet('Placed on the floor ✓ — it snaps to the floor as you drag. ' + objs);
+      if (fitted) placeAtImageCoord(fitted.fx, fitted.fy);
+      else toast('No open floor big enough clear of the furniture — long-press where you want it.', '', null, 7000);
     }
   } catch (e) {
     console.warn('Room AI failed:', e);
-    aiSet('AI unavailable here — drag + sliders still place it.');
+    warnPill('Room AI unavailable', 'The room AI couldn’t run here — drag the machine into place by hand.');
   } finally {
     aiBtn.disabled = false; calBtn.disabled = false;
-    calBtn.textContent = manualRefs.length ? '📏 Calibrate again' : '📏 Calibrate size';
     floorLocking = false;   // whatever happened, the drag lock was only ever for this one detection pass
     if (machine) { machine.visible = true; needsRender = true; }
     hideBusy();
@@ -2123,12 +2128,11 @@ async function runAIPlace(){
     if (depthCheck) maybeDepth(depthCheck);
   }
 }
-aiBtn.addEventListener('click', runAIPlace);
+aiBtn.addEventListener('click', () => { closeSheets(); runAIPlace(); });   // "Reset position" in Adjust
 
 // ---------- 3D depth pass: when it runs, and what the customer sees (see depthFloorCamera) ----------
-const depthStatusEl = document.getElementById('depthStatus'), depthText = document.getElementById('depthText');
 const depthOfferEl = document.getElementById('depthOffer');
-// 'auto': run it now; 'offer': ask first (a button under the status line); 'off': not on this device.
+// 'auto': run it now; 'offer': ask first (in "Get the exact size", from the size pill); 'off': not on this device.
 // The first 145 MB download happens by itself only on a computer (mouse-type pointer) that isn't
 // on mobile data. A phone always asks first, even on Wi-Fi: it's real money on a prepaid pack, and
 // a model this size is a lot to spring on a budget phone's memory. Once downloaded it's cached and
@@ -2146,26 +2150,26 @@ async function depthCached(){
 }
 // After the automatic placement: is a depth pass worth it for this photo, and may it run by itself?
 async function maybeDepth(calib){
-  depthOfferEl.hidden = true;
+  DEPTH.offer = false;
   if (lastDepth || manualRefs.length) return;                   // done already / the customer's own marks win
   if (calib.refs.some((r) => r !== WALL_REF.name)) return;      // a door, counter, sofa... already sized it
   const token = photoToken, mode = await depthMode();
   if (token !== photoToken) return;
   if (mode === 'auto') refineWithDepth();
-  else if (mode === 'offer' && !calib.refs.length) depthOfferEl.hidden = false;
+  else if (mode === 'offer' && !calib.refs.length) DEPTH.offer = true;   // the estimate's pill now offers it
 }
-depthOfferEl.addEventListener('click', () => refineWithDepth());
+depthOfferEl.addEventListener('click', () => { closeSheets(); refineWithDepth(); });
+// While the scan works the size pill says so -- with the download's progress the first time. (A
+// cached model reports "progress" too, while it's read back from disk.)
 function showDepthStatus(){
-  const on = DEPTH.busyToken !== null && DEPTH.busyToken === photoToken;
-  depthStatusEl.hidden = !on;
-  // (a cached model reports "progress" too, while it's read back from disk)
-  if (on) depthText.textContent = DEPTH.pct !== null && DEPTH.pct < 100
-    ? (DEPTH.cached ? 'Loading the 3D AI… ' : 'Downloading the 3D AI (one time only)… ') + DEPTH.pct + '%'
-    : 'Measuring your room in 3D…';
+  if (DEPTH.busyToken === null || DEPTH.busyToken !== photoToken || cal.on) return;
+  setPill('work', DEPTH.pct !== null && DEPTH.pct < 100
+    ? (DEPTH.cached ? 'Loading the 3D AI… ' : 'Downloading the 3D AI… ') + DEPTH.pct + '%'
+    : 'Measuring your room in 3D…');
 }
 function refineWithDepth(){
   const token = photoToken, url = photoInputURL(768);   // the model reads ~518 px anyway
-  depthOfferEl.hidden = true;
+  DEPTH.offer = false;
   DEPTH.busyToken = token; DEPTH.pct = null; showDepthStatus();
   // one photo at a time: a second run can't share the model while the first is on it
   const job = DEPTH.queue.then(() => depthCall({ type: 'depth', image: url }));
@@ -2179,10 +2183,12 @@ function refineWithDepth(){
     console.warn('3D scan failed:', e);
     DEPTH.fails = (DEPTH.fails || 0) + 1;
     if (/no-webgpu/.test(e.message) || DEPTH.fails >= 2) DEPTH.failed = true;   // don't keep trying (and saying so) every photo
-    if (token === photoToken) toast('The 3D scan couldn’t run here — 📏 Calibrate size gives an exact fit.', '', null, 6000);
+    if (token === photoToken) {
+      toast('The 3D scan couldn’t run here — 📏 Measure gives an exact size.', '', null, 6000);
+      if (lastCalib) showSizeStatus(lastCalib);                 // back to saying it's an estimate
+    }
   }).finally(() => {
     if (DEPTH.busyToken === token) DEPTH.busyToken = null;
-    showDepthStatus();
   });
 }
 // Refit with the scan and say what it did. Nothing changes if the floor didn't scan cleanly.
@@ -2193,7 +2199,7 @@ function applyDepth(){
   const calib = refitCamera();
   if (!calib) return;
   if (!calib.refs.includes(DEPTH_REF.name)) {
-    toast('The 3D scan couldn’t read this floor clearly — 📏 Calibrate size gives an exact fit.', '', null, 6000);
+    toast('The 3D scan couldn’t read this floor clearly — 📏 Measure gives an exact size.', '', null, 6000);
     return;
   }
   const h1 = machineHeightAt(machinePhotoPoint().fy);
@@ -2229,10 +2235,65 @@ function settlePlacement(){
 sSize.addEventListener('change', settlePlacement);
 sRot.addEventListener('change', settlePlacement);
 
+// ---------- the size pill: how the machine's size was worked out ----------
+// The one status on the photo, so the customer always knows how far to trust the size. Green:
+// sized from something in the room, a 3D scan, or their own measurement. Yellow: a best guess --
+// tap it for the ways to make it exact. Red: a problem with the photo. A spinner while the 3D
+// scan works.
+const sizePill = document.getElementById('sizePill'), sizePillText = document.getElementById('sizePillText');
+const sizePillMore = document.getElementById('sizePillMore');
+let pillKind = null, pillAction = null, lastCalib = null;
+function setPill(kind, text = '', action = null){
+  pillKind = kind; pillAction = action;
+  if (!kind) { sizePill.hidden = true; return; }
+  sizePill.className = 'sizePill ' + kind + (action ? ' tap' : '');
+  sizePillText.textContent = text;
+  sizePillMore.hidden = !action;
+  sizePill.hidden = cal.on;                         // out of the way while measuring
+  aiSet(text);                                      // and said to screen readers
+}
+sizePill.addEventListener('click', () => { if (pillAction) pillAction(); });
+function warnPill(short, long){ setPill('warn', short); if (long) toast(long, '', null, 7000); }
+// In words people use: it's the ceiling height the wall reference measures
+const REF_WORDS = { 'wall height': 'ceiling height', '3D depth scan': '3D scan', 'kitchen counter': 'counter', 'washing machine': 'washer' };
+function showSizeStatus(calib){
+  lastCalib = calib;
+  if (calib.manual) {
+    const m = manualRefs[manualRefs.length - 1];
+    setPill('ok', manualRefs.length > 1 ? 'Exact size · from your ' + manualRefs.length + ' measurements'
+      : 'Exact size · from your ' + (m.name ? m.name + ' (' + Math.round(m.H * 100) + ' cm)' : Math.round(m.H * 100) + ' cm measurement'));
+    return;
+  }
+  // real objects first; the ceiling height (only a typical figure) and the scan after them
+  const rank = (r) => (r === WALL_REF.name ? 1 : r === DEPTH_REF.name ? 2 : 0);
+  const refs = calib.refs.slice().sort((a, b) => rank(a) - rank(b)).map((r) => REF_WORDS[r] || r);
+  if (!refs.length) { setPill('est', 'Estimated size', openImprove); return; }
+  const list = refs.length > 3 ? refs.slice(0, 2).join(', ') + ' + ' + (refs.length - 2) + ' more'
+    : refs.length > 1 ? refs.slice(0, -1).join(', ') + ' & ' + refs[refs.length - 1] : refs[0];
+  setPill('ok', 'Sized from ' + (refs.length === 1 && refs[0] === '3D scan' ? 'a 3D scan of the room' : 'the ' + list));
+}
+// Making an estimate exact: straight to Measure, or -- where the 3D scan is on offer (a phone that
+// hasn't downloaded it) -- a choice of the two.
+function openImprove(){ if (DEPTH.offer) openSheet(improveEl); else openCalib(); }
+
+// ---------- bottom sheets: machine, adjust, exact size ----------
+const adjustEl = document.getElementById('adjust'), improveEl = document.getElementById('improve');
+function openSheet(el){ closeSheets(); el.classList.add('open'); if (el === menu) machineChip.setAttribute('aria-expanded', 'true'); }
+function closeSheets(){
+  for (const el of [menu, adjustEl, improveEl]) el.classList.remove('open');
+  machineChip.setAttribute('aria-expanded', 'false');
+}
+for (const el of [adjustEl, improveEl]) el.addEventListener('click', (e) => { if (e.target === el) closeSheets(); });
+document.getElementById('adjustBtn').addEventListener('click', () => openSheet(adjustEl));
+document.getElementById('adjustDone').addEventListener('click', closeSheets);
+document.getElementById('improveMeasure').addEventListener('click', () => { closeSheets(); openCalib(); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheets(); });
+
 // ---------- toast: a short notice over the photo, optionally with one action (Undo) ----------
 const toastEl = document.getElementById('toast'), toastText = document.getElementById('toastText'), toastBtn = document.getElementById('toastBtn');
 let toastTimer = null, toastAction = null;
 function toast(msg, actionLabel = '', action = null, ms = 5000){
+  clearTimeout(hintTimer); hintEl.style.display = 'none';   // same spot at the bottom of the photo
   toastText.textContent = msg;
   toastBtn.textContent = actionLabel; toastBtn.hidden = !action; toastAction = action;
   toastEl.classList.add('on');
@@ -2342,8 +2403,8 @@ function openCalib(){
   if (!photoBitmap || !machine || calBtn.disabled) return;
   Object.assign(cal, { on: true, base: null, top: null, drag: null, preset: null });
   machine.visible = false; needsRender = true;                   // out of the way of what's being marked
-  clearTimeout(hintTimer); hintEl.style.display = 'none'; dimchip.style.display = 'none';
-  setMenu(false);
+  clearTimeout(hintTimer); hintEl.style.display = 'none'; sizePill.hidden = true;
+  closeSheets(); hideToast();
   dockEl.inert = true; topBar.inert = true;
   calibEl.classList.add('on'); calBar.classList.add('on');
   calUpdateStep(); renderCalib();
@@ -2354,8 +2415,9 @@ function closeCalib(){
   dockEl.inert = false; topBar.inert = false;
   hideLoupe(); renderCalib();
   if (machine) { machine.visible = true; needsRender = true; }
-  if (dimsOn && stageEl.style.display === 'block') dimchip.style.display = 'block';
+  sizePill.hidden = !pillKind;
   if (DEPTH.pendingApply) applyDepth();        // the 3D scan finished while they were marking
+  else showDepthStatus();                      // or is still running: say so again
 }
 function openCalSheet(){
   cal.preset = null; calCm.value = ''; calApply.disabled = true; calHint.textContent = '';
@@ -2382,8 +2444,7 @@ function refitCamera(){
   placeAtImageCoord(at.fx, at.fy);
   settlePlacement();
   calBtn.classList.toggle('glow', !calib.refs.length);
-  calBtn.textContent = manualRefs.length ? '📏 Calibrate again' : '📏 Calibrate size';
-  aiSet(sizedFromText(calib));
+  showSizeStatus(calib);
   needsRender = true;
   return calib;
 }
@@ -2473,19 +2534,21 @@ const chooser     = document.getElementById('chooser');
 const chooserList = document.getElementById('chooserList');
 const menu        = document.getElementById('menu');
 const menuList    = document.getElementById('menuList');
-const hamBtn      = document.getElementById('hamBtn');
+const machineChip = document.getElementById('machineChip');
 
-const optionMarkup = (k) =>
-  '<span class="thumb"><img src="' + MODELS[k].thumb + '" alt="' + MODELS[k].label + '" loading="lazy"></span>' +
-  '<span class="txt"><span class="cn">' + MODELS[k].label + '</span>' +
-  '<span class="cd">' + MODELS[k].desc + '</span></span>';
+// One card per machine: its picture, its name and one word on what it is. `end` is the chevron on
+// the first screen, the tick (shown on the current one) in the switcher.
+const optionMarkup = (k, end) =>
+  '<span class="thumb"><img src="' + MODELS[k].thumb + '" alt=""></span>' +
+  '<span class="txt"><span class="cn">' + MODELS[k].label + '</span><span class="cd">' + MODELS[k].desc + '</span></span>' +
+  '<span class="end" aria-hidden="true">' + end + '</span>';
 
 function renderLists(){
   chooserList.innerHTML = '';
   menuList.innerHTML = '';
   for (const k of Object.keys(MODELS)) {
     const a = document.createElement('button');
-    a.type = 'button'; a.className = 'choice'; a.innerHTML = optionMarkup(k);
+    a.type = 'button'; a.className = 'choice'; a.innerHTML = optionMarkup(k, '›');
     a.addEventListener('click', () => startWith(k));
     chooserList.appendChild(a);
 
@@ -2493,7 +2556,7 @@ function renderLists(){
     b.type = 'button'; b.className = 'choice';
     b.setAttribute('role', 'radio');
     b.setAttribute('aria-checked', String(k === modelKey));
-    b.innerHTML = optionMarkup(k);
+    b.innerHTML = optionMarkup(k, '✓');
     b.addEventListener('click', () => selectModel(k));
     menuList.appendChild(b);
   }
@@ -2505,10 +2568,7 @@ function syncMenuChecks(){
   });
 }
 
-function setMenu(open){
-  menu.classList.toggle('open', open);
-  hamBtn.setAttribute('aria-expanded', String(open));
-}
+function setMenu(open){ if (open) openSheet(menu); else closeSheets(); }
 
 // Switching mid-session swaps the mesh in place (see loadModel's keepPos) rather than
 // resetting the composition — there is no floor re-scan to redo here, unlike fit.html's AR
@@ -2518,46 +2578,28 @@ function selectModel(k){
   if (k === modelKey) return;
   modelKey = k;
   syncMenuChecks();
-  document.getElementById('topTtl').textContent =
-    (stageEl.style.display === 'block') ? 'Position it · then save' : 'Add the ' + machineLabel() + ' to your photo';
+  updateDimChip();
   if (started) loadModel(modelKey);
 }
 
-// First choice reveals the upload screen — the chooser is the true landing screen, so nobody
+// First choice reveals the photo screen — the chooser is the true landing screen, so nobody
 // picks a photo before deciding what they're even placing in it.
 function startWith(k){
   modelKey = k;
   syncMenuChecks();
   chooser.style.display = 'none';
-  introP.textContent = 'Take a photo of your space (or pick one), then drop the IFB ' +
-    machineLabel() + ' into it and save the picture.';
   showUpload();
 }
 
-hamBtn.addEventListener('click', () => setMenu(!menu.classList.contains('open')));
+machineChip.addEventListener('click', () => setMenu(!menu.classList.contains('open')));
 menu.addEventListener('click', (e) => { if (e.target === menu) setMenu(false); });
 renderLists();
-
-// ---------- collapsible sections inside the switcher: Model Select / Style It ----------
-// Size/Rotate/Angle used to sit directly on the composer dock, competing for space with the
-// photo itself. They now live here instead, alongside the model picker, so the composer
-// screen stays clear and shows only the photo and the placed machine.
-function makeAccordion(headEl, bodyEl){
-  headEl.addEventListener('click', () => {
-    const open = headEl.getAttribute('aria-expanded') !== 'true';
-    headEl.setAttribute('aria-expanded', String(open));
-    bodyEl.hidden = !open;
-  });
-}
-makeAccordion(document.getElementById('accModelHead'), document.getElementById('accModelBody'));
-makeAccordion(document.getElementById('accStyleHead'), document.getElementById('accStyleBody'));
 
 dimBtn.addEventListener('click', () => {
   dimsOn = !dimsOn;
   if (dimGroup) dimGroup.visible = dimsOn;
-  dimchip.style.display = (dimsOn && stageEl.style.display === 'block') ? 'block' : 'none';
-  dimBtn.style.opacity = dimsOn ? '1' : '0.5';
   dimBtn.setAttribute('aria-pressed', String(dimsOn));
+  dimBtn.setAttribute('aria-label', dimsOn ? 'Hide dimensions' : 'Show dimensions');
   needsRender = true;
 });
 
@@ -2567,6 +2609,9 @@ dimBtn.addEventListener('click', () => {
 // placement. Nothing is exposed without the flag.
 if (new URLSearchParams(location.search).has('debug')) {
   window.__phroomDebug = {
+    // still placing (AI running or the overlay up)? and what the size pill says
+    busy: () => aiBtn.disabled || busyEl.classList.contains('on'),
+    status: () => (sizePill.hidden ? '' : pillKind + ': ' + sizePillText.textContent),
     cam: () => ({ hc: +cam.hc.toFixed(3), pitchDeg: +cam.pitchDeg.toFixed(2), f35: +cam.f35.toFixed(1) }),
     labels: () => [...new Set((lastSeg || []).map((o) => o.label))],
     seg: () => lastSeg,

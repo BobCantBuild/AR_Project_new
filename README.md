@@ -34,7 +34,9 @@ its real size:
   stove, sofa, wardrobe, wall-to-ceiling), the photo's lens (EXIF) and its vertical lines.
 - **3D depth scan** when the photo has nothing of known height: a depth AI (Metric3D, 145 MB,
   WebGPU) measures the room. Downloads by itself on a computer; phones ask first.
-- **📏 Calibrate size** for an exact fit: touch the bottom and top of a door, table, counter or
+- **A size badge** on the photo always says how the size was worked out — green "Sized from the
+  door / counter / 3D scan…", or yellow "Estimated size", which offers the ways to make it exact.
+- **📏 Measure** for an exact fit: touch the bottom and top of a door, table, counter or
   anything you know the height of.
 - **In-app camera** on phones: a level, tilt guidance, and the phone's tilt saved with the
   photo — the one thing a photo can't tell the sizing by itself.
