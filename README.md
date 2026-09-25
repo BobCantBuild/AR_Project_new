@@ -29,7 +29,7 @@ Every page shows the machine at IFB's datasheet size for the Executive MXC 9014:
 Take a photo with the in-app camera or choose one, and the machine appears on your floor at
 its real size:
 - **Finds the floor** (AI segmentation) and keeps the machine on it, clear of furniture in
-  front of it; drag to move, drag the machine to turn it, long-press to place it exactly.
+  front of it; drag with one finger to move, twist with two fingers to turn, long-press to place it exactly.
 - **Sizes it from the room**: things of known height in the photo (doors, counters, fridge,
   stove, sofa, wardrobe, wall-to-ceiling), the photo's lens (EXIF) and its vertical lines.
 - **3D depth scan** when the photo has nothing of known height: a depth AI (Metric3D, 145 MB,

@@ -389,7 +389,7 @@
       <span class="t" id="sizePillText"></span><span class="more" id="sizePillMore" hidden>Fix&nbsp;›</span>
     </button>
     <span class="srOnly" id="aiStatus" role="status" aria-live="polite"></span>
-    <div class="hint" id="hint">Drag to move · drag the machine to turn it</div>
+    <div class="hint" id="hint">One finger to move · two fingers to turn</div>
     <!-- Measure: touch-and-slide markers for the bottom and top of something of known height -->
     <div id="calib" aria-hidden="true">
       <svg id="calibSvg"></svg>
@@ -1046,7 +1046,7 @@ function updateDimChip(){
 // to drag something they can't see yet just confuses.
 let hintTimer = null;
 function showDragHint(){
-  hintEl.textContent = 'Drag to move · drag the machine to turn it';
+  hintEl.textContent = 'One finger to move · two fingers to turn';
   hintEl.style.display = 'block';
   clearTimeout(hintTimer);
   hintTimer = setTimeout(() => { hintEl.style.display = 'none'; }, 3500);
@@ -1119,9 +1119,8 @@ function initThree(){
   updateCamera();
 
   // --- interaction ---
-  // One finger on the machine turns it (matching fit.html); one finger on the floor around it
-  // moves it, snapping to the AI floor mask when one is available. What the touch starts on
-  // decides which gesture it is.
+  // One finger moves the machine, snapping to the AI floor mask when there is one; two fingers
+  // turn it (see the gestures note further down).
   //
   // A plain drag always snaps to the AI's floor mask -- that's the whole point of detecting
   // the floor. But the AI can be wrong (a rug it missed, a step it called "floor" when it
@@ -1132,7 +1131,7 @@ function initThree(){
   // goes back to snapping normally. Moving before the hold completes cancels it, so a normal
   // drag can never accidentally turn into a free placement.
   const LONG_PRESS_MS = 550, LONG_PRESS_TOL = 10;   // ms to hold · px of wiggle still counted as "held still"
-  let dragMode = null, dragStartX = 0, rotBaseDeg = 0;
+  let dragMode = null;
   let downX = 0, downY = 0, longPressTimer = null;
   const toNDC = (x, y) => { ndc.set((x / window.innerWidth) * 2 - 1, -(y / stageH()) * 2 + 1); };
   const hitsMachine = (x, y) => {
@@ -1180,24 +1179,44 @@ function initThree(){
     if (!floorMask || placementOk(tx, tz)) { lastValidX = tx; lastValidZ = tz; }
   };
   const clearLongPress = () => { clearTimeout(longPressTimer); longPressTimer = null; };
-  // Same mapping as fit.html: a swipe across the full screen width is one full turn. The
-  // Rotate slider follows along, since applyRotation() reads its value as the source of truth.
-  const turnTo = (x) => {
+  // Turning: the Turn slider is the source of truth (applyRotation() reads it), so set that.
+  const setTurn = (deg) => {
     if (!machine) return;
-    let deg = rotBaseDeg + ((x - dragStartX) / window.innerWidth) * 360;
     deg = ((deg % 360) + 360) % 360;
     sRot.value = Math.round(deg);
     vRot.textContent = sRot.value + '°';
     applyRotation();
     needsRender = true;
   };
+  // Gestures: ONE finger moves the machine -- from anywhere on the floor it jumps to the finger,
+  // and when the finger starts on the machine itself it's carried along from where it was
+  // grabbed (no jump). TWO fingers twist to turn it, like turning an object on a table: the
+  // machine turns by as much as the line between the fingers does. A mouse wheel turns it on a
+  // computer. Long-press still places it exactly under the finger, floor mask or not.
+  const touches = new Map();                         // pointerId -> {x, y}
+  let grabDX = 0, grabDY = 0, twistBase = 0, twistRot = 0, downAt = 0, preGesture = null;
+  const twistAngle = () => { const [a, b] = [...touches.values()]; return Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI; };
   glCanvas.addEventListener('pointerdown', (e) => {
     glCanvas.setPointerCapture(e.pointerId);
-    if (machine && hitsMachine(e.clientX, e.clientY)) {
-      dragMode = 'turn'; dragStartX = e.clientX; rotBaseDeg = +sRot.value;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.size >= 2) {                         // second finger: stop moving, start turning
+      clearLongPress();
+      if (touches.size === 2 && machine) {
+        // Two fingers never land at exactly the same instant, and the first one's touch already
+        // moved the machine to it -- a second finger soon after means it was a twist all along.
+        if (preGesture && performance.now() - downAt < 400) { machine.position.copy(preGesture.pos); freePlaced = preGesture.free; needsRender = true; }
+        dragMode = 'twist'; twistBase = twistAngle(); twistRot = +sRot.value;
+      }
       return;
     }
-    downX = e.clientX; downY = e.clientY;
+    downX = e.clientX; downY = e.clientY; downAt = performance.now();
+    preGesture = machine ? { pos: machine.position.clone(), free: freePlaced } : null;
+    grabDX = grabDY = 0;
+    if (machine && hitsMachine(e.clientX, e.clientY)) {
+      // carry it from where it was grabbed: keep the offset between the finger and its base
+      const b = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z));
+      grabDX = b.x - e.clientX; grabDY = b.y - e.clientY;
+    }
     if (floorLocking) {
       // Floor detection for this photo hasn't finished yet — there's no floorMask to snap a
       // plain drag to, so ignore it (see the note by the flag's declaration). A long press
@@ -1205,7 +1224,7 @@ function initThree(){
       // themselves, floor mask or not, so that's honoured even during the lock.
       dragMode = null;
     } else {
-      dragMode = 'move'; moveTo(e.clientX, e.clientY);
+      dragMode = 'move'; moveTo(e.clientX + grabDX, e.clientY + grabDY);
     }
     clearLongPress();
     longPressTimer = setTimeout(() => {
@@ -1217,14 +1236,41 @@ function initThree(){
     }, LONG_PRESS_MS);
   });
   glCanvas.addEventListener('pointermove', (e) => {
-    if (dragMode === 'turn') { turnTo(e.clientX); return; }
+    if (!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (dragMode === 'twist') {
+      if (touches.size >= 2) {
+        let d = twistAngle() - twistBase; d = ((d + 540) % 360) - 180;   // shortest way round
+        setTurn(twistRot - d);                       // clockwise twist on screen = clockwise from above
+      }
+      return;
+    }
+    if (touches.size > 1) return;
     if (dragMode === 'free') { placeRaw(e.clientX, e.clientY); return; }
     // Moved more than a light wiggle since pointerdown → this is a drag, not a held press.
     if (longPressTimer && Math.hypot(e.clientX - downX, e.clientY - downY) > LONG_PRESS_TOL) clearLongPress();
-    if (dragMode === 'move') moveTo(e.clientX, e.clientY);
+    if (dragMode === 'move') moveTo(e.clientX + grabDX, e.clientY + grabDY);
   });
-  glCanvas.addEventListener('pointerup',     () => { if (dragMode === 'turn') settlePlacement(); dragMode = null; clearLongPress(); });
-  glCanvas.addEventListener('pointercancel', () => { dragMode = null; clearLongPress(); });
+  const endPointer = (e) => {
+    touches.delete(e.pointerId);
+    clearLongPress();
+    if (dragMode === 'twist') {
+      if (touches.size >= 2) { twistBase = twistAngle(); twistRot = +sRot.value; return; }   // a third finger lifted
+      settlePlacement();                             // a turn can swing the footprint into furniture
+      dragMode = touches.size ? 'none' : null;       // one finger still down: don't let it start moving
+      return;
+    }
+    if (!touches.size) dragMode = null;
+  };
+  glCanvas.addEventListener('pointerup', endPointer);
+  glCanvas.addEventListener('pointercancel', endPointer);
+  glCanvas.addEventListener('wheel', (e) => {
+    if (!machine || cal.on) return;
+    e.preventDefault();
+    setTurn(+sRot.value + (e.deltaY > 0 ? 5 : -5));
+    clearTimeout(glCanvas._wheelSettle);
+    glCanvas._wheelSettle = setTimeout(settlePlacement, 250);
+  }, { passive: false });
 
   // render loop (renders only when something changed)
   const tick = () => {
