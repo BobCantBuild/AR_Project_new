@@ -1187,11 +1187,13 @@ function initThree(){
     applyRotation();
     needsRender = true;
   };
-  // Gestures: ONE finger moves the machine -- from anywhere on the floor it jumps to the finger,
-  // and when the finger starts on the machine itself it's carried along from where it was
-  // grabbed (no jump). TWO fingers twist to turn it, like turning an object on a table: the
-  // machine turns by as much as the line between the fingers does. A mouse wheel turns it on a
-  // computer. Long-press still places it exactly under the finger, floor mask or not.
+  // Gestures: ONE finger moves the machine, but only once it actually drags -- a plain tap
+  // anywhere on the floor no longer teleports it there. Starting on the machine itself carries
+  // it along from where it was grabbed (no jump); starting elsewhere waits for the finger to
+  // move past LONG_PRESS_TOL before the machine starts following it. TWO fingers twist to turn
+  // it, like turning an object on a table: the machine turns by as much as the line between the
+  // fingers does. A mouse wheel turns it on a computer. Long-press still places it exactly under
+  // the finger, floor mask or not.
   const touches = new Map();                         // pointerId -> {x, y}
   let grabDX = 0, grabDY = 0, twistBase = 0, twistRot = 0, downAt = 0, preGesture = null;
   const twistAngle = () => { const [a, b] = [...touches.values()]; return Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI; };
@@ -1211,7 +1213,8 @@ function initThree(){
     downX = e.clientX; downY = e.clientY; downAt = performance.now();
     preGesture = machine ? { pos: machine.position.clone(), free: freePlaced } : null;
     grabDX = grabDY = 0;
-    if (machine && hitsMachine(e.clientX, e.clientY)) {
+    const grabbedMachine = !!(machine && hitsMachine(e.clientX, e.clientY));
+    if (grabbedMachine) {
       // carry it from where it was grabbed: keep the offset between the finger and its base
       const b = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z));
       grabDX = b.x - e.clientX; grabDY = b.y - e.clientY;
@@ -1222,8 +1225,13 @@ function initThree(){
       // still works though: holding still is the customer explicitly asking to place it
       // themselves, floor mask or not, so that's honoured even during the lock.
       dragMode = null;
-    } else {
+    } else if (grabbedMachine) {
+      // Grabbed the machine itself: carry it from here right away, no jump.
       dragMode = 'move'; moveTo(e.clientX + grabDX, e.clientY + grabDY);
+    } else {
+      // Touched empty floor: don't jump the machine there on a plain tap -- wait for the
+      // finger to actually drag (see pointermove) before it starts following it.
+      dragMode = 'pending';
     }
     clearLongPress();
     longPressTimer = setTimeout(() => {
@@ -1247,7 +1255,14 @@ function initThree(){
     if (touches.size > 1) return;
     if (dragMode === 'free') { placeRaw(e.clientX, e.clientY); return; }
     // Moved more than a light wiggle since pointerdown → this is a drag, not a held press.
-    if (longPressTimer && Math.hypot(e.clientX - downX, e.clientY - downY) > LONG_PRESS_TOL) clearLongPress();
+    const dragged = Math.hypot(e.clientX - downX, e.clientY - downY) > LONG_PRESS_TOL;
+    if (longPressTimer && dragged) clearLongPress();
+    if (dragMode === 'pending') {
+      // A tap on empty floor doesn't move the machine -- only promote to 'move' once the
+      // finger has actually dragged, so it starts following from here, not from the tap.
+      if (!dragged) return;
+      dragMode = 'move';
+    }
     if (dragMode === 'move') moveTo(e.clientX + grabDX, e.clientY + grabDY);
   });
   const endPointer = (e) => {
