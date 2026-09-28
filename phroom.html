@@ -428,8 +428,8 @@
       </div>
       <div class="slider"><label for="sRot">Angle</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
       <div class="sheetBtns">
-        <button class="btn dark" id="rotL" type="button">↺ 90°</button>
-        <button class="btn dark" id="rotR" type="button">↻ 90°</button>
+        <button class="btn dark" id="rotL" type="button">↺ 45°</button>
+        <button class="btn dark" id="rotR" type="button">↻ 45°</button>
       </div>
       <!-- size and camera tilt stay automatic (real size, fitted tilt); kept for the code that reads them -->
       <div hidden>
@@ -2306,10 +2306,10 @@ function closeSheets(){
 }
 for (const el of [adjustEl, improveEl]) el.addEventListener('click', (e) => { if (e.target === el) closeSheets(); });
 document.getElementById('adjustBtn').addEventListener('click', () => openSheet(adjustEl));
-// quick quarter turns in the Rotate sheet
+// quick 45° turns in the Rotate sheet
 const turnBy = (d) => { sRot.value = ((+sRot.value + d) % 360 + 360) % 360; sRot.dispatchEvent(new Event('input')); sRot.dispatchEvent(new Event('change')); };
-document.getElementById('rotL').addEventListener('click', () => turnBy(90));
-document.getElementById('rotR').addEventListener('click', () => turnBy(-90));
+document.getElementById('rotL').addEventListener('click', () => turnBy(45));
+document.getElementById('rotR').addEventListener('click', () => turnBy(-45));
 document.getElementById('adjustDone').addEventListener('click', closeSheets);
 document.getElementById('improveMeasure').addEventListener('click', () => { closeSheets(); openCalib(); });
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheets(); });
