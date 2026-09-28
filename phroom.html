@@ -740,8 +740,21 @@ if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && matchMedia(
 // Device orientation -> how far the back camera points below the horizon, and how far the picture
 // is rolled. The phone's "up" in its own frame is (-cosβ·sinγ, sinβ, cosβ·cosγ); the back camera looks
 // along -z, so its down-tilt is asin(cosβ·cosγ) -- the same in portrait and landscape.
+// The video's own intrinsic size follows the phone's physical rotation (mobile browsers rotate
+// the frame to match, same as the final captured photo does -- see photoIsPortrait()), so this
+// is a direct read of how the phone is currently held, no separate orientation API needed.
+function camIsLandscape(){ return camVideo.videoWidth > camVideo.videoHeight; }
 function onOrient(e){
   if (e.beta == null || e.gamma == null) return;
+  // Landscape shots aren't supported downstream (placement/calibration assume a portrait
+  // photo) -- gate the shutter shut and tell the customer to rotate back, instead of letting
+  // them take one that won't work.
+  if (camIsLandscape()) {
+    shutter.disabled = true;
+    camHint.textContent = 'Rotate your phone to portrait to take the photo';
+    return;
+  }
+  shutter.disabled = false;
   const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
   const ux = -Math.cos(b) * Math.sin(g), uy = Math.sin(b), uz = Math.cos(b) * Math.cos(g);
   const scr = (screen.orientation && screen.orientation.angle) || +window.orientation || 0;
@@ -772,13 +785,22 @@ async function openCamera(){
   Object.assign(tilt, { pitch: null, roll: null, hist: [] });
   camHint.textContent = 'Show the floor where the machine would go';
   camTilt.textContent = ''; camHorizon.classList.remove('on');
+  shutter.disabled = false;
   camVideo.srcObject = camStream;
   camView.hidden = false;
   window.addEventListener('deviceorientation', onOrient);
+  // Fires whenever the video's intrinsic width/height change -- the only signal on devices with
+  // no motion sensor (or that denied the motion-permission prompt), where onOrient never runs.
+  camVideo.addEventListener('resize', onVideoResize);
   camVideo.play().catch(() => {});
+}
+function onVideoResize(){
+  if (camIsLandscape()) { shutter.disabled = true; camHint.textContent = 'Rotate your phone to portrait to take the photo'; }
+  else if (tilt.pitch == null) { shutter.disabled = false; }   // no tilt reading yet to judge angle by -- just clear the rotate warning
 }
 function closeCamera(){
   window.removeEventListener('deviceorientation', onOrient);
+  camVideo.removeEventListener('resize', onVideoResize);
   if (camStream) camStream.getTracks().forEach((t) => t.stop());
   camStream = null; camVideo.srcObject = null; camView.hidden = true;
 }
@@ -788,7 +810,7 @@ document.getElementById('camGallery').addEventListener('click', () => { closeCam
 document.addEventListener('visibilitychange', () => { if (document.hidden && camStream) closeCamera(); });
 shutter.addEventListener('click', async () => {
   const w = camVideo.videoWidth, h = camVideo.videoHeight;
-  if (!w || !h) return;
+  if (!w || !h || w > h) return;                     // landscape: shouldn't have been clickable, but don't capture it either way
   shutter.disabled = true;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   c.getContext('2d').drawImage(camVideo, 0, 0, w, h);
