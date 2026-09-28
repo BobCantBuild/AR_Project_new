@@ -1969,7 +1969,11 @@ function calibrateCamera(out, manual = [], depth = null){
 // wall-to-ceiling height, itself just a typical figure. depthMode() says when it may download by
 // itself and when the customer is asked first.
 const DEPTH = { loaded: false, cached: false, failed: false, offer: false, pct: null, busyToken: null, queue: Promise.resolve(), pendingApply: false, lastFit: null };
-const depthCall = aiChannel((pct) => { DEPTH.pct = pct; showDepthStatus(); }, () => { DEPTH.loaded = false; });
+const depthCall = aiChannel((pct) => {
+  DEPTH.pct = pct;
+  if (pct >= 100) DEPTH.t0 = performance.now();                // downloaded: the estimate starts now
+  showDepthStatus();
+}, () => { DEPTH.loaded = false; });
 let lastDepth = null;       // this photo's depth map {width, height, data}, canonical (see depthFloorCamera)
 let photoToken = 0;         // bumped for every new photo, so a late depth result can't land on the next one
 const DEPTH_MODEL_URL = 'https://huggingface.co/onnx-community/metric3d-vit-small/resolve/main/onnx/model.onnx';
@@ -2093,7 +2097,6 @@ async function runAIPlace(){
   if (!photoBitmap || !machine) { aiSet('Load a photo first.'); floorLocking = false; return; }
   aiBtn.disabled = true; calBtn.disabled = true;
   freePlaced = false;
-  let depthCheck = null;
   // Keep the machine out of sight until it's been sized and placed -- otherwise it sits at a
   // default spot and size for several seconds and then visibly jumps.
   machine.visible = false; needsRender = true;
@@ -2134,7 +2137,6 @@ async function runAIPlace(){
     sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
     updateCamera();
     matchLighting();
-    depthCheck = calib;                       // see finally: once the machine is showing, maybe a 3D pass
     let p = autoFloorPoint();
     placeAtImageCoord(p.fx, p.fy);
     // Say what the size was judged from -- or that nothing in view could anchor it, with Measure
@@ -2150,6 +2152,9 @@ async function runAIPlace(){
       if (fitted) placeAtImageCoord(fitted.fx, fitted.fy);
       else toast('No open floor big enough clear of the furniture — long-press where you want it.', '', null, 7000);
     }
+    // Where the photo gave no firm ruler, the 3D scan runs now, before the machine is shown, so it
+    // appears once, at its final size, instead of appearing and then changing.
+    await depthStep(calib);
   } catch (e) {
     console.warn('Room AI failed:', e);
     warnPill('Room AI unavailable', 'The room AI couldn’t run here — drag the machine into place by hand.');
@@ -2161,7 +2166,6 @@ async function runAIPlace(){
     // let the AI's view of the room linger a beat as the machine appears, then fade it
     setTimeout(() => scanEl.classList.remove('show'), 1400);
     showDragHint();
-    if (depthCheck) maybeDepth(depthCheck);
   }
 }
 // Reset: back where the AI placed it, facing the starting way
@@ -2185,33 +2189,47 @@ async function depthCached(){
   try { DEPTH.cached = !!(await (await caches.open('transformers-cache')).match(DEPTH_MODEL_URL)); } catch (e) { DEPTH.cached = false; }
   return DEPTH.cached;
 }
-// After the automatic placement: is a depth pass worth it for this photo, and may it run by itself?
-async function maybeDepth(calib){
+// Part of placing: is a 3D pass worth it for this photo, and may it run by itself? If so it runs
+// here, on the progress overlay, and placing waits for it -- up to a minute, so a slow first-time
+// download can't hold the machine back for ever (it then finishes in the background).
+async function depthStep(calib){
   DEPTH.offer = false;
   if (lastDepth || manualRefs.length) return;                   // done already / the customer's own marks win
   if (calib.refs.some((r) => r !== WALL_REF.name)) return;      // a door, counter, sofa... already sized it
   const token = photoToken, mode = await depthMode();
   if (token !== photoToken) return;
-  if (mode === 'auto') refineWithDepth();
-  else if (mode === 'offer' && !calib.refs.length) DEPTH.offer = true;   // the estimate's pill now offers it
+  if (mode === 'offer') { if (!calib.refs.length) DEPTH.offer = true; return; }
+  if (mode !== 'auto') return;
+  setBusy('depth', '📏', 'Measuring your room…', '', 0);
+  const tick = setInterval(showDepthStatus, 250);
+  try { await Promise.race([refineWithDepth(), new Promise((r) => setTimeout(r, 60000))]); }
+  finally { clearInterval(tick); }
 }
 depthOfferEl.addEventListener('click', () => { closeSheets(); refineWithDepth(); });
-// While the scan works the size pill says so -- with the download's progress the first time. (A
-// cached model reports "progress" too, while it's read back from disk.)
+// The overlay while the scan works: the download's progress the first time, then a bar and the
+// time left, estimated from the last run on this device (the very first run also sets up the
+// GPU, ~8 s). A cached model reports "progress" too, while it's read back from disk.
 function showDepthStatus(){
-  if (DEPTH.busyToken === null || DEPTH.busyToken !== photoToken || cal.on) return;
-  setPill('work', DEPTH.pct !== null && DEPTH.pct < 100
-    ? (DEPTH.cached ? 'Loading the 3D AI… ' : 'Downloading the 3D AI… ') + DEPTH.pct + '%'
-    : 'Measuring your room in 3D…');
+  if (DEPTH.busyToken === null || DEPTH.busyToken !== photoToken || busyStep !== 'depth') return;
+  // not loaded yet: no countdown until there's something to count (the download, then the run)
+  if (!DEPTH.loaded && (DEPTH.pct === null || DEPTH.pct < 100)) {
+    const dl = DEPTH.pct !== null && !DEPTH.cached;
+    setBusy('depth', '📏', 'Getting ready…' + (dl ? ' ' + DEPTH.pct + '%' : ''), dl ? 'A one-time download — after this it’s quick' : '', dl ? DEPTH.pct : null);
+    return;
+  }
+  const est = DEPTH.loaded ? (DEPTH.lastMs || 2500) : 8000, el = performance.now() - DEPTH.t0, left = Math.ceil((est - el) / 1000);
+  setBusy('depth', '📏', 'Measuring your room…', left > 0 ? 'About ' + left + ' s left' : 'Almost done…', Math.min(95, 100 * el / est));
 }
 function refineWithDepth(){
   const token = photoToken, url = photoInputURL(768);   // the model reads ~518 px anyway
   DEPTH.offer = false;
-  DEPTH.busyToken = token; DEPTH.pct = null; showDepthStatus();
+  const warm = DEPTH.loaded;
+  DEPTH.busyToken = token; DEPTH.pct = null; DEPTH.t0 = performance.now(); showDepthStatus();
   // one photo at a time: a second run can't share the model while the first is on it
   const job = DEPTH.queue.then(() => depthCall({ type: 'depth', image: url }));
   DEPTH.queue = job.catch(() => {});
-  job.then((r) => {
+  return job.then((r) => {
+    if (warm) DEPTH.lastMs = performance.now() - DEPTH.t0;       // for the next estimate
     DEPTH.loaded = true;
     if (token !== photoToken) return;                           // they've moved on to another photo
     lastDepth = { width: r.width, height: r.height, data: r.data };
