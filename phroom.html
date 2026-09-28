@@ -144,21 +144,6 @@
   #gl{touch-action:none}
   #dock{display:none}
   #dock[inert]{opacity:.35}
-  /* How the machine's size was worked out: the one status on the photo, and -- when it's only an
-     estimate -- the way to make it exact. */
-  .sizePill{position:absolute;left:50%;top:calc(env(safe-area-inset-top,0px) + 62px);transform:translateX(-50%);z-index:8;
-    appearance:none;display:flex;align-items:center;gap:8px;max-width:calc(100% - 24px);padding:8px 14px;border-radius:999px;
-    color:#fff;font-size:12.5px;font-weight:700;white-space:nowrap;cursor:default;
-    background:rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.2);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-  .sizePill .t{overflow:hidden;text-overflow:ellipsis}
-  .sizePill .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--go);box-shadow:0 0 8px var(--go)}
-  .sizePill.est .dot{background:var(--accent);box-shadow:0 0 8px var(--accent)}
-  .sizePill.warn .dot{background:var(--warn);box-shadow:none}
-  .sizePill .spin{display:none}
-  .sizePill.work .dot{display:none}
-  .sizePill.work .spin{display:block}
-  .sizePill.tap{cursor:pointer;border-color:rgba(255,204,0,.55)}
-  .sizePill .more{flex:none;color:var(--accent)}
   .spin{flex:none;width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   .hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:7;display:none;max-width:calc(100% - 24px);
@@ -383,11 +368,6 @@
     <canvas id="bg"></canvas>
     <canvas id="scan"></canvas>
     <canvas id="gl"></canvas>
-    <!-- how the size was worked out; taps through to making it exact when it's only an estimate -->
-    <button class="sizePill" id="sizePill" type="button" hidden>
-      <span class="dot" aria-hidden="true"></span><span class="spin" aria-hidden="true"></span>
-      <span class="t" id="sizePillText"></span><span class="more" id="sizePillMore" hidden>Fix&nbsp;›</span>
-    </button>
     <span class="srOnly" id="aiStatus" role="status" aria-live="polite"></span>
     <div class="hint" id="hint">One finger to move · two fingers to turn</div>
     <!-- Measure: touch-and-slide markers for the bottom and top of something of known height -->
@@ -2241,27 +2221,22 @@ function refineWithDepth(){
     DEPTH.fails = (DEPTH.fails || 0) + 1;
     if (/no-webgpu/.test(e.message) || DEPTH.fails >= 2) DEPTH.failed = true;   // don't keep trying (and saying so) every photo
     if (token === photoToken) {
-      toast('The 3D scan couldn’t run here — 📏 Measure gives an exact size.', '', null, 6000);
       if (lastCalib) showSizeStatus(lastCalib);                 // back to saying it's an estimate
     }
   }).finally(() => {
     if (DEPTH.busyToken === token) DEPTH.busyToken = null;
   });
 }
-// Refit with the scan and say what it did. Nothing changes if the floor didn't scan cleanly.
+// Refit with the scan. Nothing changes if the floor didn't scan cleanly.
 function applyDepth(){
   DEPTH.pendingApply = false;
   if (!machine || !lastDepth) return;
-  const h0 = machineHeightAt(machinePhotoPoint().fy);
   const calib = refitCamera();
   if (!calib) return;
   if (!calib.refs.includes(DEPTH_REF.name)) {
-    toast('The 3D scan couldn’t read this floor clearly — 📏 Measure gives an exact size.', '', null, 6000);
-    return;
+    console.warn('3D scan: the floor didn’t come out as one clean plane -- size left as it was');
   }
-  const h1 = machineHeightAt(machinePhotoPoint().fy);
-  const change = h0 && h1 ? h1 / h0 - 1 : 0;
-  toast(Math.abs(change) < 0.03 ? 'A 3D scan of your room agrees with this size ✓' : 'Size fine-tuned with a 3D scan of your room ✓');
+  // a background job: the size just settles, nothing is announced
 }
 // On-screen height (share of the photo's height) of the machine standing with its front edge at row
 // v, under camera c -- what the sizing is ultimately about.
@@ -2292,24 +2267,12 @@ function settlePlacement(){
 sSize.addEventListener('change', settlePlacement);
 sRot.addEventListener('change', settlePlacement);
 
-// ---------- the size pill: how the machine's size was worked out ----------
-// The one status on the photo, so the customer always knows how far to trust the size. Green:
-// sized from something in the room, a 3D scan, or their own measurement. Yellow: a best guess --
-// tap it for the ways to make it exact. Red: a problem with the photo. A spinner while the 3D
-// scan works.
-const sizePill = document.getElementById('sizePill'), sizePillText = document.getElementById('sizePillText');
-const sizePillMore = document.getElementById('sizePillMore');
-let pillKind = null, pillAction = null, lastCalib = null;
-function setPill(kind, text = '', action = null){
-  pillKind = kind; pillAction = action;
-  if (!kind) { sizePill.hidden = true; return; }
-  sizePill.className = 'sizePill ' + kind + (action && kind !== 'ok' ? ' tap' : '');
-  sizePillText.textContent = text;
-  sizePillMore.hidden = !action || kind === 'ok';
-  sizePill.hidden = cal.on;                         // out of the way while measuring
-  aiSet(text);                                      // and said to screen readers
-}
-sizePill.addEventListener('click', () => { if (pillAction) pillAction(); });
+// ---------- sizing status: kept, not shown ----------
+// How the size was worked out (a detected object, the 3D scan, the customer's measurement, or a
+// best guess) is a background job -- the customer isn't told. The state is still kept for Measure's
+// flow and the debug hook.
+let pillKind = null, pillText = '', pillAction = null, lastCalib = null;
+function setPill(kind, text = '', action = null){ pillKind = kind; pillText = text; pillAction = action; }
 function warnPill(short, long){ setPill('warn', short); if (long) toast(long, '', null, 7000); }
 // In words people use: it's the ceiling height the wall reference measures
 const REF_WORDS = { 'wall height': 'ceiling height', '3D depth scan': '3D scan', 'kitchen counter': 'counter', 'washing machine': 'washer' };
@@ -2465,7 +2428,7 @@ function openCalib(){
   if (!photoBitmap || !machine || calBtn.disabled) return;
   Object.assign(cal, { on: true, base: null, top: null, drag: null, preset: null });
   machine.visible = false; needsRender = true;                   // out of the way of what's being marked
-  clearTimeout(hintTimer); hintEl.style.display = 'none'; sizePill.hidden = true;
+  clearTimeout(hintTimer); hintEl.style.display = 'none';
   closeSheets(); hideToast();
   dockEl.inert = true; topBar.inert = true;
   calibEl.classList.add('on'); calBar.classList.add('on');
@@ -2477,7 +2440,6 @@ function closeCalib(){
   dockEl.inert = false; topBar.inert = false;
   hideLoupe(); renderCalib();
   if (machine) { machine.visible = true; needsRender = true; }
-  sizePill.hidden = !pillKind;
   if (DEPTH.pendingApply) applyDepth();        // the 3D scan finished while they were marking
   else showDepthStatus();                      // or is still running: say so again
 }
@@ -2673,7 +2635,7 @@ if (new URLSearchParams(location.search).has('debug')) {
   window.__phroomDebug = {
     // still placing (AI running or the overlay up)? and what the size pill says
     busy: () => aiBtn.disabled || busyEl.classList.contains('on'),
-    status: () => (sizePill.hidden ? '' : pillKind + ': ' + sizePillText.textContent),
+    status: () => (pillKind ? pillKind + ': ' + pillText : ''),
     cam: () => ({ hc: +cam.hc.toFixed(3), pitchDeg: +cam.pitchDeg.toFixed(2), f35: +cam.f35.toFixed(1) }),
     labels: () => [...new Set((lastSeg || []).map((o) => o.label))],
     seg: () => lastSeg,
