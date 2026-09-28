@@ -616,17 +616,25 @@ const busyText = document.getElementById('busyText'), busySub = document.getElem
 const busyBar = document.getElementById('busyBar'), busyFill = document.getElementById('busyFill');
 let busyStep = null;   // which step owns the overlay, so one step finishing can't hide another's
 // pct: 0-100 for a download with known size, null for "working, no idea how long"
+// Each step's emoji cycles through a small themed set while it bobs, so the card never looks still.
+const BUSY_EMOJI = { model: ['🧺', '🫧', '👕'], ai: ['⏳', '⌛'], seg: ['🔍', '🛋️', '🚪'], measure: ['📏', '📐'], depth: ['📏', '📐'] };
+let busyCycle = null;
 function setBusy(step, emoji, text, sub = '', pct = null){
   if (busyStep !== step) {                   // restart the bob so each new step visibly pops in
     busyEmoji.style.animation = 'none'; void busyEmoji.offsetWidth; busyEmoji.style.animation = '';
+    const set = BUSY_EMOJI[step] || [emoji];
+    let i = 0; busyEmoji.textContent = set[0];
+    clearInterval(busyCycle);
+    if (set.length > 1 && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+      busyCycle = setInterval(() => { busyEmoji.textContent = set[++i % set.length]; }, 1100);   // one change per bob
   }
   busyStep = step;
-  busyEmoji.textContent = emoji; busyText.textContent = text; busySub.textContent = sub;
+  busyText.textContent = text; busySub.textContent = sub;
   busyBar.classList.toggle('det', pct !== null);
   busyFill.style.width = pct === null ? '' : Math.max(4, Math.min(100, pct)) + '%';
   busyEl.classList.add('on');
 }
-function hideBusy(step){ if (step && busyStep !== step) return; busyStep = null; busyEl.classList.remove('on'); }
+function hideBusy(step){ if (step && busyStep !== step) return; busyStep = null; clearInterval(busyCycle); busyEl.classList.remove('on'); }
 // Resolves once the browser has painted: the AI and the camera fit both block the main thread, so
 // without this a new step's text would never get on screen before the wait it's describing.
 // (With a timer as well: a hidden page -- the customer switched apps mid-way -- paints nothing and
