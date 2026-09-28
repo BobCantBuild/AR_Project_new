@@ -432,22 +432,30 @@
   </section>
 
   <div class="bar" id="dock">
-    <button class="btn" id="calBtn" type="button"><span class="ic">📏</span>Measure</button>
-    <button class="btn" id="adjustBtn" type="button" aria-haspopup="dialog"><span class="ic">⚙️</span>Adjust</button>
+    <!-- Measure lives on the size pill now (tap it); the button stays for its state, out of sight -->
+    <button class="btn" id="calBtn" type="button" hidden><span class="ic">📏</span>Measure</button>
+    <button class="btn" id="adjustBtn" type="button" aria-haspopup="dialog"><span class="ic">↻</span>Rotate</button>
+    <button class="btn" id="aiBtn" type="button"><span class="ic">↺</span>Reset</button>
     <button class="btn go" id="save" type="button"><span class="ic">💾</span>Save</button>
   </div>
 
-  <!-- Adjust: turn / size / camera tilt by hand, or put it back where the AI placed it -->
+  <!-- Rotate: turn the machine by hand (two fingers on the photo do the same) -->
   <div class="sheetWrap" id="adjust">
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="adjustTitle">
       <div class="sheetHead">
-        <span class="sheetTitle" id="adjustTitle">Adjust</span>
+        <span class="sheetTitle" id="adjustTitle">Rotate</span>
         <button class="btn small" id="adjustDone" type="button">Done</button>
       </div>
-      <div class="slider"><label for="sRot">Turn</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
-      <div class="slider"><label for="sSize">Size</label><input id="sSize" type="range" min="40" max="200" value="100"><span class="val" id="vSize">≈87.5cm</span></div>
-      <div class="slider"><label for="sAng">Camera tilt</label><input id="sAng" type="range" min="-10" max="45" value="12"><span class="val" id="vAng">12°</span></div>
-      <button class="btn dark" id="aiBtn" type="button"><span class="ic">↺</span>Reset position</button>
+      <div class="slider"><label for="sRot">Angle</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
+      <div class="sheetBtns">
+        <button class="btn dark" id="rotL" type="button">↺ 90°</button>
+        <button class="btn dark" id="rotR" type="button">↻ 90°</button>
+      </div>
+      <!-- size and camera tilt stay automatic (real size, fitted tilt); kept for the code that reads them -->
+      <div hidden>
+        <input id="sSize" type="range" min="40" max="200" value="100"><span id="vSize">≈87.5cm</span>
+        <input id="sAng" type="range" min="-10" max="45" value="12"><span id="vAng">12°</span>
+      </div>
     </div>
   </div>
 
@@ -640,7 +648,9 @@ function setBusy(step, emoji, text, sub = '', pct = null){
 function hideBusy(step){ if (step && busyStep !== step) return; busyStep = null; busyEl.classList.remove('on'); }
 // Resolves once the browser has painted: the AI and the camera fit both block the main thread, so
 // without this a new step's text would never get on screen before the wait it's describing.
-const nextPaint = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+// (With a timer as well: a hidden page -- the customer switched apps mid-way -- paints nothing and
+// would otherwise stop right here until they came back.)
+const nextPaint = () => new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(r)); setTimeout(r, 150); });
 
 // ---------- upload flow ----------
 const readingEl = document.getElementById('reading'), qnotesEl = document.getElementById('qnotes');
@@ -2174,7 +2184,8 @@ async function runAIPlace(){
     if (depthCheck) maybeDepth(depthCheck);
   }
 }
-aiBtn.addEventListener('click', () => { closeSheets(); runAIPlace(); });   // "Reset position" in Adjust
+// Reset: back where the AI placed it, facing the starting way
+aiBtn.addEventListener('click', () => { closeSheets(); sRot.value = 20; sRot.dispatchEvent(new Event('input')); runAIPlace(); });
 
 // ---------- 3D depth pass: when it runs, and what the customer sees (see depthFloorCamera) ----------
 const depthOfferEl = document.getElementById('depthOffer');
@@ -2292,9 +2303,9 @@ let pillKind = null, pillAction = null, lastCalib = null;
 function setPill(kind, text = '', action = null){
   pillKind = kind; pillAction = action;
   if (!kind) { sizePill.hidden = true; return; }
-  sizePill.className = 'sizePill ' + kind + (action ? ' tap' : '');
+  sizePill.className = 'sizePill ' + kind + (action && kind !== 'ok' ? ' tap' : '');
   sizePillText.textContent = text;
-  sizePillMore.hidden = !action;
+  sizePillMore.hidden = !action || kind === 'ok';
   sizePill.hidden = cal.on;                         // out of the way while measuring
   aiSet(text);                                      // and said to screen readers
 }
@@ -2307,7 +2318,7 @@ function showSizeStatus(calib){
   if (calib.manual) {
     const m = manualRefs[manualRefs.length - 1];
     setPill('ok', manualRefs.length > 1 ? 'Exact size · from your ' + manualRefs.length + ' measurements'
-      : 'Exact size · from your ' + (m.name ? m.name + ' (' + Math.round(m.H * 100) + ' cm)' : Math.round(m.H * 100) + ' cm measurement'));
+      : 'Exact size · from your ' + (m.name ? m.name + ' (' + Math.round(m.H * 100) + ' cm)' : Math.round(m.H * 100) + ' cm measurement'), openCalib);
     return;
   }
   // real objects first; the ceiling height (only a typical figure) and the scan after them
@@ -2316,9 +2327,10 @@ function showSizeStatus(calib){
   if (!refs.length) { setPill('est', 'Estimated size', openImprove); return; }
   const list = refs.length > 3 ? refs.slice(0, 2).join(', ') + ' + ' + (refs.length - 2) + ' more'
     : refs.length > 1 ? refs.slice(0, -1).join(', ') + ' & ' + refs[refs.length - 1] : refs[0];
-  setPill('ok', 'Sized from ' + (refs.length === 1 && refs[0] === '3D scan' ? 'a 3D scan of the room' : 'the ' + list));
+  setPill('ok', 'Sized from ' + (refs.length === 1 && refs[0] === '3D scan' ? 'a 3D scan of the room' : 'the ' + list), openCalib);
 }
-// Making an estimate exact: straight to Measure, or -- where the 3D scan is on offer (a phone that
+// Measure is reached from the pill: tapping it always starts measuring, and an estimate says so
+// ('Fix ›'). Making an estimate exact: straight to Measure, or -- where the 3D scan is on offer (a phone that
 // hasn't downloaded it) -- a choice of the two.
 function openImprove(){ if (DEPTH.offer) openSheet(improveEl); else openCalib(); }
 
@@ -2331,6 +2343,10 @@ function closeSheets(){
 }
 for (const el of [adjustEl, improveEl]) el.addEventListener('click', (e) => { if (e.target === el) closeSheets(); });
 document.getElementById('adjustBtn').addEventListener('click', () => openSheet(adjustEl));
+// quick quarter turns in the Rotate sheet
+const turnBy = (d) => { sRot.value = ((+sRot.value + d) % 360 + 360) % 360; sRot.dispatchEvent(new Event('input')); sRot.dispatchEvent(new Event('change')); };
+document.getElementById('rotL').addEventListener('click', () => turnBy(90));
+document.getElementById('rotR').addEventListener('click', () => turnBy(-90));
 document.getElementById('adjustDone').addEventListener('click', closeSheets);
 document.getElementById('improveMeasure').addEventListener('click', () => { closeSheets(); openCalib(); });
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheets(); });
