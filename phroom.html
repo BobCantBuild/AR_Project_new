@@ -177,6 +177,7 @@
   .busyEmoji{display:inline-block;font-size:36px;line-height:1;animation:busyBob 1.1s ease-in-out infinite}
   @keyframes busyBob{0%,100%{transform:translateY(0) rotate(-7deg) scale(1)}50%{transform:translateY(-7px) rotate(7deg) scale(1.14)}}
   .busyText{font-weight:800;font-size:14.5px;line-height:1.35}
+  .busySub:empty{display:none}
   .busySub{font-size:11.5px;color:var(--muted);line-height:1.35}
   .busyBar{width:190px;max-width:100%;height:5px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
   .busyFill{height:100%;width:38%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--go));
@@ -837,8 +838,8 @@ function loadModel(key){
   if (!cfg) return;
   const keepPos = machine ? machine.position.clone() : new THREE.Vector3(0, 0, 0);
   disposeModel();
-  const label = cfg.label.toLowerCase(), sub = 'A detailed 3D model — only slow the first time';
-  setBusy('model', '🧺', 'Bringing in the ' + label + '…', sub);
+  const label = cfg.label.toLowerCase(), sub = '';
+  setBusy('model', '🧺', 'Loading the machine…', sub);
 
   new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(cfg.url, (gltf) => {
     const g = new THREE.Group();
@@ -891,8 +892,8 @@ function loadModel(key){
     }
   }, (e) => {
     if (busyStep !== 'model') return;
-    if (e.lengthComputable) setBusy('model', '🧺', 'Bringing in the ' + label + '… ' + Math.round(e.loaded / e.total * 100) + '%', sub, e.loaded / e.total * 100);
-    else setBusy('model', '🧺', 'Bringing in the ' + label + '… ' + (e.loaded / 1048576).toFixed(1) + ' MB', sub);
+    if (e.lengthComputable) setBusy('model', '🧺', 'Loading the machine… ' + Math.round(e.loaded / e.total * 100) + '%', sub, e.loaded / e.total * 100);
+    else setBusy('model', '🧺', 'Loading the machine…', sub);
   }, () => {
     hideBusy('model');
     hintEl.textContent = 'Could not load the ' + label + ' — check connection.'; hintEl.style.display = 'block';
@@ -1466,8 +1467,8 @@ function loadSeg(){
 // Once the file is in, the AI still takes a few seconds to set itself up -- a bar parked at 100%
 // looks stuck, so say what's happening instead.
 function showAILoading(){
-  if (AI.pct !== null && AI.pct >= 100) setBusy('ai', '🧠', 'Getting the room AI ready…', 'Downloaded — setting it up');
-  else setBusy('ai', '🧠', 'Waking up the room AI…' + (AI.pct ? ' ' + AI.pct + '%' : ''), 'About 15 MB, only the first time', AI.pct);
+  if (AI.pct !== null && AI.pct >= 100) setBusy('ai', '⏳', 'Getting ready…', '');
+  else setBusy('ai', '⏳', 'Getting ready…' + (AI.pct ? ' ' + AI.pct + '%' : ''), '', AI.pct);
 }
 
 // The AI's view of the room, flashed over the photo once it's done: floor green, the room's own
@@ -2107,7 +2108,7 @@ async function runAIPlace(){
       aiSet('Loading AI (downloads ~15 MB the first time)…');
       await loadSeg();
     }
-    setBusy('seg', '🔍', 'Finding the floor and furniture…', 'Reading your photo');
+    setBusy('seg', '🔍', 'Looking at your room…', '');
     aiSet('Understanding the room…');
     await nextPaint();
     const out = await AI.seg(photoInputURL());
@@ -2130,7 +2131,7 @@ async function runAIPlace(){
       warnPill('Only floor in view', 'This points straight down at the floor — retake it showing some of the room (a wall or furniture) so the size can be judged.');
       return;
     }
-    setBusy('measure', '📐', 'Measuring your room…', 'Working out the camera height and angle');
+    setBusy('measure', '📐', 'Measuring your room…', '');
     await nextPaint();                        // the fit below blocks for a moment -- show the step first
     const calib = calibrateCamera(out, manualRefs, lastDepth);
     cam = { hc: calib.hc, pitchDeg: calib.pitchDeg, f35: calib.f35 };
@@ -2214,7 +2215,7 @@ function showDepthStatus(){
   // not loaded yet: no countdown until there's something to count (the download, then the run)
   if (!DEPTH.loaded && (DEPTH.pct === null || DEPTH.pct < 100)) {
     const dl = DEPTH.pct !== null && !DEPTH.cached;
-    setBusy('depth', '📏', 'Getting ready…' + (dl ? ' ' + DEPTH.pct + '%' : ''), dl ? 'A one-time download — after this it’s quick' : '', dl ? DEPTH.pct : null);
+    setBusy('depth', '📏', 'Getting ready…' + (dl ? ' ' + DEPTH.pct + '%' : ''), '', dl ? DEPTH.pct : null);
     return;
   }
   const est = DEPTH.loaded ? (DEPTH.lastMs || 2500) : 8000, el = performance.now() - DEPTH.t0, left = Math.ceil((est - el) / 1000);
