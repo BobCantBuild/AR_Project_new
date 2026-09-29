@@ -12,7 +12,8 @@ pattern Shopify and Amazon use (GLB for web/Android, auto-USDZ for iPhone Quick 
 ```
 index.html            Product 3D/AR viewer (model-viewer, pinned 4.3.1)
 phroom.html           "See it in your room" — AI places the machine into a room photo at real size
-phroom-ai-worker.js   The room AIs for phroom.html (floor/furniture segmentation, 3D depth), off the main thread
+phroom1.html          "Will it fit?" — measures the customer's space in a photo and says if the machine fits
+phroom-ai-worker.js   The room AIs for phroom.html / phroom1.html (floor/furniture segmentation, 3D depth), off the main thread
 fit.html               "Will it fit?" live AR — 8th Wall SLAM, place at real scale
 photo.html             "Add to a photo" — drop the machine into a still photo by hand, save/share
 models/IFB_WM1.glb      The 3D model: IFB Executive MXC 9014, true scale (87.5 cm tall), compressed (3 MB)
@@ -46,6 +47,46 @@ Tested on 16 real room photos. On the ones with nothing of known size in view, c
 hand-measured objects, the old guess drew the machine 16–62% too small; the depth scan brings
 that to within 1–21%, marking one known object with Calibrate to within ~1–8%, and the in-app
 camera's recorded tilt alone took one of them (my_pg) to within 2.5%.
+
+## phroom1.html — "Will it fit?" in a photo (fit in room, not just view in room)
+`phroom.html` shows the machine at the room's *estimated* scale — right to 5–20%, fine for seeing
+how it looks, not for "will it go in this 62 cm gap". `phroom1.html` measures the actual space and
+compares it with IFB's datasheet size plus the gaps a machine needs (≥1 cm each side — 2.5 cm is
+comfortable — 5 cm behind for hoses, 2 cm above).
+
+**How the space is measured — the customer picks one:**
+
+| Method | What the customer does | Width accuracy (tested) |
+|---|---|---|
+| 📄 **A4 sheet on the floor** (recommended) | Lays a sheet of A4 in the space, takes the photo; the app finds the sheet, the customer checks its corners | ~1.4% RMS when found automatically (±~1 cm on a 64 cm gap) |
+| 🔲 **Floor tiles** | Drags 4 dots onto a tile (or 2×2 block) at the space, picks the tile size | ~2% RMS |
+| 📏 **I measured it** | Types the tape / phone-Measure-app width (depth, height optional) | exact (±0.5 cm) |
+| 🚪 **Door or counter height** | Marks something of known height (the existing Measure tool) | ~3.5% RMS |
+| ✨ **Quick estimate** | Nothing — the AI judges the room | rough: only firm for clearly roomy / clearly hopeless spaces |
+| 📱 **Live AR** | Opens the phone's own AR (ARKit / ARCore via `<model-viewer>`, `ar-scale="fixed"`) at true size | visual check, no numbers |
+
+Then the customer marks the space on the photo — its left and right sides where they meet the floor,
+optionally the wall behind (depth) and the underside of a counter above (height) — with a magnifier,
+and a live readout and the machine's footprint drawn in green/red as they go. The answer:
+**✅ Fits / ✅ Fits, snugly / ⚠️ Too close to call / ❌ Won't fit**, decided on the whole error band
+(a Monte-Carlo over every corner and tap), never on the middle value alone; the machine is then
+stood in the space, square to it, and the saved picture carries the verdict.
+
+**How the A4 sheet sizes the room:** the sheet's four corners give the floor-to-photo homography;
+from it the phone's height, tilt, roll and lens are fitted (Levenberg–Marquardt, with a phone's
+usual lens, a hand-held height and the in-app camera's recorded tilt as priors, and the lens left
+open between 1x / ultra-wide / zoom when the photo can't tell). The sheet finder looks for a bright,
+darker, coloured or edge-bounded smooth quadrilateral on the floor, snaps its sides to sub-pixel
+edges, and only calls it "found" when all four edges are clean and stop at the corners — otherwise
+it asks the customer to check.
+
+**Tested** (all without anyone's help, in the browser): 150–300 synthetic rooms per case rendered
+with three.js with known answers (floors: white/beige/grey tiles, wood, granite; random gaps,
+phone heights, tilts, rolls, lenses, lighting, shadows, JPEG noise), and the 16 real room photos in
+`test_image/` with an A4 sheet composited on the floor. Found automatically on 14/16 real photos
+(all within 1 px), never a confident wrong detection; **no wrong fit verdicts in any test** — when
+the error band straddles the limit it says "too close to call" and points to the tape measure.
+Hardest case: a white sheet on white tiles, or half in shadow — then the customer drags the dots.
 
 ## fit.html — "Will it fit?" (AR, browser-only)
 Live camera + 8th Wall in-browser SLAM (works in stock Safari on iPhone and Chrome on
