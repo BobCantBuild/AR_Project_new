@@ -417,11 +417,13 @@
     <p class="mSub" id="methodsSub">We measure the space in your photo and check it against the machine.</p>
     <div class="mList" id="methodList"></div>
     <details class="mWhy">
-      <summary>Why not use my hand, or just the photo?</summary>
-      <p><b>Hands</b> differ in size by 15% or more from person to person, and a hand held up to the camera
-        is much nearer than the floor being measured — a millimetre's slip there becomes centimetres at the
-        machine's spot. A sheet of <b>A4 paper</b> is 21 × 29.7 cm everywhere, and it lies exactly where the
-        machine will stand.</p>
+      <summary>Which should I use?</summary>
+      <p><b>An A4 sheet</b> is best from a photo: it's exactly 21 × 29.7 cm everywhere, and it lies right where the
+        machine will stand, so it tells the app the size <i>and</i> the angle of the floor.</p>
+      <p><b>Your hand</b> works too — laid flat on the floor across the front of the space, not held up to the
+        camera (a hand near the lens is much nearer than the floor being measured, and a small slip there becomes
+        centimetres at the machine). Hands differ by about 5% from person to person, so measure yours once with a
+        ruler if you can, and take the photo from about 1 m.</p>
       <p><b>The photo alone</b> can only guess the room's scale from things of typical size (doors, counters,
         ceiling height) — good for seeing how it looks, but it can be 10% out. That's fine for a big space,
         not for a tight one.</p>
@@ -610,6 +612,24 @@
       <div class="sheetBtns">
         <button class="btn dark" id="rpAlt" type="button">Place by hand</button>
         <button class="btn go" id="rpOk" type="button">Looks right ✓</button>
+      </div>
+    </div>
+    <!-- ✋ hand: how long it is -->
+    <div class="rectPanel" id="handPanel" role="dialog" aria-labelledby="hpTitle">
+      <div class="rpHead">
+        <span class="fitIc" aria-hidden="true" style="font-size:26px">✋</span>
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span class="rpTitle" id="hpTitle">How long is your hand?</span>
+          <span class="rpSub">From the crease at your wrist to the tip of your middle finger. Measured once with a ruler is best.</span>
+        </div>
+        <button class="iconBtn" id="hpCancel" type="button" aria-label="Cancel">✕</button>
+      </div>
+      <div class="rpRow" id="hpChips"></div>
+      <div class="rpCustom" id="hpCustom" hidden><span>My hand</span><input id="hpCm" type="number" inputmode="decimal" min="12" max="24" step="0.1" placeholder="18.5" /><span>cm</span></div>
+      <span class="calHint" id="hpHint" aria-live="polite"></span>
+      <div class="sheetBtns">
+        <button class="btn dark" id="hpRemark" type="button">Re-mark hand</button>
+        <button class="btn go" id="hpOk" type="button">Use ✓</button>
       </div>
     </div>
     <!-- the answer -->
@@ -1609,7 +1629,7 @@ function resize(){
   scanEl.width = w * DPR; scanEl.height = h * DPR;
   drawScan();       // resizing a canvas clears it
   renderCalib();    // calibration dots are kept in photo coordinates -- redraw them where the photo now is
-  if (fitUI.mode) { renderFit(); if (fitUI.mode === 'marks') placeFitBar(); }
+  if (fitUI.mode) { renderFit(); if (fitUI.mode === 'marks' || fitUI.mode === 'hand') placeFitBar(); }
   if (cal.on) placeCalBar();
   updateCamera();   // the stage's shape changes how the photo's field of view maps onto it
 }
@@ -3287,7 +3307,16 @@ const FM = (() => {
         cam = camFromParams(p0.hc, p0.pitchDeg + g() * (ref.pitchSig || 0), p0.rollDeg, ref.cam.F * Math.exp(g() * (ref.fSig || 0)), 2 * ref.cam.cx, 2 * ref.cam.cy);
         const m = measureSpace(cam, { L: jit(marks.L, markSig), R: jit(marks.R, markSig), K: jit(marks.K, markSig), T: jit(marks.T, markSig) });
         if (!m || !(m.width > 0)) continue;
-        const k = (ref.pinWidth || nominal.width) * Math.exp(g() * ref.relSig) / m.width;
+        let k;
+        if (ref.pin) {
+          // a known length lying on the floor (e.g. a hand, wrist to fingertip): its two tapped ends
+          // and its length are uncertain too; the scale follows from them on this run's camera
+          const A = floorAt(cam, jit(ref.pin.A, markSig)), B = floorAt(cam, jit(ref.pin.B, markSig));
+          if (!A || !B) continue;
+          const d = Math.hypot(A[0] - B[0], A[1] - B[1]);
+          if (!(d > 1e-4)) continue;
+          k = ref.pin.len * Math.exp(g() * ref.pin.relSig) / d;
+        } else k = (ref.pinWidth || nominal.width) * Math.exp(g() * ref.relSig) / m.width;
         W.push(m.width * k); if (m.depth != null) D.push(m.depth * k); if (m.height != null) Hh.push(m.height * k);
         continue;
       }
@@ -3313,11 +3342,16 @@ const TILE_PRESETS = [
   { label: '60 × 120', w: 60, h: 120 }, { label: '30 × 30', w: 30, h: 30 }, { label: '1 × 1 ft', w: 30.5, h: 30.5 },
   { label: '40 × 40', w: 40, h: 40 }, { label: 'Other…', custom: true },
 ];
+// Adult hand length, wrist crease to middle fingertip: typical for Indian adults (men ~18.5 cm, women
+// ~17 cm) with ~5% spread person to person -- the band says so unless the customer measured theirs.
+const HAND_PRESETS = [{ label: 'Man · ~18.5 cm', cm: 18.5 }, { label: 'Woman · ~17 cm', cm: 17 }, { label: 'I measured mine…', custom: true }];
+const HAND_TYPICAL_SIG = 0.055, HAND_MEASURED_SIG = 0.015;
 const METHODS = {
   a4:    { icon: '📄', name: 'A4 sheet on the floor', desc: 'Lay a sheet of A4 paper in the space, then photograph it', acc: '±1–2 cm', cls: '', rec: true, what: 'your A4 sheet' },
   tiles: { icon: '🔲', name: 'Floor tiles', desc: 'Mark a tile (or a few) you know the size of', acc: '±1–2 cm', cls: '', what: 'your floor tiles' },
   tape:  { icon: '📏', name: 'I measured it', desc: 'Type in your tape or phone Measure-app numbers', acc: 'Exact', cls: '', what: 'your tape measure' },
   door:  { icon: '🚪', name: 'Door or counter height', desc: 'Mark something in the photo you know the height of', acc: '±2–4 cm', cls: 'mid', what: 'your door/counter' },
+  hand:  { icon: '✋', name: 'Your hand', desc: 'Lay your hand flat across the front of the space — mark wrist and fingertip', acc: '±3–6 cm', cls: 'mid', what: 'your hand' },
   auto:  { icon: '✨', name: 'Quick estimate', desc: 'Nothing to place or measure — the AI judges the room. Only sure for roomy spaces', acc: 'Rough', cls: 'low', what: 'the AI’s estimate of the room' },
   ar:    { icon: '📱', name: 'Live AR, true size', desc: 'Your phone’s own AR (ARKit / ARCore) — walk up to the space', acc: 'Live', cls: 'ar', what: 'live AR' },
 };
@@ -3330,6 +3364,7 @@ const fit = {
   quadKind: null,    // 'a4' | 'tiles'
   quadAuto: false,   // corners as the detector found them (not moved by hand)
   tiles: { preset: 0, nx: 1, ny: 1, w: 60, h: 60 },
+  hand: { W: null, F: null, preset: 0 },   // wrist crease and middle fingertip, photo px
   marks: {},         // L, R (front of the space, both sides), K (a floor point on the wall behind), T (the underside of anything above) -- photo px
   tape: null,        // { w, d, h } cm
   result: null,
@@ -3799,6 +3834,8 @@ async function fitStart(){
     openQuad('a4', det ? det.corners : defaultQuad('a4'), det ? (det.confident ? true : 'maybe') : false);
   } else if (m === 'tiles') {
     openQuad('tiles', defaultQuad('tiles'), false);
+  } else if (m === 'hand') {
+    openHand();
   } else if (m === 'door') {
     fitAfterCalib = (mark) => { fit.cal = { kind: 'cam', relSig: mark.sig > 0.03 ? 0.06 : 0.04 }; openMarks(); };
     openCalib();
@@ -3822,6 +3859,7 @@ function fitCloseOverlays(){
   fitUI.mode = null; fitUI.drag = null; fitUI.whole = null;
   fitLayer.classList.remove('on'); fitBar.classList.remove('on', 'bottom', 'dragging');
   rectPanel.classList.remove('on', 'dragging');
+  handPanel.classList.remove('on', 'dragging');
   fitLoupe.style.display = 'none'; fitSvg.innerHTML = '';
   dockEl.inert = false; topBar.inert = false;
 }
@@ -3832,7 +3870,7 @@ function fitCancelOverlay(){
   // no answer yet: back to a plain view, with Mark space in the dock to pick it up again
   if (machine) { machine.visible = true; needsRender = true; }
   drawPhoto();
-  if (mode === 'quad') toast('Measuring stopped — tap “Mark space” to start again, or 📐 to measure another way.', '', null, 6000);
+  if (mode === 'quad' || mode === 'hand') toast('Measuring stopped — tap “Mark space” to start again, or 📐 to measure another way.', '', null, 6000);
 }
 
 function openQuad(kind, corners, auto){
@@ -3907,6 +3945,62 @@ function confirmQuad(){
   return f;
 }
 
+const handPanel = document.getElementById('handPanel'), hpChips = document.getElementById('hpChips'), hpHint = document.getElementById('hpHint');
+function openHand(){
+  fitUI.mode = 'hand'; fitUI.drag = null;
+  fit.hand.W = null; fit.hand.F = null;
+  fitUI.step = 'W';
+  fitOverlayOn(true);
+  if (machine) { machine.visible = false; needsRender = true; }
+  rectPanel.classList.remove('on'); handPanel.classList.remove('on');
+  fitBar.classList.add('on');
+  updateHandStep(); renderFit(); drawPhoto();
+}
+const HAND_STEPS = {
+  W: ['Step 1 · Wrist end', 'Touch the wrist end of the hand — where the palm meets the wrist.', '✋'],
+  F: ['Step 2 · Fingertip', 'Now the tip of the middle finger.', '☝️'],
+  done: ['Check the two dots', 'Drag either to fine-tune, then say how long the hand is (below).', '✅'],
+};
+function updateHandStep(msg){
+  const t = HAND_STEPS[fitUI.step];
+  fitStepNo.textContent = t[0]; fitStep.textContent = msg || t[1]; fitIc.textContent = t[2];
+  fitSkip.hidden = true; fitDone.hidden = true; fitVal.textContent = '';
+  placeFitBar();
+}
+function showHandPanel(){
+  hpChips.innerHTML = HAND_PRESETS.map((p, i) => `<button type="button" class="tchip" data-i="${i}" aria-pressed="${i === fit.hand.preset}">${p.label}</button>`).join('');
+  document.getElementById('hpCustom').hidden = !HAND_PRESETS[fit.hand.preset].custom;
+  hpHint.textContent = '';
+  handPanel.classList.add('on');
+}
+hpChips.addEventListener('click', (e) => {
+  const b = e.target.closest('.tchip'); if (!b) return;
+  fit.hand.preset = +b.dataset.i; showHandPanel();
+  if (HAND_PRESETS[fit.hand.preset].custom) document.getElementById('hpCm').focus();
+});
+document.getElementById('hpRemark').addEventListener('click', () => { handPanel.classList.remove('on'); openHand(); });
+document.getElementById('hpCancel').addEventListener('click', fitCancelOverlay);
+document.getElementById('hpOk').addEventListener('click', () => confirmHand());
+document.getElementById('hpCm').addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmHand(); });
+// The hand's two ends, on the floor, are a known length: stretch the photo's scale to match it. The
+// room's shape (tilt, lens) still comes from the AI -- its uncertainty widens depth and height.
+function confirmHand(cmArg = null, measuredArg = null){
+  const H = fit.hand;
+  if (!H.W || !H.F) return null;
+  const p = HAND_PRESETS[H.preset], measured = measuredArg ?? !!p.custom;
+  const cm = cmArg ?? (p.custom ? +document.getElementById('hpCm').value : p.cm);
+  if (!(cm >= 12 && cm <= 24)) { hpHint.textContent = 'Hand length in cm, wrist crease to middle fingertip — most adults are 16–21 cm.'; return null; }
+  const c = fmCam(), A = FM.floorAt(c, H.W), B = FM.floorAt(c, H.F);
+  const d = A && B ? Math.hypot(A[0] - B[0], A[1] - B[1]) : 0;
+  if (!(d > 0.01)) { hpHint.textContent = 'Those two dots need to be on the floor, at the two ends of the hand.'; return null; }
+  cam.hc *= (cm / 100) / d; updateCamera();
+  fit.locked = true;
+  fit.cal = { kind: 'cam', relSig: 0, pin: { A: H.W.slice(), B: H.F.slice(), len: cm / 100, relSig: measured ? HAND_MEASURED_SIG : HAND_TYPICAL_SIG }, handMeasured: measured };
+  handPanel.classList.remove('on');
+  openMarks();
+  return { ...cam };
+}
+
 function openMarks(keep = false){
   fitUI.mode = 'marks'; fitUI.drag = null;
   if (!keep) { fit.marks = {}; fitUI.skipped = {}; }
@@ -3953,7 +4047,8 @@ markBtn.addEventListener('click', () => {
 function placeFitBar(){
   const H = stageEl.clientHeight, bh = fitBar.offsetHeight || 64;
   const topBand = topBar.offsetHeight + bh + 14, botBand = H - bh - 24;
-  const ys = Object.values(fit.marks).filter(Boolean).map((p) => pxToScreen(p).y);
+  const pts = fitUI.mode === 'hand' ? [fit.hand.W, fit.hand.F] : Object.values(fit.marks);
+  const ys = pts.filter(Boolean).map((p) => pxToScreen(p).y);
   const clearTop = ys.every((y) => y > topBand), clearBot = ys.every((y) => y < botBand);
   let bottom = fitBar.classList.contains('bottom');
   if (!ys.length) bottom = false;
@@ -3994,6 +4089,13 @@ fitLayer.addEventListener('pointerdown', (e) => {
     else return;
     rectPanel.classList.add('dragging');
     if (fitUI.drag !== null) showFitLoupe(fit.quad[fitUI.drag], '#ffcc00');
+  } else if (fitUI.mode === 'hand') {
+    const H = fit.hand, k = ['W', 'F'].find((kk) => near(H[kk]));
+    if (k) fitUI.drag = k;
+    else if (fitUI.step !== 'done') { fitUI.drag = fitUI.step; H[fitUI.step] = p; }
+    else return;
+    fitBar.classList.add('dragging'); handPanel.classList.add('dragging');
+    showFitLoupe(H[fitUI.drag], '#ff9fd0');
   } else {
     const k = ['L', 'R', 'K', 'T'].find((kk) => near(fit.marks[kk]));
     if (k) fitUI.drag = k;
@@ -4012,6 +4114,9 @@ fitLayer.addEventListener('pointermove', (e) => {
     if (fitUI.drag !== null && fitUI.drag !== undefined) { fit.quad[fitUI.drag] = p; fitUI.moved = true; showFitLoupe(p, '#ffcc00'); }
     else if (fitUI.whole) { const dx = p[0] - fitUI.whole.start[0], dy = p[1] - fitUI.whole.start[1]; fit.quad = fitUI.whole.quad.map((q) => [q[0] + dx, q[1] + dy]); fitUI.moved = true; }
     else return;
+  } else if (fitUI.mode === 'hand') {
+    if (!fitUI.drag) return;
+    fit.hand[fitUI.drag] = p; showFitLoupe(p, '#ff9fd0');
   } else {
     if (!fitUI.drag) return;
     fit.marks[fitUI.drag] = p; showFitLoupe(p, MARK_COLOR[fitUI.drag]);
@@ -4027,6 +4132,16 @@ const fitRelease = () => {
     if (fitUI.drag !== null || fitUI.whole) fit.quad = FM.orderQuad(fit.quad);
     fitUI.drag = null; fitUI.whole = null;
     renderFit(); return;
+  }
+  if (fitUI.mode === 'hand') {
+    handPanel.classList.remove('dragging');
+    const hk = fitUI.drag; fitUI.drag = null;
+    if (!hk) return;
+    if (!FM.floorAt(fmCam(), fit.hand[hk])) { fit.hand[hk] = null; fitUI.step = hk; updateHandStep('That’s above the floor line — touch the hand where it lies on the floor.'); renderFit(); return; }
+    if (fitUI.step === hk) fitUI.step = !fit.hand.W ? 'W' : !fit.hand.F ? 'F' : 'done';
+    updateHandStep(); renderFit();
+    if (fitUI.step === 'done' && !handPanel.classList.contains('on')) showHandPanel();
+    return;
   }
   const k = fitUI.drag; fitUI.drag = null;
   if (!k) return;
@@ -4114,6 +4229,14 @@ function renderFit(){
     const edge = Math.min(...q.map((p, i) => Math.hypot(p.x - q[(i + 1) % 4].x, p.y - q[(i + 1) % 4].y)));
     const rr = Math.max(5, Math.min(10, edge / 4));
     q.forEach((p, i) => { s += `<circle cx="${p.x}" cy="${p.y}" r="${fitUI.drag === i ? rr + 3 : rr}" fill="rgba(255,204,0,.3)" stroke="#fff" stroke-width="2"/><circle cx="${p.x}" cy="${p.y}" r="1.8" fill="#fff"/>`; });
+  } else if (fitUI.mode === 'hand') {
+    const H = fit.hand;
+    if (H.W && H.F) { const a = S(H.W), b = S(H.F); s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="rgba(0,0,0,.55)" stroke-width="5" stroke-linecap="round"/><line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="#ff9fd0" stroke-width="2.2" stroke-linecap="round"/>`; }
+    for (const [k, lab] of [['W', 'W'], ['F', 'F']]) {
+      if (!H[k]) continue;
+      const q = S(H[k]);
+      s += `<circle cx="${q.x}" cy="${q.y}" r="${fitUI.drag === k ? 11 : 8}" fill="#ff9fd0" stroke="#fff" stroke-width="2.5"/><text x="${q.x}" y="${q.y + 3.5}" text-anchor="middle" fill="#000" font-size="9" font-weight="900" font-family="system-ui,sans-serif">${lab}</text>`;
+    }
   } else {
     s += svgSpace(S, true);
   }
@@ -4214,7 +4337,7 @@ function fitCompute(){
     const pitchSig = sensorPitch != null ? 2 : !lastCalib ? 10 : manualRefs.length || refs.some((r) => r !== WALL_REF.name && r !== DEPTH_REF.name) ? 5 : 7;
     const fSig = exifF35 ? 0.05 : lastCalib ? 0.15 : 0.25;
     const tapeW = fit.method === 'tape' && fit.tape && fit.tape.w ? fit.tape.w / 100 : null;
-    meas = FM.measureWithUncertainty({ kind: 'cam', cam: fmCam(), relSig: tapeW ? 0 : fit.cal.relSig, pitchSig, fSig, pinWidth: tapeW }, marks, sig, 200);
+    meas = FM.measureWithUncertainty({ kind: 'cam', cam: fmCam(), relSig: tapeW ? 0 : fit.cal.relSig, pitchSig, fSig, pinWidth: tapeW, pin: fit.cal.pin || null }, marks, sig, 200);
   }
   if (!meas) { fit.result = null; return; }
   const S = { W: bandCm(meas.width), D: bandCm(meas.depth), H: bandCm(meas.height) };
@@ -4224,7 +4347,15 @@ function fitCompute(){
     if (fit.tape.d) S.D = exact(fit.tape.d);
     if (fit.tape.h) S.H = exact(fit.tape.h);
   }
-  fit.result = { S, dims: curDims(), v: fitVerdict(S, curDims()), method: fit.method, how: fit.cal.kind };
+  // Sanity: once scaled, where does that put the phone? Outside 0.3–2.6 m nobody held it there -- the
+  // room's angle (the AI's estimate) has gone wrong, and anything carried across the photo with it is
+  // guesswork. A tape's width is still exact; everything else is withheld rather than guessed.
+  let unreliable = false;
+  if (fit.cal.kind === 'cam') { const hc = FM.camParams(fmCam()).hc; unreliable = !(hc > 0.3 && hc < 2.6); }
+  if (unreliable && fit.method === 'tape') { if (!(fit.tape && fit.tape.d)) S.D = null; if (!(fit.tape && fit.tape.h)) S.H = null; }
+  const v = fitVerdict(S, curDims());
+  if (unreliable && fit.method !== 'tape') v.overall = 'unsure';
+  fit.result = { S, dims: curDims(), v, method: fit.method, how: fit.cal.kind, unreliable: unreliable && fit.method !== 'tape' };
 }
 // Space bands (cm) against the machine (cm) + the gaps it needs. A verdict is only firm when the whole
 // band agrees; otherwise it's "too close to call" with the way it leans.
@@ -4254,6 +4385,9 @@ function verdictTexts(r){
   const pm = (b) => b.exact ? '' : ' ±' + fmtCm((b.hi - b.lo) / 2);
   const bad = V.rows.find((x) => x.v === 'nofit'), unsure = V.rows.find((x) => x.v === 'unsure'), short = V.rows.find((x) => x.v === 'short');
   let icon = '✓', title;
+  if (r.unreliable) {
+    return { icon: '?', title: 'Couldn’t work out the photo’s angle — measure another way', line: 'The room’s shape in this photo couldn’t be read reliably, so its size can’t be trusted', pm };
+  }
   if (V.overall === 'nofit') {
     icon = '✕';
     title = bad.k === 'H' ? 'Won’t fit under it — about ' + fmtCm(bad.need - bad.s.mid, 0) + ' cm too low'
@@ -4280,10 +4414,12 @@ function verdictTableHtml(r){
 function verdictNote(r){
   const how = r.method === 'tape' ? 'Your tape measurements' : 'Measured on your photo with ' + (METHODS[r.method] || METHODS.auto).what;
   const unsureTip = r.v.overall === 'unsure' ? ' A tape measure (or your phone’s Measure app) settles it — choose “Another way” › I measured it.' : '';
+  const handTip = r.method === 'hand' && fit.cal && fit.cal.pin && !fit.cal.handMeasured ? ' It used a typical hand length — measuring your hand once with a ruler makes this tighter.' : '';
   const tl = MODELS[modelKey].specCm ? '' : ' The top loader’s size comes from its 3D model (no datasheet figure yet).';
   const door = modelKey !== 'TL' ? ' A front-loading door needs about ' + FIT.DOOR_SWING_CM + ' cm clear in front to open.' : ' A top-loader’s lid needs clear space above it to open.';
+  if (r.unreliable) return 'Try an A4 sheet on the floor (it fixes the angle as well as the size), or your tape measure — or retake the photo standing a little further back with more floor in view.';
   return how + '. It needs at least ' + FIT.SIDE_MIN + ' cm free each side (' + FIT.SIDE_OK + ' cm is comfortable), '
-    + FIT.BACK_MIN + ' cm behind for the hoses and ' + FIT.TOP_MIN + ' cm above.' + door + unsureTip + tl;
+    + FIT.BACK_MIN + ' cm behind for the hoses and ' + FIT.TOP_MIN + ' cm above.' + door + handTip + unsureTip + tl;
 }
 function showVerdict(){
   const r = fit.result;
@@ -4424,6 +4560,8 @@ const UPLOAD_COPY = {
     ['🔲 Tiles in view', '↔️ Both sides in view', '📏 Know the tile size'], 'Show the floor tiles and both sides of the space'],
   tape: ['Now a photo of the space', 'Your measurements decide the fit — the photo shows how it will look. Mark the two sides you measured.',
     ['↔️ Both sides in view', '⬇️ Show the floor'], 'Show both sides of the space and the floor'],
+  hand: ['Put your hand in the photo', 'Lay one hand flat on the floor right across the front of the space — on the line between its two sides — fingers together, pointing to the left or right. Take the photo from about 1 m back (crouch if you need to; or ask someone), both sides of the space in view — the closer, the bigger the hand, the more exact.',
+    ['✋ Across the front of the space', '↔️ Fingers pointing sideways', '📷 About 1 m back', '📏 Measured hand = more exact'], 'Show the hand on the floor and both sides of the space'],
   door: ['Photograph the space', 'Include a door, counter or table you know the height of — you’ll mark it, then the space.',
     ['🚪 Door or counter in view', '↔️ Both sides in view', '⬇️ Show the floor'], 'Show the space and a door or counter'],
   auto: ['Photograph the space', 'Show the floor and both sides of the space. The AI judges the room’s scale — fine for a roomy space; for a tight one, use an A4 sheet.',
@@ -4591,6 +4729,7 @@ if (new URLSearchParams(location.search).has('debug')) {
         return f && { ...FM.camParams(f.cam), f35: FM.FToF35(f.cam.F, ...photoWH()), rms: f.rms, a: f.a, b: f.b, sig: fit.cal.sig, weights: (f.hyps || []).map((h) => +h.weight.toFixed(3)) };
       },
       mark: (marks) => { fit.marks = { ...marks }; fitFinish(); return window.__phroomDebug.fit.result(); },
+      handCal: (W, F, cm, measured) => { fit.hand.W = W; fit.hand.F = F; return confirmHand(cm, measured); },
       // the door/counter step without the taps: what Apply does, then on to the space
       doorCal: (top, base, cm, name = null) => {
         const mark = { top, base, H: cm / 100, name, sig: 0.02 };

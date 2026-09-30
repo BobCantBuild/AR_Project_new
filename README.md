@@ -62,6 +62,7 @@ comfortable — 5 cm behind for hoses, 2 cm above).
 | 🔲 **Floor tiles** | Drags 4 dots onto a tile (or 2×2 block) at the space, picks the tile size | ~2% RMS |
 | 📏 **I measured it** | Types the tape / phone-Measure-app width (depth, height optional) | exact (±0.5 cm) |
 | 🚪 **Door or counter height** | Marks something of known height (the existing Measure tool) | ~3.5% RMS |
+| ✋ **Your hand** | Lays a hand flat across the front of the space (fingers sideways), taps wrist + fingertip, picks a typical (man ~18.5 / woman ~17 cm) or measured hand length | ~5.5% RMS typical length, ~4% measured (in-app camera, which records the phone's tilt); wider from a gallery photo |
 | ✨ **Quick estimate** | Nothing — the AI judges the room | rough: only firm for clearly roomy / clearly hopeless spaces |
 | 📱 **Live AR** | Opens the phone's own AR (ARKit / ARCore via `<model-viewer>`, `ar-scale="fixed"`) at true size | visual check, no numbers |
 
@@ -87,6 +88,9 @@ phone heights, tilts, rolls, lenses, lighting, shadows, JPEG noise), and the 16 
 (all within 1 px), never a confident wrong detection; **no wrong fit verdicts in any test** — when
 the error band straddles the limit it says "too close to call" and points to the tape measure.
 Hardest case: a white sheet on white tiles, or half in shadow — then the customer drags the dots.
+The hand is the least precise reference (small in the photo, and people's hands differ), so its
+verdicts are firm only with a clear margin; if the room's angle can't be read at all (the implied
+phone height comes out impossible) the page says so instead of giving a size.
 
 ## fit.html — "Will it fit?" (AR, browser-only)
 Live camera + 8th Wall in-browser SLAM (works in stock Safari on iPhone and Chrome on
