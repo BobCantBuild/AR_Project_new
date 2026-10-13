@@ -16,11 +16,12 @@
 </script>
 
 <style>
-  /* Look and feel after the IFB AR/VR viewer: near-black, the product and the photo filling the
-     screen, big clear buttons in one bar at the bottom -- green for the main action, yellow for
-     the rest -- and small pill badges over the picture. IFB red stays in the logo. */
+  /* Look and feel: the photo and the product fill the screen, with one red primary action per
+     screen (IFB red), quiet glass secondary buttons, line icons and a calm neutral palette.
+     The machine chooser and the photo screen are light; the composer stays dark so the photo
+     is the brightest thing on it. */
   :root{--bg:#0b0b0b;--panel:rgba(14,14,14,.97);--card:#161616;--line:rgba(255,255,255,.1);
-    --ink:#fff;--muted:rgba(255,255,255,.62);--go:#00ff99;--accent:#ffcc00;--warn:#ff6b5e}
+    --ink:#fff;--muted:rgba(255,255,255,.64);--go:#2ee67b;--accent:#fff;--primary:#e11d2a;--primary-hi:#f23a46;--warn:#ff6b5e}
   *{box-sizing:border-box}
   [hidden]{display:none!important}
   /* 100dvh is the part of a phone's screen actually visible under the address bar -- 100% alone
@@ -36,23 +37,27 @@
 
   /* ---------- buttons ---------- */
   .btn{appearance:none;flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;
-    padding:12px 10px;border:0;border-radius:12px;font-weight:800;font-size:15px;white-space:nowrap;cursor:pointer;
-    color:#000;background:var(--accent);transition:transform .1s,opacity .15s}
+    padding:12px 10px;border:0;border-radius:12px;font-weight:600;font-size:15px;white-space:nowrap;cursor:pointer;
+    color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);transition:transform .1s,opacity .15s,background .15s}
+  .btn:hover{background:rgba(255,255,255,.18)}
   .btn:active{transform:scale(.97)}
-  .btn.go{background:var(--go)}
-  .btn.dark{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.18)}
+  .btn.go{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 6px 18px rgba(225,29,42,.32)}
+  .btn.go:hover{background:var(--primary-hi)}
+  .btn.dark{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.18)}
   .btn:disabled{opacity:.4;cursor:default;transform:none}
-  .btn .ic{font-size:17px;line-height:1}
+  .btn .ic{display:inline-flex;line-height:1}
+  .i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .i.flip{transform:scaleX(-1)}
   .btn.small{flex:none;min-height:38px;padding:8px 14px;font-size:13.5px;border-radius:10px}
   /* Measure pulses when nothing in the photo could size the machine */
   .btn.glow{animation:glow 1.6s ease-in-out infinite}
-  @keyframes glow{50%{box-shadow:0 0 0 5px rgba(255,204,0,.3)}}
+  @keyframes glow{50%{box-shadow:0 0 0 5px rgba(255,255,255,.28)}}
   .round{appearance:none;flex:none;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
     padding:0;color:#fff;cursor:pointer;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.22);
     -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);transition:background .15s,color .15s,border-color .15s}
   .round svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round}
-  .round[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#000}
-  .linkBtn{appearance:none;background:none;border:0;color:var(--accent);font-size:13px;font-weight:700;cursor:pointer;padding:4px;align-self:center}
+  .round[aria-pressed="true"]{background:#fff;border-color:#fff;color:#111}
+  .linkBtn{appearance:none;background:none;border:0;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:4px;align-self:center;text-decoration:underline;text-underline-offset:3px}
   /* one bar of actions along the bottom of the photo screen and of the composer */
   .bar{flex:none;display:flex;gap:10px;padding:12px 12px calc(env(safe-area-inset-bottom,0px) + 12px);
     background:var(--panel);border-top:1px solid var(--line)}
@@ -62,10 +67,10 @@
 
   /* ---------- top bar (photo screen and composer) ---------- */
   .top{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:10px;
-    padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 12px;background:linear-gradient(180deg,rgba(0,0,0,.72),rgba(0,0,0,0))}
+    padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 12px;background:linear-gradient(180deg,rgba(0,0,0,.4),rgba(0,0,0,0))}
   .brand{display:block;width:30px;height:30px;border-radius:7px;flex:none}
   .machineChip{appearance:none;display:flex;align-items:center;gap:7px;min-width:0;padding:8px 13px;border-radius:999px;cursor:pointer;
-    color:#fff;font-size:13px;font-weight:700;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.22);
+    color:#fff;font-size:13px;font-weight:600;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.22);
     -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
   .machineChip .mc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .machineChip .chev{flex:none;opacity:.7;font-size:10px}
@@ -73,37 +78,60 @@
   .top[inert]{opacity:.35}
 
   /* ---------- 1. choose the machine ---------- */
-  #chooser{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:22px;
-    padding:calc(env(safe-area-inset-top,0px) + 28px) 18px calc(env(safe-area-inset-bottom,0px) + 28px);overflow-y:auto;background:var(--bg)}
-  .ch-brand{display:block;width:46px;height:46px;border-radius:11px}
-  #chooser h1{margin:0;font-size:23px;font-weight:800;letter-spacing:-.01em}
+  /* the two light screens: same tokens, light values */
+  #chooser,#upload{--bg:#f6f4f1;--card:#fff;--line:rgba(20,20,25,.1);--ink:#17181c;--muted:#666a73;color:var(--ink)}
+  #chooser{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:18px;
+    padding:calc(env(safe-area-inset-top,0px) + 26px) 18px calc(env(safe-area-inset-bottom,0px) + 26px);overflow-y:auto;
+    background:radial-gradient(120% 60% at 50% 0%,#fff 0%,#f6f4f1 62%)}
+  .ch-brand{display:block;width:40px;height:40px;border-radius:10px}
+  #chooser h1{margin:0;font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.15;text-align:center}
+  .ch-sub{margin:-8px 0 0;max-width:320px;text-align:center;color:var(--muted);font-size:14.5px;line-height:1.5}
+  .how{display:flex;gap:6px;width:100%;max-width:380px;margin-top:4px}
+  .how div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;font-size:12px;line-height:1.3;color:var(--muted)}
+  .how .hi{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;
+    border:1px solid var(--line);color:var(--primary)}
+  .how .hi .i{width:19px;height:19px}
   .choices{display:flex;flex-direction:column;gap:12px;width:100%;max-width:380px}
-  .choice{appearance:none;display:flex;align-items:center;gap:16px;width:100%;padding:12px 16px 12px 12px;border-radius:16px;
-    text-align:left;color:#fff;cursor:pointer;background:var(--card);border:1px solid var(--line);transition:border-color .15s}
-  .choice:hover,.choice:focus-visible{border-color:var(--accent);outline:none}
-  .choice .thumb{flex:none;width:80px;height:92px;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:5px;
-    background:radial-gradient(circle at 50% 40%,#6a6a6a,#2a2a2a 78%)}
+  .choice{appearance:none;display:flex;align-items:center;gap:16px;width:100%;padding:12px 16px 12px 12px;border-radius:20px;
+    text-align:left;color:#fff;cursor:pointer;background:var(--card);border:1px solid var(--line);transition:border-color .15s,box-shadow .15s,transform .1s}
+  .choice:active{transform:scale(.985)}
+  .choice:hover,.choice:focus-visible{border-color:rgba(255,255,255,.5);outline:none}
+  .choice .thumb{flex:none;width:80px;height:92px;border-radius:14px;display:flex;align-items:center;justify-content:center;padding:5px;
+    background:radial-gradient(circle at 50% 40%,#5a5a5a,#262626 80%)}
+  #chooser .choice{color:var(--ink);box-shadow:0 1px 2px rgba(20,20,25,.05),0 8px 22px rgba(20,20,25,.06);padding:14px 16px 14px 14px}
+  #chooser .choice:hover,#chooser .choice:focus-visible{border-color:var(--primary);box-shadow:0 1px 2px rgba(20,20,25,.05),0 10px 26px rgba(225,29,42,.14)}
+  #chooser .choice .thumb{width:96px;height:112px;background:radial-gradient(circle at 50% 38%,#ecebe8,#d9d6d1 85%)}
+  #chooser .choice .cn{font-size:18px}
+  #chooser .choice .end{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:var(--primary);color:#fff;font-size:20px;padding-bottom:2px}
   .choice .thumb img{width:100%;height:100%;object-fit:contain}
   .choice .txt{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
-  .choice .cn{font-weight:800;font-size:17px}
+  .choice .cn{font-weight:600;font-size:17px}
   .choice .cd{color:var(--muted);font-size:13px}
   .choice .end{flex:none;color:rgba(255,255,255,.4);font-size:24px;line-height:1}
-  .choice[aria-checked="true"]{border-color:var(--go)}
-  #menuList .choice .end{visibility:hidden;color:var(--go);font-size:18px}
+  .choice[aria-checked="true"]{border-color:#fff;background:rgba(255,255,255,.08)}
+  #menuList .choice .end{visibility:hidden;color:#fff;font-size:18px}
   #menuList .choice[aria-checked="true"] .end{visibility:visible}
   #menuList .choice .thumb{width:56px;height:64px}
 
   /* ---------- 2. the photo ---------- */
   #upload{position:fixed;inset:0;z-index:15;display:none;flex-direction:column;background:var(--bg)}
+  body:has(#upload[style*="flex"]) .top{background:none}
+  body:has(#upload[style*="flex"]) .top .round,body:has(#upload[style*="flex"]) .top .machineChip{background:#fff;color:#17181c;border-color:rgba(20,20,25,.12)}
   .upMain{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:16px;
     padding:calc(env(safe-area-inset-top,0px) + 66px) 22px 16px;text-align:center;overflow-y:auto}
   .intro{display:flex;flex-direction:column;align-items:center;gap:14px}
   .upArt{width:150px;height:120px;flex:none}
-  #upload h1{margin:0;font-size:24px;font-weight:800;letter-spacing:-.01em}
+  #upload h1{margin:0;font-size:26px;font-weight:700;letter-spacing:-.02em}
   #upload .lead{margin:0;max-width:300px;color:var(--muted);font-size:14.5px;line-height:1.5}
   .tips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:360px;margin-top:6px}
-  .tip{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;font-size:12.5px;font-weight:600;
-    color:rgba(255,255,255,.88);background:var(--card);border:1px solid var(--line)}
+  .tip{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;font-size:12.5px;font-weight:500;
+    color:var(--ink);background:var(--card);border:1px solid var(--line)}
+  .tip .i{width:16px;height:16px;color:var(--primary)}
+  #upload .bar{background:#fff;border-top:1px solid var(--line)}
+  #upload .btn:not(.go){background:#fff;color:var(--ink);border-color:rgba(20,20,25,.18)}
+  #upload .qnote{color:#7a5200;background:#fff6dd;border-color:#f0d58a}
+  #upload .qnote.good{color:#14633c;background:#e7f8ef;border-color:#a9e0c2}
   /* once a photo is picked it fills the screen, above Retake / Use photo */
   #upload.picked .intro{display:none}
   #upload.picked .upMain{justify-content:flex-start;padding:calc(env(safe-area-inset-top,0px) + 64px) 10px 12px}
@@ -159,12 +187,7 @@
   #busy{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;
     background:rgba(0,0,0,.3);opacity:0;visibility:hidden;transition:opacity .35s,visibility 0s .35s}
   #busy.on{opacity:1;visibility:visible;transition:opacity .35s}
-  .busyGlow{position:absolute;inset:-60%;opacity:.8;
-    background:radial-gradient(circle at 30% 30%,rgba(255,204,0,.38),transparent 38%),
-               radial-gradient(circle at 72% 58%,rgba(0,255,153,.3),transparent 42%),
-               radial-gradient(circle at 38% 78%,rgba(0,194,255,.3),transparent 40%),
-               radial-gradient(circle at 70% 22%,rgba(225,29,42,.3),transparent 36%);
-    animation:busySpin 7s linear infinite}
+  .busyGlow{position:absolute;inset:0;background:rgba(0,0,0,.18)}
   @keyframes busySpin{from{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.15)}to{transform:rotate(360deg) scale(1)}}
   .busyScan{position:absolute;left:0;right:0;top:0;height:28%;
     background:linear-gradient(180deg,transparent,rgba(255,255,255,.12) 42%,rgba(255,255,255,.28) 50%,rgba(255,255,255,.12) 58%,transparent);
@@ -174,20 +197,21 @@
     align-items:center;gap:9px;min-width:230px;max-width:86%;padding:16px 20px;border-radius:18px;text-align:center;
     background:rgba(12,12,12,.82);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
     border:1px solid rgba(255,255,255,.16);box-shadow:0 12px 34px rgba(0,0,0,.5);color:#fff}
-  .busyEmoji{display:inline-block;font-size:36px;line-height:1;animation:busyBob 1.1s ease-in-out infinite}
+  .busyEmoji{display:inline-block;font-size:0;width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.22);
+    border-top-color:var(--primary);animation:spin .9s linear infinite}
   @keyframes busyBob{0%,100%{transform:translateY(0) rotate(-7deg) scale(1)}50%{transform:translateY(-7px) rotate(7deg) scale(1.14)}}
-  .busyText{font-weight:800;font-size:14.5px;line-height:1.35}
+  .busyText{font-weight:600;font-size:14.5px;line-height:1.35}
   .busySub:empty{display:none}
   .busySub{font-size:11.5px;color:var(--muted);line-height:1.35}
   .busyBar{width:190px;max-width:100%;height:5px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
-  .busyFill{height:100%;width:38%;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--go));
+  .busyFill{height:100%;width:38%;border-radius:99px;background:var(--primary);
     animation:busyIndet 1.3s ease-in-out infinite}
   @keyframes busyIndet{from{transform:translateX(-110%)}to{transform:translateX(300%)}}
   .busyBar.det .busyFill{animation:none;transform:none;transition:width .25s}
   /* the AI's view of the room, flashed over the photo once it's done (see revealScan()) */
   #scan{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity .5s}
   #scan.show{opacity:1}
-  .reading .busyEmoji{font-size:22px}
+  .reading .busyEmoji{width:20px;height:20px;border-width:2.5px}
   @media (prefers-reduced-motion: reduce){
     .busyGlow,.busyEmoji,.busyFill,.btn.glow{animation:none}
     .busyScan{display:none}
@@ -206,7 +230,7 @@
   #adjust{background:transparent;pointer-events:none}
   #adjust .sheet{pointer-events:auto}
   .sheetHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
-  .sheetTitle{font-weight:800;font-size:17px}
+  .sheetTitle{font-weight:600;font-size:18px}
   .sheetSub{font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:-8px}
   .slider{display:flex;align-items:center;gap:12px;font-size:13.5px}
   .slider label{width:84px;color:var(--muted);flex:none}
@@ -215,9 +239,10 @@
   .sheetBtns{display:flex;gap:10px}
   .option{appearance:none;display:flex;align-items:center;gap:14px;width:100%;padding:14px;border-radius:14px;text-align:left;cursor:pointer;
     color:#fff;background:var(--card);border:1px solid var(--line)}
-  .option:hover,.option:focus-visible{border-color:var(--accent);outline:none}
-  .option .oi{flex:none;font-size:24px}
-  .option b{display:block;font-size:15px}
+  .option:hover,.option:focus-visible{border-color:rgba(255,255,255,.5);outline:none}
+  .option .oi{flex:none;width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.1)}
+  .option .oi .i{width:22px;height:22px}
+  .option b{display:block;font-size:15px;font-weight:600}
   .option small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
 
   /* ---------- Measure: the customer marks something of known height ---------- */
@@ -244,7 +269,7 @@
   .calBar.bottom{top:auto;bottom:10px}
   .calBar.dragging{opacity:.12}
   .calTexts{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
-  .calStepNo{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+  .calStepNo{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--muted)}
   .calStep{font-size:13px;font-weight:700;line-height:1.3}
   .calBtns{display:flex;gap:6px;align-items:center;flex:none}
   .iconBtn{appearance:none;width:34px;height:34px;border-radius:10px;cursor:pointer;color:#fff;font-size:15px;
@@ -257,9 +282,9 @@
   .chips{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .chip{appearance:none;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;color:#fff;
     background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 11px;font-size:13px}
-  .chip .ce{font-size:20px;flex:none}
+  .chip .ce{display:none}
   .chip .cm{display:block;color:var(--muted);font-size:11.5px}
-  .chip[aria-pressed="true"]{border-color:var(--accent);background:rgba(255,204,0,.12)}
+  .chip[aria-pressed="true"]{border-color:#fff;background:rgba(255,255,255,.1)}
   .calInputRow{display:flex;align-items:center;gap:10px;font-size:13.5px}
   .calInputRow input{width:110px;padding:10px 12px;border-radius:11px;border:1px solid rgba(255,255,255,.25);
     background:rgba(255,255,255,.08);color:#fff;font-size:16px;font-weight:700}
@@ -273,10 +298,26 @@
     border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 26px rgba(0,0,0,.5);
     opacity:0;visibility:hidden;transform:translate(-50%,10px);transition:opacity .2s,transform .2s,visibility 0s .2s}
   .toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .2s,transform .2s}
-  .toastBtn{appearance:none;flex:none;border:0;background:none;color:var(--accent);font-weight:800;font-size:13.5px;cursor:pointer;padding:4px 2px}
+  .toastBtn{appearance:none;flex:none;border:0;background:none;color:#fff;text-decoration:underline;font-weight:600;font-size:13.5px;cursor:pointer;padding:4px 2px}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4.5h-4.5"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 4v4.5h4.5"/></symbol>
+  <symbol id="i-ruler" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v4M15 8v3M19 8v2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10M8 10.5l4 4 4-4M5 19h14"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 4l1.8 4.7 4.7 1.8-4.7 1.8L12 17l-1.8-4.7L5.5 10.5l4.7-1.8z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-span" viewBox="0 0 24 24"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></symbol>
+  <symbol id="i-floor" viewBox="0 0 24 24"><path d="M3 16l9-5 9 5-9 5z"/><path d="M12 3v5"/></symbol>
+  <symbol id="i-door" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="1.5"/><circle cx="14.5" cy="12" r=".8"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+</svg>
   <!-- top bar: back, the machine (tap to switch), and -- in the composer -- dimensions on/off -->
   <div class="top" id="topBar">
     <button class="round" id="backBtn" type="button" aria-label="Back">
@@ -295,8 +336,14 @@
   <!-- ===== 1. Choose the machine ===== -->
   <section id="chooser">
     <img class="ch-brand" src="assets/IFB%20logo%201.png" alt="IFB" />
-    <h1>Choose your machine</h1>
+    <h1>Try it in your home</h1>
+    <p class="ch-sub">Pick a machine, photograph your space, and see it at its real size.</p>
     <div class="choices" id="chooserList"></div>
+    <div class="how" aria-hidden="true">
+      <div><span class="hi"><svg class="i"><use href="#i-grid"/></svg></span>Pick a machine</div>
+      <div><span class="hi"><svg class="i"><use href="#i-camera"/></svg></span>Photograph the spot</div>
+      <div><span class="hi"><svg class="i"><use href="#i-check"/></svg></span>See it, save it</div>
+    </div>
   </section>
 
   <!-- machine switcher (from the machine name in the top bar) -->
@@ -313,39 +360,39 @@
       <div class="intro">
         <!-- a phone framing the spot, with the machine standing on the floor -->
         <svg class="upArt" viewBox="0 0 150 120" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="38" y="3" width="74" height="114" rx="14" stroke="rgba(255,255,255,.55)" stroke-width="2.2"/>
-          <path d="M44 20h62" stroke="rgba(255,255,255,.12)" stroke-width="1.5"/>
-          <path d="M58 22v44M92 22v44" stroke="rgba(255,255,255,.22)" stroke-width="1.6"/>
-          <path d="M42 80l16-14h34l16 14" stroke="rgba(255,255,255,.35)" stroke-width="1.6"/>
-          <path d="M48 106h54" stroke="rgba(255,255,255,.22)" stroke-width="1.6" stroke-dasharray="3 5"/>
-          <rect x="62" y="58" width="26" height="36" rx="3.5" stroke="#ffcc00" stroke-width="2.4"/>
-          <path d="M62 66h26" stroke="#ffcc00" stroke-width="1.8"/>
-          <circle cx="75" cy="80" r="8.5" stroke="#ffcc00" stroke-width="2.2"/>
-          <ellipse cx="75" cy="97" rx="17" ry="3" stroke="#00ff99" stroke-width="1.8"/>
+          <rect x="38" y="3" width="74" height="114" rx="14" stroke="#2b2d33" stroke-width="2.2"/>
+          <path d="M44 20h62" stroke="rgba(20,20,25,.12)" stroke-width="1.5"/>
+          <path d="M58 22v44M92 22v44" stroke="rgba(20,20,25,.22)" stroke-width="1.6"/>
+          <path d="M42 80l16-14h34l16 14" stroke="rgba(20,20,25,.35)" stroke-width="1.6"/>
+          <path d="M48 106h54" stroke="rgba(20,20,25,.22)" stroke-width="1.6" stroke-dasharray="3 5"/>
+          <rect x="62" y="58" width="26" height="36" rx="3.5" stroke="#e11d2a" stroke-width="2.4"/>
+          <path d="M62 66h26" stroke="#e11d2a" stroke-width="1.8"/>
+          <circle cx="75" cy="80" r="8.5" stroke="#e11d2a" stroke-width="2.2"/>
+          <ellipse cx="75" cy="97" rx="17" ry="3" stroke="#9aa0ab" stroke-width="1.8"/>
         </svg>
         <h1>Photograph the spot</h1>
         <p class="lead" id="introP">Take a photo of the floor where the machine will go — it appears there at its real size.</p>
         <div class="tips">
-          <span class="tip">↔️ Stand 2–3 m back</span>
-          <span class="tip">⬇️ Show the floor</span>
-          <span class="tip">🚪 A door or counter in view</span>
+          <span class="tip"><svg class="i"><use href="#i-span"/></svg>Stand 2–3 m back</span>
+          <span class="tip"><svg class="i"><use href="#i-floor"/></svg>Show the floor</span>
+          <span class="tip"><svg class="i"><use href="#i-door"/></svg>A door or counter in view</span>
         </div>
       </div>
-      <p class="reading" id="reading" role="status"><span class="busyEmoji" aria-hidden="true">🖼️</span>Reading your photo…</p>
+      <p class="reading" id="reading" role="status"><span class="busyEmoji" aria-hidden="true"></span>Reading your photo…</p>
       <img id="preview" class="preview" alt="Your photo" />
       <div class="qnotes" id="qnotes" role="status" aria-live="polite"></div>
     </div>
     <div class="bar" id="pickRow">
-      <button class="btn go" id="takeBtn" type="button" hidden><span class="ic">📷</span>Take photo</button>
-      <label class="btn go" id="galleryBtn"><span class="ic">🖼️</span><span id="galleryLabel">Choose a photo</span>
+      <button class="btn go" id="takeBtn" type="button" hidden><span class="ic"><svg class="i"><use href="#i-camera"/></svg></span>Take photo</button>
+      <label class="btn go" id="galleryBtn"><span class="ic"><svg class="i"><use href="#i-image"/></svg></span><span id="galleryLabel">Choose a photo</span>
         <input id="file" type="file" accept="image/*" />
       </label>
       <!-- the phone's own camera app: the fallback when the in-app camera can't open -->
       <input id="fileCam" type="file" accept="image/*" capture="environment" hidden />
     </div>
     <div class="bar confirmRow" id="confirmRow">
-      <button class="btn dark" id="retake" type="button"><span class="ic">↩</span>Retake</button>
-      <button class="btn go" id="usephoto" type="button">Use photo<span class="ic">→</span></button>
+      <button class="btn dark" id="retake" type="button"><span class="ic"><svg class="i"><use href="#i-reset"/></svg></span>Retake</button>
+      <button class="btn go" id="usephoto" type="button">Use photo<span class="ic"><svg class="i"><use href="#i-arrow"/></svg></span></button>
     </div>
   </section>
 
@@ -354,13 +401,13 @@
     <video id="camVideo" playsinline autoplay muted></video>
     <div class="camHorizon" id="camHorizon" aria-hidden="true"></div>
     <div class="camTop">
-      <button class="iconBtn" id="camClose" type="button" aria-label="Close the camera">✕</button>
+      <button class="iconBtn" id="camClose" type="button" aria-label="Close the camera"><svg class="i"><use href="#i-x"/></svg></button>
       <span class="camHint" id="camHint" role="status" aria-live="polite">Show the floor where the machine would go</span>
     </div>
     <div class="camBottom">
       <span class="camTilt" id="camTilt"></span>
       <button class="shutter" id="shutter" type="button" aria-label="Take the photo"></button>
-      <button class="iconBtn" id="camGallery" type="button" aria-label="Choose from your photos instead">🖼️</button>
+      <button class="iconBtn" id="camGallery" type="button" aria-label="Choose from your photos instead"><svg class="i"><use href="#i-image"/></svg></button>
     </div>
   </div>
 
@@ -393,7 +440,7 @@
       </div>
       <div class="calBtns">
         <button class="btn small go" id="calNext" type="button" hidden>Next →</button>
-        <button class="iconBtn" id="calCancel" type="button" aria-label="Cancel measuring">✕</button>
+        <button class="iconBtn" id="calCancel" type="button" aria-label="Cancel measuring"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
     </div>
     <div class="toast" id="toast" role="status" aria-live="polite">
@@ -404,7 +451,7 @@
       <div class="busyGlow"></div>
       <div class="busyScan"></div>
       <div class="busyCard" role="status" aria-live="polite">
-        <span class="busyEmoji" id="busyEmoji" aria-hidden="true">🧺</span>
+        <span class="busyEmoji" id="busyEmoji" aria-hidden="true"></span>
         <span class="busyText" id="busyText">Getting ready…</span>
         <span class="busySub" id="busySub"></span>
         <div class="busyBar" id="busyBar"><div class="busyFill" id="busyFill"></div></div>
@@ -413,11 +460,11 @@
   </section>
 
   <div class="bar" id="dock">
-    <button class="btn" id="adjustBtn" type="button" aria-haspopup="dialog"><span class="ic">↻</span>Rotate</button>
-    <button class="btn" id="calBtn" type="button"><span class="ic">📏</span>Measure</button>
+    <button class="btn" id="adjustBtn" type="button" aria-haspopup="dialog"><span class="ic"><svg class="i"><use href="#i-rotate"/></svg></span>Rotate</button>
+    <button class="btn" id="calBtn" type="button"><span class="ic"><svg class="i"><use href="#i-ruler"/></svg></span>Measure</button>
     <!-- Reset left the bar; the button stays, out of sight, since the placing code uses its state -->
-    <button class="btn" id="aiBtn" type="button" hidden><span class="ic">↺</span>Reset</button>
-    <button class="btn go" id="save" type="button"><span class="ic">💾</span>Save</button>
+    <button class="btn" id="aiBtn" type="button" hidden><span class="ic"><svg class="i"><use href="#i-reset"/></svg></span>Reset</button>
+    <button class="btn go" id="save" type="button"><span class="ic"><svg class="i"><use href="#i-download"/></svg></span>Save</button>
   </div>
 
   <!-- Rotate: turn the machine by hand (two fingers on the photo do the same) -->
@@ -429,8 +476,8 @@
       </div>
       <div class="slider"><label for="sRot">Angle</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
       <div class="sheetBtns">
-        <button class="btn dark" id="rotL" type="button">↺ 45°</button>
-        <button class="btn dark" id="rotR" type="button">↻ 45°</button>
+        <button class="btn dark" id="rotL" type="button"><svg class="i flip"><use href="#i-rotate"/></svg>45°</button>
+        <button class="btn dark" id="rotR" type="button"><svg class="i"><use href="#i-rotate"/></svg>45°</button>
       </div>
       <!-- size and camera tilt stay automatic (real size, fitted tilt); kept for the code that reads them -->
       <div hidden>
@@ -444,11 +491,11 @@
   <div class="sheetWrap" id="improve">
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="improveTitle">
       <div class="sheetHead"><span class="sheetTitle" id="improveTitle">Get the exact size</span></div>
-      <span class="sheetSub">Nothing in this photo has a size the app knows, so the machine's size is a best guess.</span>
-      <button class="option" id="improveMeasure" type="button"><span class="oi">📏</span>
+      <span class="sheetSub">Nothing in this photo tells us its real size yet, so the machine's size is an estimate.</span>
+      <button class="option" id="improveMeasure" type="button"><span class="oi"><svg class="i"><use href="#i-ruler"/></svg></span>
         <span><b>Measure something</b><small>Mark a door, table or counter in the photo — exact</small></span></button>
-      <button class="option" id="depthOffer" type="button"><span class="oi">✨</span>
-        <span><b>3D-scan my room</b><small>Automatic · one-time 145 MB download</small></span></button>
+      <button class="option" id="depthOffer" type="button"><span class="oi"><svg class="i"><use href="#i-sparkle"/></svg></span>
+        <span><b>Scan my room in 3D</b><small>Automatic · one-time 145 MB download</small></span></button>
     </div>
   </div>
 
@@ -465,7 +512,7 @@
     <span class="calHint" id="calHint" aria-live="polite"></span>
     <div class="sheetBtns">
       <button class="btn dark" id="calRemark" type="button">Re-mark</button>
-      <button class="btn go" id="calApply" type="button" disabled>Apply ✓</button>
+      <button class="btn go" id="calApply" type="button" disabled>Apply</button>
     </div>
     <button class="linkBtn" id="calReset" type="button" hidden>Remove my measurements (go back to automatic)</button>
   </div>
@@ -663,13 +710,13 @@ async function takePhotoFile(f, pitch = null){
   } catch (err) {
     // e.g. a HEIC photo on a browser that can't open them
     readingEl.classList.remove('on'); resetPicker();
-    showNotes([{ text: '😕 Couldn’t open that photo. Try another one — a JPG or PNG works best.' }]);
+    showNotes([{ text: 'Couldn’t open that photo. Try another one — a JPG or PNG works best.' }]);
     return;
   }
   await readPhotoLens(f);   // best-effort: the photo's real lens, if its EXIF still says
   readingEl.classList.remove('on');
   const notes = photoNotes(photoBitmap);
-  if (sensorPitch !== null) notes.push({ good: true, text: '📐 Your phone’s tilt (' + Math.round(sensorPitch) + '° down) was recorded with the photo — it helps get the size right.' });
+  if (sensorPitch !== null) notes.push({ good: true, text: 'Your phone’s tilt (' + Math.round(sensorPitch) + '° down) was recorded with the photo — it helps get the size right.' });
   showNotes(notes);
   if (previewURL) URL.revokeObjectURL(previewURL);
   preview.src = previewURL = URL.createObjectURL(f);
@@ -684,7 +731,7 @@ function showNotes(notes){
 // even a slight blur dropped them to 8-47; their average brightness ran 0.33-0.57.
 function photoNotes(bm){
   const notes = [], long = Math.max(bm.width, bm.height);
-  if (long < 700) notes.push({ text: '🔎 This photo is quite small (' + bm.width + ' × ' + bm.height + ') — the full-size photo from your camera lets the AI see more.' });
+  if (long < 700) notes.push({ text: 'This photo is quite small (' + bm.width + ' × ' + bm.height + ') — the full-size photo from your camera lets the AI see more.' });
   const s = 256 / long, w = Math.max(3, Math.round(bm.width * s)), h = Math.max(3, Math.round(bm.height * s));
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(bm, 0, 0, w, h);
@@ -692,14 +739,14 @@ function photoNotes(bm){
   let bright = 0, lit = 0;
   for (let i = 0; i < w * h; i++) { g[i] = (0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]) / 255; bright += g[i]; if (g[i] > 0.45) lit++; }
   // dark all over -- not just a dark sofa in a lit room
-  if (bright / (w * h) < 0.18 && lit < 0.1 * w * h) notes.push({ text: '💡 It’s quite dark — the AI finds the floor and furniture much better in good light.' });
+  if (bright / (w * h) < 0.18 && lit < 0.1 * w * h) notes.push({ text: 'It’s quite dark — the AI finds the floor and furniture much better in good light.' });
   // sharpness: how much fine detail there is (variance of the Laplacian, in 0-255 units)
   let m = 0, m2 = 0, n = 0;
   for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
     const i = y * w + x, L = 255 * (4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w]);
     m += L; m2 += L * L; n++;
   }
-  if (n && m2 / n - (m / n) ** 2 < 100) notes.push({ text: '🤳 It looks blurry — hold the phone still (or tap to focus) and try again.' });
+  if (n && m2 / n - (m / n) ** 2 < 100) notes.push({ text: 'It looks blurry — hold the phone still (or tap to focus) and try again.' });
   return notes;
 }
 // Back to "take or choose", clearing the inputs so picking the same file again still counts
@@ -778,7 +825,7 @@ async function openCamera(){
       facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1920 }, aspectRatio: { ideal: 4 / 3 } } });
   } catch (e) {
     camStream = null;
-    showNotes([{ text: '📷 The camera didn’t open here — take the photo with your camera app, then choose it.' }]);
+    showNotes([{ text: 'The camera didn’t open here — take the photo with your camera app, then choose it.' }]);
     fileCam.click();
     return;
   }
@@ -1261,7 +1308,7 @@ function initThree(){
       dragMode = 'free';
       placeRaw(downX, downY);
       if (navigator.vibrate) try { navigator.vibrate(15); } catch (err) {}
-      toast('Placed exactly there ✓ — drag it to snap back to the floor');
+      toast('Placed exactly there. Drag it to snap back to the floor.');
     }, LONG_PRESS_MS);
   });
   glCanvas.addEventListener('pointermove', (e) => {
@@ -1451,7 +1498,7 @@ saveBtn.addEventListener('click', async () => {
     const a = document.createElement('a');
     a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    toast('Saved ✓ — check your downloads');
+    toast('Saved. Check your downloads.');
   } catch (e) {
     console.warn('Save failed:', e);
     toast('Couldn’t save the picture — please try again.');
@@ -2573,7 +2620,7 @@ calibEl.addEventListener('pointercancel', calRelease);
 const chipHtml = (i, e, label, sub) => `<button type="button" class="chip" data-i="${i}" aria-pressed="false">` +
   `<span class="ce">${e}</span><span><b>${label}</b><span class="cm">${sub}</span></span></button>`;
 calChips.innerHTML = CAL_PRESETS.map((p, i) => chipHtml(i, p.e, p.label, p.cm + ' cm')).join('') +
-  chipHtml('other', '✏️', 'Something else', 'type its height below');
+  chipHtml('other', '', 'Something else', 'type its height below');
 calChips.addEventListener('click', (e) => {
   const b = e.target.closest('.chip'); if (!b) return;
   [...calChips.children].forEach((c) => c.setAttribute('aria-pressed', String(c === b)));
