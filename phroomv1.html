@@ -1,0 +1,2996 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>IFB Washing Machine — Measure and Place (v1)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="icon" type="image/png" href="assets/IFB%20logo%201.png" />
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.172.0/build/three.module.min.js",
+    "three/addons/": "https://unpkg.com/three@0.172.0/examples/jsm/"
+  }
+}
+</script>
+
+<style>
+  /* Look and feel: the photo and the product fill the screen, with one red primary action per
+     screen (IFB red), quiet glass secondary buttons, line icons and a calm neutral palette.
+     The machine chooser and the photo screen are light; the composer stays dark so the photo
+     is the brightest thing on it. */
+  :root{--bg:#0b0b0b;--panel:rgba(14,14,14,.97);--card:#161616;--line:rgba(255,255,255,.1);
+    --ink:#fff;--muted:rgba(255,255,255,.64);--go:#2ee67b;--accent:#fff;--primary:#e11d2a;--primary-hi:#f23a46;--warn:#ff6b5e}
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  /* 100dvh is the part of a phone's screen actually visible under the address bar -- 100% alone
+     includes the area behind it, which pushed the bottom bar off screen. The 100% stays for
+     browsers that predate dvh. */
+  html,body{margin:0;height:100%;height:100dvh;overflow:hidden;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  /* #stage and the composer's bar are the only in-flow children: the photo gets whatever the bar
+     leaves, so the controls never sit on top of it. Every other screen is its own fixed layer. */
+  body{display:flex;flex-direction:column}
+  button,input{font-family:inherit}
+
+  /* ---------- buttons ---------- */
+  .btn{appearance:none;flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;
+    padding:12px 10px;border:0;border-radius:12px;font-weight:600;font-size:15px;white-space:nowrap;cursor:pointer;
+    color:#fff;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);transition:transform .1s,opacity .15s,background .15s}
+  .btn:hover{background:rgba(255,255,255,.18)}
+  .btn:active{transform:scale(.97)}
+  .btn.go{background:var(--primary);border-color:var(--primary);color:#fff;box-shadow:0 6px 18px rgba(225,29,42,.32)}
+  .btn.go:hover{background:var(--primary-hi)}
+  .btn.dark{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.18)}
+  .btn:disabled{opacity:.4;cursor:default;transform:none}
+  .btn .ic{display:inline-flex;line-height:1}
+  .i{width:20px;height:20px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .i.flip{transform:scaleX(-1)}
+  .btn.small{flex:none;min-height:38px;padding:8px 14px;font-size:13.5px;border-radius:10px}
+  /* Measure pulses when nothing in the photo could size the machine */
+  .btn.glow{animation:glow 1.6s ease-in-out infinite}
+  @keyframes glow{50%{box-shadow:0 0 0 5px rgba(255,255,255,.28)}}
+  .round{appearance:none;flex:none;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    padding:0;color:#fff;cursor:pointer;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.22);
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);transition:background .15s,color .15s,border-color .15s}
+  .round svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .round[aria-pressed="true"]{background:#fff;border-color:#fff;color:#111}
+  .linkBtn{appearance:none;background:none;border:0;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;padding:4px;align-self:center;text-decoration:underline;text-underline-offset:3px}
+  /* one bar of actions along the bottom of the photo screen and of the composer */
+  .bar{flex:none;display:flex;gap:10px;padding:12px 12px calc(env(safe-area-inset-bottom,0px) + 12px);
+    background:var(--panel);border-top:1px solid var(--line)}
+  /* on a wide screen the buttons stay button-sized, centred, rather than stretching edge to edge */
+  @media (min-width:700px){ .bar{padding-left:calc(50% - 300px);padding-right:calc(50% - 300px)} }
+  @media (max-width:350px){ .btn{font-size:13.5px;gap:6px} .bar{gap:8px;padding-left:10px;padding-right:10px} }
+
+  /* ---------- top bar (photo screen and composer) ---------- */
+  .top{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:10px;
+    padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 12px;background:linear-gradient(180deg,rgba(0,0,0,.4),rgba(0,0,0,0))}
+  .brand{display:block;width:30px;height:30px;border-radius:7px;flex:none}
+  .machineChip{appearance:none;display:flex;align-items:center;gap:7px;min-width:0;padding:8px 13px;border-radius:999px;cursor:pointer;
+    color:#fff;font-size:13px;font-weight:600;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.22);
+    -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  .machineChip .mc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .machineChip .chev{flex:none;opacity:.7;font-size:10px}
+  .grow{flex:1}
+  .top[inert]{opacity:.35}
+
+  /* ---------- 1. choose the machine ---------- */
+  /* the two light screens: same tokens, light values */
+  #chooser,#upload{--bg:#f6f4f1;--card:#fff;--line:rgba(20,20,25,.1);--ink:#17181c;--muted:#666a73;color:var(--ink)}
+  #chooser{position:fixed;inset:0;z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:18px;
+    padding:calc(env(safe-area-inset-top,0px) + 26px) 18px calc(env(safe-area-inset-bottom,0px) + 26px);overflow-y:auto;
+    background:radial-gradient(120% 60% at 50% 0%,#fff 0%,#f6f4f1 62%)}
+  .ch-brand{display:block;width:40px;height:40px;border-radius:10px}
+  #chooser h1{margin:0;font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.15;text-align:center}
+  .ch-sub{margin:-8px 0 0;max-width:320px;text-align:center;color:var(--muted);font-size:14.5px;line-height:1.5}
+  .how{display:flex;gap:6px;width:100%;max-width:380px;margin-top:4px}
+  .how div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;font-size:12px;line-height:1.3;color:var(--muted)}
+  .how .hi{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;
+    border:1px solid var(--line);color:var(--primary)}
+  .how .hi .i{width:19px;height:19px}
+  .choices{display:flex;flex-direction:column;gap:12px;width:100%;max-width:380px}
+  .choice{appearance:none;display:flex;align-items:center;gap:16px;width:100%;padding:12px 16px 12px 12px;border-radius:20px;
+    text-align:left;color:#fff;cursor:pointer;background:var(--card);border:1px solid var(--line);transition:border-color .15s,box-shadow .15s,transform .1s}
+  .choice:active{transform:scale(.985)}
+  .choice:hover,.choice:focus-visible{border-color:rgba(255,255,255,.5);outline:none}
+  .choice .thumb{flex:none;width:80px;height:92px;border-radius:14px;display:flex;align-items:center;justify-content:center;padding:5px;
+    background:radial-gradient(circle at 50% 40%,#5a5a5a,#262626 80%)}
+  #chooser .choice{color:var(--ink);box-shadow:0 1px 2px rgba(20,20,25,.05),0 8px 22px rgba(20,20,25,.06);padding:14px 16px 14px 14px}
+  #chooser .choice:hover,#chooser .choice:focus-visible{border-color:var(--primary);box-shadow:0 1px 2px rgba(20,20,25,.05),0 10px 26px rgba(225,29,42,.14)}
+  #chooser .choice .thumb{width:84px;height:96px;background:radial-gradient(circle at 50% 38%,#ecebe8,#d9d6d1 85%)}
+  #chooser .choice .cn{font-size:18px}
+  #chooser .choice .end{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    background:var(--primary);color:#fff;font-size:20px;padding-bottom:2px}
+  .choice .thumb img{width:100%;height:100%;object-fit:contain}
+  .choice .txt{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+  .choice .cn{font-weight:600;font-size:17px}
+  .choice .cd{color:var(--muted);font-size:13px}
+  .choice .end{flex:none;color:rgba(255,255,255,.4);font-size:24px;line-height:1}
+  .choice[aria-checked="true"]{border-color:#fff;background:rgba(255,255,255,.08)}
+  #menuList .choice .end{visibility:hidden;color:#fff;font-size:18px}
+  #menuList .choice[aria-checked="true"] .end{visibility:visible}
+  #menuList .choice .thumb{width:56px;height:64px}
+
+  /* ---------- 2. the photo ---------- */
+  #upload{position:fixed;inset:0;z-index:15;display:none;flex-direction:column;background:var(--bg)}
+  body:has(#upload[style*="flex"]) .top{background:none}
+  body:has(#upload[style*="flex"]) .top .round,body:has(#upload[style*="flex"]) .top .machineChip{background:#fff;color:#17181c;border-color:rgba(20,20,25,.12)}
+  .upMain{flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;justify-content:safe center;gap:16px;
+    padding:calc(env(safe-area-inset-top,0px) + 66px) 22px 16px;text-align:center;overflow-y:auto}
+  .intro{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .upArt{width:150px;height:120px;flex:none}
+  #upload h1{margin:0;font-size:26px;font-weight:700;letter-spacing:-.02em}
+  #upload .lead{margin:0;max-width:300px;color:var(--muted);font-size:14.5px;line-height:1.5}
+  .tips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:360px;margin-top:6px}
+  .tip{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:999px;font-size:12.5px;font-weight:500;
+    color:var(--ink);background:var(--card);border:1px solid var(--line)}
+  .tip .i{width:16px;height:16px;color:var(--primary)}
+  #upload .bar{background:#fff;border-top:1px solid var(--line)}
+  #upload .btn:not(.go){background:#fff;color:var(--ink);border-color:rgba(20,20,25,.18)}
+  #upload .qnote{color:#7a5200;background:#fff6dd;border-color:#f0d58a}
+  #upload .qnote.good{color:#14633c;background:#e7f8ef;border-color:#a9e0c2}
+  /* once a photo is picked it fills the screen, above Retake / Use photo */
+  #upload.picked .intro{display:none}
+  #upload.picked .upMain{justify-content:flex-start;padding:calc(env(safe-area-inset-top,0px) + 64px) 10px 12px}
+  .preview{display:none;flex:1;min-height:0;max-width:100%;object-fit:contain;border-radius:12px}
+  #upload.picked .preview{display:block}
+  .reading{display:none;align-items:center;gap:10px;color:var(--muted);font-size:14px;margin:0}
+  .reading.on{display:flex}
+  .qnotes{display:flex;flex-direction:column;gap:6px;width:100%;max-width:440px;flex:none}
+  .qnotes:empty{display:none}
+  .qnote{font-size:12.5px;line-height:1.4;text-align:left;color:#ffe7a3;background:rgba(255,204,0,.1);
+    border:1px solid rgba(255,204,0,.35);border-radius:12px;padding:8px 11px}
+  .qnote.good{color:#b3ffd9;background:rgba(0,255,153,.08);border-color:rgba(0,255,153,.35)}
+  #file,#fileCam{display:none}
+  .confirmRow{display:none}
+
+  /* ---------- in-app camera ---------- */
+  #camView{position:fixed;inset:0;z-index:60;background:#000}
+  /* contain, not cover: what's on screen is exactly what the photo will hold */
+  #camVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+  .camHorizon{position:absolute;left:14%;right:14%;top:50%;height:0;border-top:2px solid rgba(255,255,255,.85);
+    filter:drop-shadow(0 0 1px rgba(0,0,0,.8));pointer-events:none;display:none;transition:border-color .15s}
+  .camHorizon.on{display:block}
+  .camHorizon.level{border-top-color:var(--go)}
+  .camTop{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:12px;
+    padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 26px;background:linear-gradient(180deg,rgba(0,0,0,.65),transparent)}
+  .camHint{color:#fff;font-size:14px;font-weight:700;line-height:1.3;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+  .camBottom{position:absolute;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:space-between;
+    padding:26px 24px calc(env(safe-area-inset-bottom,0px) + 22px);background:linear-gradient(0deg,rgba(0,0,0,.65),transparent)}
+  .camTilt{width:44px;color:#fff;font-size:12px;font-weight:800;text-align:center;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+  .shutter{appearance:none;width:76px;height:76px;border-radius:50%;border:5px solid #fff;background:rgba(255,255,255,.22);
+    cursor:pointer;box-shadow:0 0 0 2px rgba(0,0,0,.35);transition:transform .1s,background .1s}
+  .shutter:active{transform:scale(.93);background:rgba(255,255,255,.6)}
+  .shutter:disabled{opacity:.4}
+
+  /* ---------- 3. the composer ---------- */
+  #stage{position:relative;flex:1;min-height:0;z-index:5;display:none;background:#000}
+  #bg,#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
+  #gl{touch-action:none}
+  #dock{display:none}
+  #dock[inert]{opacity:.35}
+  .spin{flex:none;width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:7;display:none;max-width:calc(100% - 24px);
+    color:#fff;font-size:12.5px;font-weight:600;background:rgba(0,0,0,.62);border:1px solid rgba(255,255,255,.2);
+    border-radius:999px;padding:8px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+  .srOnly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  /* ---------- "working on it" overlay ----------
+     Over the photo while the machine and the room AI download and while the AI reads the room --
+     several seconds on a first visit -- so it never looks frozen. Every animation is a transform
+     (or opacity): the AI runs in a worker, but the camera fit still holds the main thread for a
+     moment, and only compositor-driven animations keep moving through that. */
+  #busy{position:absolute;inset:0;z-index:3;pointer-events:none;overflow:hidden;
+    background:rgba(0,0,0,.3);opacity:0;visibility:hidden;transition:opacity .35s,visibility 0s .35s}
+  #busy.on{opacity:1;visibility:visible;transition:opacity .35s}
+  .busyGlow{position:absolute;inset:0;background:rgba(0,0,0,.18)}
+  @keyframes busySpin{from{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.15)}to{transform:rotate(360deg) scale(1)}}
+  .busyScan{position:absolute;left:0;right:0;top:0;height:28%;
+    background:linear-gradient(180deg,transparent,rgba(255,255,255,.12) 42%,rgba(255,255,255,.28) 50%,rgba(255,255,255,.12) 58%,transparent);
+    animation:busySweep 2.4s ease-in-out infinite}
+  @keyframes busySweep{from{transform:translateY(-100%)}to{transform:translateY(360%)}}
+  .busyCard{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;
+    align-items:center;gap:9px;min-width:230px;max-width:86%;padding:16px 20px;border-radius:18px;text-align:center;
+    background:rgba(12,12,12,.82);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.16);box-shadow:0 12px 34px rgba(0,0,0,.5);color:#fff}
+  .busyEmoji{display:inline-block;font-size:0;width:34px;height:34px;border-radius:50%;border:3px solid rgba(255,255,255,.22);
+    border-top-color:var(--primary);animation:spin .9s linear infinite}
+  @keyframes busyBob{0%,100%{transform:translateY(0) rotate(-7deg) scale(1)}50%{transform:translateY(-7px) rotate(7deg) scale(1.14)}}
+  .busyText{font-weight:600;font-size:14.5px;line-height:1.35}
+  .busySub:empty{display:none}
+  .busySub{font-size:11.5px;color:var(--muted);line-height:1.35}
+  .busyBar{width:190px;max-width:100%;height:5px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden}
+  .busyFill{height:100%;width:38%;border-radius:99px;background:var(--primary);
+    animation:busyIndet 1.3s ease-in-out infinite}
+  @keyframes busyIndet{from{transform:translateX(-110%)}to{transform:translateX(300%)}}
+  .busyBar.det .busyFill{animation:none;transform:none;transition:width .25s}
+  /* the AI's view of the room, flashed over the photo once it's done (see revealScan()) */
+  #scan{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:0;transition:opacity .5s}
+  #scan.show{opacity:1}
+  .reading .busyEmoji{width:20px;height:20px;border-width:2.5px}
+  @media (prefers-reduced-motion: reduce){
+    .busyGlow,.busyEmoji,.busyFill,.btn.glow{animation:none}
+    .busyScan{display:none}
+    .spin{animation-duration:2.4s}
+  }
+
+  /* ---------- bottom sheets: machine, adjust, exact size ---------- */
+  .sheetWrap{position:fixed;inset:0;z-index:30;display:none;background:rgba(0,0,0,.55)}
+  .sheetWrap.open{display:block}
+  .sheet{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:14px;max-height:86vh;overflow-y:auto;
+    padding:10px 16px calc(env(safe-area-inset-bottom,0px) + 18px);background:#141414;border-top:1px solid var(--line);
+    border-radius:20px 20px 0 0;box-shadow:0 -12px 34px rgba(0,0,0,.5)}
+  .sheet::before{content:"";flex:none;align-self:center;width:40px;height:4px;border-radius:4px;background:rgba(255,255,255,.22)}
+  /* Adjust keeps the photo clear and live: sliders turn and size the machine while you watch, and
+     it can still be dragged about behind the sheet. */
+  #adjust{background:transparent;pointer-events:none}
+  #adjust .sheet{pointer-events:auto}
+  .sheetHead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .sheetTitle{font-weight:600;font-size:18px}
+  .sheetSub{font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:-8px}
+  .slider{display:flex;align-items:center;gap:12px;font-size:13.5px}
+  .slider label{width:84px;color:var(--muted);flex:none}
+  .slider .val{width:62px;text-align:right;font-weight:700;flex:none;font-variant-numeric:tabular-nums}
+  input[type=range]{flex:1;min-width:0;accent-color:var(--accent);height:30px}
+  .sheetBtns{display:flex;gap:10px}
+  .option{appearance:none;display:flex;align-items:center;gap:14px;width:100%;padding:14px;border-radius:14px;text-align:left;cursor:pointer;
+    color:#fff;background:var(--card);border:1px solid var(--line)}
+  .option:hover,.option:focus-visible{border-color:rgba(255,255,255,.5);outline:none}
+  .option .oi{flex:none;width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.1)}
+  .option .oi .i{width:22px;height:22px}
+  .option b{display:block;font-size:15px;font-weight:600}
+  .option small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+
+  /* ---------- Measure: the customer marks something of known height ---------- */
+  #calib{position:absolute;inset:0;z-index:4;display:none;touch-action:none;cursor:crosshair}
+  #calib.on{display:block}
+  #calibSvg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+  /* magnifier over the finger -- on a phone the fingertip hides exactly the spot being marked */
+  #loupe{position:absolute;width:118px;height:118px;border-radius:50%;border:3px solid #fff;display:none;
+    box-shadow:0 8px 24px rgba(0,0,0,.55);pointer-events:none;background:#000}
+  /* Compact, and kept off the marks: it sits at whichever edge of the photo is clear of them (see
+     placeCalBar()), touches go straight through it to the photo, and it all but vanishes while a
+     finger is down -- so no part of the photo is ever unmarkable. */
+  .calBar{position:absolute;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 56px);z-index:6;display:none;
+    align-items:center;gap:10px;padding:9px 10px 9px 13px;border-radius:14px;color:#fff;pointer-events:none;
+    background:rgba(12,12,12,.88);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
+    border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(0,0,0,.45);transition:opacity .15s}
+  .calBar .calBtns{pointer-events:auto}
+  .calBar.on{display:flex}
+  .calIcon{flex:none;width:40px;height:40px;overflow:visible}
+  .calBar[data-step="1"] .ciTop,.calBar[data-step="1"] .ciLine{display:none}
+  .calBar[data-step="1"] .ciBase,.calBar[data-step="2"] .ciTop{animation:ciPulse 1.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+  @keyframes ciPulse{50%{transform:scale(1.35)}}
+  @media (prefers-reduced-motion: reduce){ .calIcon *{animation:none!important} }
+  .calBar.bottom{top:auto;bottom:10px}
+  .calBar.dragging{opacity:.12}
+  .calTexts{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+  .calStepNo{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--muted)}
+  .calStep{font-size:13px;font-weight:700;line-height:1.3}
+  .calBtns{display:flex;gap:6px;align-items:center;flex:none}
+  .iconBtn{appearance:none;width:34px;height:34px;border-radius:10px;cursor:pointer;color:#fff;font-size:15px;
+    background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25)}
+  .calSheet{position:fixed;left:0;right:0;bottom:0;z-index:35;display:none;flex-direction:column;gap:12px;
+    max-height:80vh;overflow-y:auto;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 16px);
+    background:#141414;border-top:1px solid var(--line);border-radius:20px 20px 0 0;
+    box-shadow:0 -12px 34px rgba(0,0,0,.5);color:#fff}
+  .calSheet.open{display:flex}
+  .chips{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .chip{appearance:none;cursor:pointer;display:flex;align-items:center;gap:8px;text-align:left;color:#fff;
+    background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 11px;font-size:13px}
+  .chip .ce{display:none}
+  .chip .cm{display:block;color:var(--muted);font-size:11.5px}
+  .chip[aria-pressed="true"]{border-color:#fff;background:rgba(255,255,255,.1)}
+  .calInputRow{display:flex;align-items:center;gap:10px;font-size:13.5px}
+  .calInputRow input{width:110px;padding:10px 12px;border-radius:11px;border:1px solid rgba(255,255,255,.25);
+    background:rgba(255,255,255,.08);color:#fff;font-size:16px;font-weight:700}
+  .calHint{font-size:12px;color:#ffb3aa;margin-top:-4px}
+  .calHint.ok{color:var(--muted)}
+  .calGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .calField{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
+  .calLbl{font-weight:600}
+  .calIn{display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:14px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08)}
+  .calIn:focus-within{border-color:#fff}
+  .calIn input{flex:1;min-width:0;width:100%;padding:12px 0;border:0;background:none;color:#fff;font-size:22px;font-weight:700;outline:none}
+  .calIn em{font-style:normal;color:var(--muted);font-size:13px}
+  .calIn.auto{border-color:rgba(138,230,191,.7)}
+  .calIn.edited{border-color:var(--pop)}
+  .calHint:empty{display:none}
+
+  /* short notices over the bottom of the photo, sometimes with an Undo */
+  .toast{position:absolute;left:50%;bottom:12px;z-index:9;display:flex;align-items:center;gap:12px;
+    width:max-content;max-width:calc(100% - 24px);padding:10px 12px 10px 15px;border-radius:14px;
+    color:#fff;font-size:13px;font-weight:700;line-height:1.35;background:rgba(18,18,18,.95);
+    border:1px solid rgba(255,255,255,.16);box-shadow:0 10px 26px rgba(0,0,0,.5);
+    opacity:0;visibility:hidden;transform:translate(-50%,10px);transition:opacity .2s,transform .2s,visibility 0s .2s}
+  .toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .2s,transform .2s}
+  .toastBtn{appearance:none;flex:none;border:0;background:none;color:#fff;text-decoration:underline;font-weight:600;font-size:13.5px;cursor:pointer;padding:4px 2px}
+
+  /* ---------- Gen Z skin: chunky type, cream and pops of colour, outlined cards with hard shadows ---------- */
+  :root{--ff:"Plus Jakarta Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --k:#17181c;--cream:#fff4e8;--pop:#ffd84d;--pink:#ff8fb3;--lav:#c2b4ff;--mint:#8ae6bf}
+  html,body,button,input{font-family:var(--ff)}
+  #chooser,#upload{--bg:var(--cream);--line:var(--k);--muted:#4b4d56;
+    background:radial-gradient(60% 38% at 8% 0%,rgba(255,143,179,.45),transparent 70%),
+               radial-gradient(55% 40% at 100% 18%,rgba(194,180,255,.5),transparent 70%),
+               radial-gradient(70% 40% at 0% 100%,rgba(255,216,77,.5),transparent 70%),var(--cream)}
+  .sticker{display:inline-block;transform:rotate(-3deg);background:var(--pop);color:var(--k);font-weight:800;font-size:12px;
+    letter-spacing:.02em;padding:6px 12px;border:2px solid var(--k);border-radius:999px;box-shadow:2px 2px 0 var(--k)}
+  #chooser h1,#upload h1{font-weight:800;letter-spacing:-.035em;line-height:1.05}
+  #chooser h1{font-size:34px}
+  #upload h1{font-size:32px}
+  .ch-sub,#upload .lead{font-weight:500;color:#3b3d45}
+  .ch-brand{border:2px solid var(--k);box-shadow:2px 2px 0 var(--k)}
+  #chooser .choice{border:2px solid var(--k);border-radius:26px;box-shadow:4px 4px 0 var(--k)}
+  #chooser .choice:hover,#chooser .choice:focus-visible{border-color:var(--k);box-shadow:4px 4px 0 var(--k);transform:translate(-1px,-1px)}
+  #chooser .choice:active{transform:translate(3px,3px);box-shadow:1px 1px 0 var(--k)}
+  #chooser .choice .cn{font-weight:800;font-size:19px;letter-spacing:-.01em}
+  #chooser .choice .cd{font-weight:500}
+  #chooser .choice:nth-child(1) .thumb{background:radial-gradient(circle at 50% 38%,#ffe1ec,var(--pink) 95%)}
+  #chooser .choice:nth-child(2) .thumb{background:radial-gradient(circle at 50% 38%,#ebe5ff,var(--lav) 95%)}
+  #chooser .choice:nth-child(3) .thumb{background:radial-gradient(circle at 50% 38%,#dcfbee,var(--mint) 95%)}
+  #chooser .choice .thumb{border:2px solid var(--k)}
+  #chooser .choice .end{border:2px solid var(--k);background:var(--pop);color:var(--k);font-weight:800}
+  .how .hi{border:2px solid var(--k);box-shadow:2px 2px 0 var(--k);color:var(--k)}
+  .how div:nth-child(1) .hi{background:var(--pink)}.how div:nth-child(2) .hi{background:var(--lav)}.how div:nth-child(3) .hi{background:var(--mint)}
+  .how div{font-weight:600;color:var(--k)}
+  .tip{border:2px solid var(--k);font-weight:700;box-shadow:2px 2px 0 var(--k)}
+  .tip:nth-child(1){background:var(--pop)}.tip:nth-child(2){background:var(--pink)}.tip:nth-child(3){background:var(--lav)}
+  .tip .i{color:var(--k)}
+  #upload .bar{background:transparent;border-top:0}
+  #upload .btn{border:2px solid var(--k);border-radius:18px;box-shadow:3px 3px 0 var(--k);font-weight:800}
+  #upload .btn.go{background:var(--primary);color:#fff}
+  #upload .btn:not(.go){background:#fff;color:var(--k)}
+  #upload .btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--k)}
+  .btn{font-weight:700;border-radius:16px}
+  #dock .btn.go{border-color:#fff;box-shadow:none;font-weight:800}
+  #dock .btn:not(.go){background:rgba(255,255,255,.14)}
+  .machineChip{font-weight:700}
+  .busyText{font-weight:700}
+  .toast{font-weight:600}
+  .sheet{border-radius:28px 28px 0 0}
+  .sheetTitle{font-weight:800;letter-spacing:-.01em}
+  .option{border-radius:18px}
+  .option b{font-weight:700}
+  #sizeChoice .sheet{background:var(--cream);color:var(--k);border-top:2px solid var(--k)}
+  #sizeChoice .sheet::before{background:rgba(23,24,28,.25)}
+  #sizeChoice .sheetSub{color:#4b4d56}
+  #sizeChoice .option{background:#fff;color:var(--k);border:2px solid var(--k);box-shadow:3px 3px 0 var(--k)}
+  #sizeChoice .option:hover,#sizeChoice .option:focus-visible{border-color:var(--k)}
+  #sizeChoice .option:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--k)}
+  #sizeChoice .option small{color:#4b4d56}
+  #sizeChoice #scKnown .oi{background:var(--pop)}
+  #sizeChoice #scAI .oi{background:var(--lav)}
+  #sizeChoice .oi{border:2px solid var(--k);color:var(--k)}
+  @keyframes pop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+  #chooser .choice{animation:pop .35s both}
+  #chooser .choice:nth-child(2){animation-delay:.06s}#chooser .choice:nth-child(3){animation-delay:.12s}
+  @media (prefers-reduced-motion: reduce){ #chooser .choice{animation:none} }
+
+  /* ---------- colour and motion ---------- */
+  .btn .ic,.tip .te,.how .hi,.em{font-size:18px;line-height:1}
+  .how .hi{font-size:19px}
+  /* the loader is a bobbing emoji again */
+  .busyEmoji{width:auto;height:auto;border:0;border-radius:0;font-size:38px;animation:busyBob 1.1s ease-in-out infinite}
+  .reading .busyEmoji{width:auto;height:auto;border:0;font-size:22px}
+  .busyFill{background:linear-gradient(90deg,#ff3d5a,#ffb23d,#7be0b5,#8f7bff)}
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+  @keyframes wiggle{0%,100%{transform:rotate(-4deg) scale(1)}50%{transform:rotate(3deg) scale(1.07)}}
+  @keyframes wave{0%,60%,100%{transform:rotate(0)}10%,30%{transform:rotate(16deg)}20%,40%{transform:rotate(-10deg)}50%{transform:rotate(8deg)}}
+  @keyframes drift1{0%,100%{transform:translate(0,0) scale(1)}50%{transform:translate(40px,60px) scale(1.2)}}
+  @keyframes drift2{0%,100%{transform:translate(0,0) scale(1.1)}50%{transform:translate(-50px,-40px) scale(.9)}}
+  @keyframes shimmer{to{background-position:200% 0}}
+  @keyframes nudge{0%,88%,100%{transform:translateY(0)}92%{transform:translateY(-4px) scale(1.03)}96%{transform:translateY(0) scale(.99)}}
+  @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  @keyframes tipIn{from{transform:translateY(12px) scale(.9);opacity:0}to{transform:none;opacity:1}}
+  @keyframes confetti{0%{transform:translate(0,0) rotate(0) scale(.6);opacity:1}100%{transform:translate(var(--dx),var(--dy)) rotate(var(--r)) scale(1.1);opacity:0}}
+  .sticker{animation:wiggle 2.6s ease-in-out infinite}
+  .wave{display:inline-block;transform-origin:70% 70%;animation:wave 2.6s ease-in-out infinite}
+  #chooser .choice .thumb img{animation:floaty 3.2s ease-in-out infinite}
+  #chooser .choice:nth-child(2) .thumb img{animation-delay:.5s}
+  #chooser .choice:nth-child(3) .thumb img{animation-delay:1s}
+  #chooser .choice .end{transition:transform .2s}
+  #chooser .choice:hover .end{transform:translateX(3px) scale(1.1)}
+  #chooser .how div{animation:tipIn .5s both}
+  #chooser .how div:nth-child(1){animation-delay:.35s}#chooser .how div:nth-child(2){animation-delay:.45s}#chooser .how div:nth-child(3){animation-delay:.55s}
+  /* drifting colour blobs behind the two light screens */
+  #chooser::before,#chooser::after,#upload::before,#upload::after{content:"";position:fixed;z-index:-1;width:260px;height:260px;border-radius:50%;
+    filter:blur(46px);opacity:.55;pointer-events:none}
+  #chooser::before,#upload::before{left:-70px;top:12%;background:#ff8fb3;animation:drift1 9s ease-in-out infinite}
+  #chooser::after,#upload::after{right:-80px;bottom:8%;background:#8f7bff;animation:drift2 11s ease-in-out infinite}
+  .upArt{animation:floaty 3.4s ease-in-out infinite}
+  .tip{animation:tipIn .5s both}
+  .tip:nth-child(1){animation-delay:.1s}.tip:nth-child(2){animation-delay:.2s}.tip:nth-child(3){animation-delay:.3s}
+  #upload .btn.go{background:linear-gradient(120deg,#ff3d5a,#ff8a3d,#ff3d8f);background-size:200% 100%;animation:shimmer 4s linear infinite,nudge 3s ease-in-out infinite}
+  /* composer bar: a colour per action */
+  #dock .btn.go{background:linear-gradient(120deg,#ff3d5a,#ff8a3d,#ff3d8f);background-size:200% 100%;animation:shimmer 4s linear infinite}
+  #dock #adjustBtn{background:rgba(143,123,255,.28);border-color:rgba(194,180,255,.7)}
+  #dock #calBtn{background:rgba(255,216,77,.22);border-color:rgba(255,216,77,.65)}
+  .btn:active{transform:scale(.94)}
+  .machineChip{border-color:rgba(255,216,77,.6)}
+  .round[aria-pressed="true"]{background:var(--pop);border-color:var(--pop)}
+  /* sheets bounce up, backdrops fade in */
+  .sheetWrap.open{animation:fadeIn .2s both}
+  .sheetWrap.open .sheet,.calSheet.open{animation:sheetUp .4s cubic-bezier(.2,1.25,.4,1) both}
+  .option{transition:transform .15s}
+  .option:hover{transform:scale(1.015)}
+  .option .oi .em{display:inline-block;transition:transform .2s}
+  .option:hover .oi .em{transform:rotate(-12deg) scale(1.2)}
+  #sizeChoice #scAI .oi .em{animation:wiggle 2.4s ease-in-out infinite}
+  .toast.on{animation:none}
+  .confetti{position:fixed;bottom:96px;z-index:90;font-size:24px;pointer-events:none;animation:confetti 1.2s cubic-bezier(.2,.7,.3,1) forwards}
+  @media (prefers-reduced-motion: reduce){
+    .sticker,.wave,#chooser .choice .thumb img,#chooser::before,#chooser::after,#upload::before,#upload::after,.upArt,.tip,
+    #upload .btn.go,#dock .btn.go,.busyEmoji,#sizeChoice #scAI .oi .em,.how div{animation:none}
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5"/></symbol>
+  <symbol id="i-rotate" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4v4.5h-4.5"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 4v4.5h4.5"/></symbol>
+  <symbol id="i-ruler" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="8" rx="1.5"/><path d="M7 8v3M11 8v4M15 8v3M19 8v2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10M8 10.5l4 4 4-4M5 19h14"/></symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24"><path d="M12 4l1.8 4.7 4.7 1.8-4.7 1.8L12 17l-1.8-4.7L5.5 10.5l4.7-1.8z"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-span" viewBox="0 0 24 24"><path d="M3 12h18M7 8l-4 4 4 4M17 8l4 4-4 4"/></symbol>
+  <symbol id="i-floor" viewBox="0 0 24 24"><path d="M3 16l9-5 9 5-9 5z"/><path d="M12 3v5"/></symbol>
+  <symbol id="i-door" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="1.5"/><circle cx="14.5" cy="12" r=".8"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></symbol>
+</svg>
+  <!-- top bar: back, the machine (tap to switch), and -- in the composer -- dimensions on/off -->
+  <div class="top" id="topBar">
+    <button class="round" id="backBtn" type="button" aria-label="Back">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <img class="brand" src="assets/IFB%20logo%201.png" alt="IFB" />
+    <button class="machineChip" id="machineChip" type="button" aria-haspopup="dialog" aria-expanded="false" aria-label="Change machine">
+      <span class="mc" id="machineChipText">Front Loader</span><span class="chev" aria-hidden="true">▼</span>
+    </button>
+    <span class="grow"></span>
+    <button class="round" id="dimBtn" type="button" aria-pressed="true" aria-label="Hide dimensions" title="Dimensions" hidden>
+      <svg viewBox="0 0 24 24"><path d="M3 12h18M3 7.5v9M21 7.5v9M7 9l-3 3 3 3M17 9l3 3-3 3"/></svg>
+    </button>
+  </div>
+
+  <!-- ===== 1. Choose the machine ===== -->
+  <section id="chooser">
+    <img class="ch-brand" src="assets/IFB%20logo%201.png" alt="IFB" />
+    <span class="sticker">✨ real size, real room</span>
+    <h1>Which one's<br>your vibe? <span class="wave">😎</span></h1>
+    <p class="ch-sub">Pick a machine, snap your space, see it IRL before you buy.</p>
+    <div class="choices" id="chooserList"></div>
+    <div class="how" aria-hidden="true">
+      <div><span class="hi">🧺</span>Pick your fave</div>
+      <div><span class="hi">📸</span>Snap the spot</div>
+      <div><span class="hi">🎉</span>Flex and save</div>
+    </div>
+  </section>
+
+  <!-- machine switcher (from the machine name in the top bar) -->
+  <div class="sheetWrap" id="menu">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="menuTitle">
+      <div class="sheetHead"><span class="sheetTitle" id="menuTitle">Machine</span></div>
+      <div class="choices" id="menuList" role="radiogroup" aria-label="Machine"></div>
+    </div>
+  </div>
+
+  <!-- ===== 2. The photo ===== -->
+  <section id="upload">
+    <div class="upMain">
+      <div class="intro">
+        <!-- a phone framing the spot, with the machine standing on the floor -->
+        <svg class="upArt" viewBox="0 0 150 120" aria-hidden="true" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="38" y="3" width="74" height="114" rx="14" stroke="#2b2d33" stroke-width="2.2"/>
+          <path d="M44 20h62" stroke="rgba(20,20,25,.12)" stroke-width="1.5"/>
+          <path d="M58 22v44M92 22v44" stroke="rgba(20,20,25,.22)" stroke-width="1.6"/>
+          <path d="M42 80l16-14h34l16 14" stroke="rgba(20,20,25,.35)" stroke-width="1.6"/>
+          <path d="M48 106h54" stroke="rgba(20,20,25,.22)" stroke-width="1.6" stroke-dasharray="3 5"/>
+          <rect x="62" y="58" width="26" height="36" rx="3.5" stroke="#e11d2a" stroke-width="2.4"/>
+          <path d="M62 66h26" stroke="#e11d2a" stroke-width="1.8"/>
+          <circle cx="75" cy="80" r="8.5" stroke="#e11d2a" stroke-width="2.2"/>
+          <ellipse cx="75" cy="97" rx="17" ry="3" stroke="#9aa0ab" stroke-width="1.8"/>
+        </svg>
+        <h1>Snap the spot <span class="wave">📸</span></h1>
+        <p class="lead" id="introP">Show us the floor where it'll live. We drop it in at its real size.</p>
+        <div class="tips">
+          <span class="tip"><span class="te">👣</span>Step back 2–3 m</span>
+          <span class="tip"><span class="te">🏠</span>Get the floor in frame</span>
+          <span class="tip"><span class="te">🚪</span>A door or counter helps</span>
+        </div>
+      </div>
+      <p class="reading" id="reading" role="status"><span class="busyEmoji" aria-hidden="true">🖼️</span>Reading your pic…</p>
+      <img id="preview" class="preview" alt="Your photo" />
+      <div class="qnotes" id="qnotes" role="status" aria-live="polite"></div>
+    </div>
+    <div class="bar" id="pickRow">
+      <button class="btn go" id="takeBtn" type="button" hidden><span class="ic">📸</span>Snap it</button>
+      <label class="btn go" id="galleryBtn"><span class="ic">🖼️</span><span id="galleryLabel">Pick a photo</span>
+        <input id="file" type="file" accept="image/*" />
+      </label>
+      <!-- the phone's own camera app: the fallback when the in-app camera can't open -->
+      <input id="fileCam" type="file" accept="image/*" capture="environment" hidden />
+    </div>
+    <div class="bar confirmRow" id="confirmRow">
+      <button class="btn dark" id="retake" type="button"><span class="ic">🔄</span>Redo</button>
+      <button class="btn go" id="usephoto" type="button">Looks good<span class="ic">✅</span></button>
+    </div>
+  </section>
+
+  <!-- ===== IN-APP CAMERA: live view + a level, and the phone's tilt recorded with the photo ===== -->
+  <div id="camView" hidden>
+    <video id="camVideo" playsinline autoplay muted></video>
+    <div class="camHorizon" id="camHorizon" aria-hidden="true"></div>
+    <div class="camTop">
+      <button class="iconBtn" id="camClose" type="button" aria-label="Close the camera"><svg class="i"><use href="#i-x"/></svg></button>
+      <span class="camHint" id="camHint" role="status" aria-live="polite">Show the floor where the machine would go</span>
+    </div>
+    <div class="camBottom">
+      <span class="camTilt" id="camTilt"></span>
+      <button class="shutter" id="shutter" type="button" aria-label="Take the photo"></button>
+      <button class="iconBtn" id="camGallery" type="button" aria-label="Choose from your photos instead"><svg class="i"><use href="#i-image"/></svg></button>
+    </div>
+  </div>
+
+  <!-- ===== 3. The composer ===== -->
+  <section id="stage">
+    <canvas id="bg"></canvas>
+    <canvas id="scan"></canvas>
+    <canvas id="gl"></canvas>
+    <span class="srOnly" id="aiStatus" role="status" aria-live="polite"></span>
+    <div class="hint" id="hint">Drag to move it 👆 · two fingers to spin 🌀</div>
+    <!-- Measure: touch-and-slide markers for the bottom and top of something of known height -->
+    <div id="calib" aria-hidden="true">
+      <svg id="calibSvg"></svg>
+      <canvas id="loupe"></canvas>
+    </div>
+    <div class="calBar" id="calBar" role="status" aria-live="polite" data-step="1">
+      <!-- which two points: bottom front edge on the floor, then the top front edge straight above -->
+      <svg class="calIcon" viewBox="0 0 44 44" aria-hidden="true">
+        <path d="M3 38.5H41" stroke="rgba(255,255,255,.35)" stroke-width="1.5"/>
+        <path d="M9 15.5 16 8.5H36L29 15.5Z" fill="rgba(255,255,255,.1)" stroke="#cfd4ea" stroke-width="1.4" stroke-linejoin="round"/>
+        <path d="M29 15.5 36 8.5V31.5L29 38.5Z" fill="rgba(255,255,255,.05)" stroke="#cfd4ea" stroke-width="1.4" stroke-linejoin="round"/>
+        <rect x="9" y="15.5" width="20" height="23" fill="rgba(255,255,255,.14)" stroke="#fff" stroke-width="1.6"/>
+        <path class="ciLine" d="M19 36V18" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 2.5"/>
+        <circle class="ciTop" cx="19" cy="15.5" r="4" fill="#4aa3ff" stroke="#fff" stroke-width="1.6"/>
+        <circle class="ciBase" cx="19" cy="38.5" r="4" fill="#2ee67b" stroke="#fff" stroke-width="1.6"/>
+      </svg>
+      <div class="calTexts">
+        <span class="calStepNo" id="calStepNo">Step 1 of 3</span>
+        <span class="calStep" id="calStep"></span>
+      </div>
+      <div class="calBtns">
+        <button class="btn small go" id="calNext" type="button" hidden>Next →</button>
+        <button class="iconBtn" id="calCancel" type="button" aria-label="Cancel measuring"><svg class="i"><use href="#i-x"/></svg></button>
+      </div>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <span id="toastText"></span>
+      <button class="toastBtn" id="toastBtn" type="button" hidden></button>
+    </div>
+    <div id="busy">
+      <div class="busyGlow"></div>
+      <div class="busyScan"></div>
+      <div class="busyCard" role="status" aria-live="polite">
+        <span class="busyEmoji" id="busyEmoji" aria-hidden="true">🧺</span>
+        <span class="busyText" id="busyText">Getting ready…</span>
+        <span class="busySub" id="busySub"></span>
+        <div class="busyBar" id="busyBar"><div class="busyFill" id="busyFill"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="bar" id="dock">
+    <button class="btn" id="adjustBtn" type="button" aria-haspopup="dialog"><span class="ic">🌀</span>Spin</button>
+    <button class="btn" id="calBtn" type="button"><span class="ic">📏</span>Measure</button>
+    <!-- Reset left the bar; the button stays, out of sight, since the placing code uses its state -->
+    <button class="btn" id="aiBtn" type="button" hidden><span class="ic"><svg class="i"><use href="#i-reset"/></svg></span>Reset</button>
+    <button class="btn go" id="save" type="button"><span class="ic">💾</span>Save it</button>
+  </div>
+
+  <!-- Rotate: turn the machine by hand (two fingers on the photo do the same) -->
+  <div class="sheetWrap" id="adjust">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="adjustTitle">
+      <div class="sheetHead">
+        <span class="sheetTitle" id="adjustTitle">Spin it 🌀</span>
+        <button class="btn small" id="adjustDone" type="button">Done</button>
+      </div>
+      <div class="slider"><label for="sRot">Angle</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
+      <div class="sheetBtns">
+        <button class="btn dark" id="rotL" type="button"><svg class="i flip"><use href="#i-rotate"/></svg>45°</button>
+        <button class="btn dark" id="rotR" type="button"><svg class="i"><use href="#i-rotate"/></svg>45°</button>
+      </div>
+      <!-- size and camera tilt stay automatic (real size, fitted tilt); kept for the code that reads them -->
+      <div hidden>
+        <input id="sSize" type="range" min="40" max="200" value="100"><span id="vSize">≈87.5cm</span>
+        <input id="sAng" type="range" min="-10" max="45" value="12"><span id="vAng">12°</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- the exact size: offered when the photo gave nothing to size the machine from -->
+  <div class="sheetWrap" id="improve">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="improveTitle">
+      <div class="sheetHead"><span class="sheetTitle" id="improveTitle">📏 Want the exact size?</span></div>
+      <span class="sheetSub">Nothing in this photo tells us its real size yet, so the machine's size is an estimate.</span>
+      <button class="option" id="improveMeasure" type="button"><span class="oi"><span class="em">📏</span></span>
+        <span><b>Measure something</b><small>Mark a door, table or counter in the photo — exact</small></span></button>
+      <button class="option" id="depthOffer" type="button"><span class="oi"><span class="em">✨</span></span>
+        <span><b>Scan my room in 3D</b><small>Automatic · one-time 145 MB download</small></span></button>
+    </div>
+  </div>
+
+  <!-- Measure, last step: what was marked, and how tall it is -->
+  <div class="calSheet" id="calSheet" role="dialog" aria-modal="true" aria-labelledby="calSheetTitle">
+    <span class="sheetTitle" id="calSheetTitle">Check the size 📏</span>
+    <span class="sheetSub" id="calSheetSub">The AI measured this from your photo. Change it if you know the real size.</span>
+    <div class="calGrid">
+      <label class="calField" for="calCm"><span class="calLbl">Height</span>
+        <span class="calIn"><input id="calCm" type="number" inputmode="decimal" min="20" max="400" step="1" placeholder="cm" /><em>cm</em></span></label>
+      <label class="calField" for="calW"><span class="calLbl">Width</span>
+        <span class="calIn"><input id="calW" type="number" inputmode="decimal" min="10" max="400" step="1" placeholder="cm" /><em>cm</em></span></label>
+    </div>
+    <span class="calHint" id="calHint" aria-live="polite"></span>
+    <div class="sheetBtns">
+      <button class="btn dark" id="calRemark" type="button">Re-mark</button>
+      <button class="btn go" id="calApply" type="button" disabled>Apply</button>
+    </div>
+    <button class="linkBtn" id="calReset" type="button" hidden>Remove my measurements (go back to automatic)</button>
+  </div>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';   // the models are meshopt-compressed
+
+// Belt-and-suspenders for the 100dvh fix in the <style> block above: sets body's height in
+// px directly from the visual viewport, which is the one thing guaranteed to match what's
+// actually visible on screen on every mobile browser, including in-app WebViews (the QR-code
+// flow) that may not fully support dvh yet. Runs before anything else touches layout.
+(function pinBodyHeightToVisibleViewport(){
+  const vv = window.visualViewport;
+  const apply = () => { document.body.style.height = (vv ? vv.height : window.innerHeight) + 'px'; };
+  apply();
+  if (vv) { vv.addEventListener('resize', apply); vv.addEventListener('scroll', apply); }
+  else { window.addEventListener('resize', apply); }
+})();
+
+// yawOffsetDeg corrects for the model's own local "forward" — each GLB was authored by a
+// different source with no shared convention, so a raw rotationY of 0 doesn't necessarily
+// face the same way across models. FL is the reference: its door faces the camera at 0°.
+// TL (Sketchfab) turned out to face 180° opposite — its control panel pointed away from the
+// camera at rotationY 0, i.e. the customer saw its back by default. Verified by rendering the
+// raw GLB from all four cardinal angles and reading off which one shows the control panel.
+// thumb: a real front-view render of each GLB, generated with the exact same "front" rule
+// as yawOffsetDeg above (rotationY 0 + the model's own offset, camera on +Z) -- so the
+// picture matches how the machine actually faces once placed in the photo.
+// ⚠️ WDR reuses FL's photo because it currently reuses FL's GLB too (see url below) -- once
+// there's a real washer-dryer model, re-render assets/thumb-washer-dryer.png from it.
+// heightCm: the real height the machine is drawn at (its width and depth follow the GLB's
+// proportions). specCm: IFB's datasheet size, shown on the H×W×D labels -- the modelled cabinet
+// runs ~3% wider/deeper than the real one, and "62 cm" could tell someone a 60 cm machine won't
+// fit their gap. FL is the IFB Executive MXC 9014 (it says so on the model's control panel):
+// 598 × 650 × 875 mm (W × D × H), ifbappliances.com/executive-mxc-9014-sslc. It used to be drawn
+// at 80 cm -- 8.6% too small. TL's height is still an estimate.
+const MODELS = {
+  FL:  { label: 'Front Loader', desc: 'Front loading',
+         url: 'models/IFB_WM1.glb', heightCm: 87.5, specCm: { H: 87.5, W: 59.8, D: 65 }, yawOffsetDeg: 0,
+         thumb: 'assets/thumb-front-loader.png' },
+  TL:  { label: 'Top Loader',   desc: 'Top loading',
+         url: 'models/washing_machine_top_load.glb', heightCm: 95, yawOffsetDeg: 180,
+         thumb: 'assets/thumb-top-loader.png' },
+  WDR: { label: 'Washer Dryer', desc: 'Washes and dries',
+         url: 'models/IFB_WM1.glb', heightCm: 87.5, specCm: { H: 87.5, W: 59.8, D: 65 }, yawOffsetDeg: 0,
+         thumb: 'assets/thumb-washer-dryer.png' },
+};
+const DEFAULT_MODEL = 'FL';
+let modelKey = DEFAULT_MODEL;
+let baseScale = 1;          // GLB units → real size for the current machine (set on load)
+let modelSize = null;       // current GLB's size in its own units
+// The virtual camera, modelled on the phone that took the photo: how high it was held (m), how far
+// it was tilted down (°), and its lens as a 35mm-equivalent focal length. calibrateCamera() fits
+// all three per photo; these are the defaults until it has (a phone at chest height, 1x lens).
+const CAM_DEFAULT = { hc: 1.35, pitchDeg: 12, f35: 26 };
+let cam = { ...CAM_DEFAULT };
+let exifF35 = null;         // the photo's own lens, when its EXIF still carries it (see readPhotoLens())
+
+// ---- H×W×D dimension lines (IKEA-style, ported from fit.html) ----
+let occluder = null;        // invisible bounding box on the machine — hit-tests both rotate-
+                             // vs-move touch and which dimension edge is behind the machine
+let dimGroup = null;        // the H/W/D lines + labels, parented to the machine
+let dimSets = [];           // [{name, cands:[{line,label,pts,mid}]}] — show the best-facing candidate
+let dimsOn = true;
+// This is a real ES module (import * as THREE from 'three' at the top), unlike fit.html's
+// plain <script> that waits on a separately-loaded module setting window.THREE — so there is
+// no "THREE isn't ready yet" race here and these can be constructed immediately.
+const _wp = new THREE.Vector3(), _cam = new THREE.Vector3(), _dir = new THREE.Vector3();
+
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+// DOM
+const fileInput = document.getElementById('file');
+const preview   = document.getElementById('preview');
+const confirmRow= document.getElementById('confirmRow');
+const uploadEl  = document.getElementById('upload');
+const stageEl   = document.getElementById('stage');
+const dockEl    = document.getElementById('dock');
+// #stage no longer spans the full viewport now that .dock sits below it in normal flow, so
+// anything that used to treat window.innerHeight as "the photo frame's height" needs this
+// instead. Width is untouched -- the dock is full-width, so it only ever eats into height.
+const stageH = () => stageEl.clientHeight || window.innerHeight;
+const hintEl    = document.getElementById('hint');
+const bg        = document.getElementById('bg');
+const glCanvas  = document.getElementById('gl');
+const sSize=document.getElementById('sSize'), sRot=document.getElementById('sRot'), sAng=document.getElementById('sAng');
+const vSize=document.getElementById('vSize'), vRot=document.getElementById('vRot'), vAng=document.getElementById('vAng');
+const dimBtn  = document.getElementById('dimBtn');
+const machineChipText = document.getElementById('machineChipText');
+
+let photoBitmap = null;                 // chosen photo (EXIF-corrected)
+let lastSeg = null;                     // this photo's segmentation result (runAIPlace), reused by Calibrate
+let manualRefs = [];                    // [{top, base, H, name}] -- things the customer marked with Calibrate
+let floorMask = null;                   // AI floor mask {w,h,data} — constrains placement to the floor
+let obstacleMask = null;                // AI mask of furniture/people {w,h,data,base} — see blockedByObstacle()
+// Floor detection now runs automatically (see startComposer()) instead of waiting for a button
+// tap, so there's a brief window on a fresh photo where floorMask isn't ready yet. floorLocking
+// blocks the move-the-machine drag during that window -- otherwise "only the floor, never
+// anywhere" would have a gap right at the start, before the AI has had a chance to look.
+let floorLocking = false;
+let scanDeferred = false;               // "I know the size": the scan waits until they've marked it
+let pendingMark = false;                // ...and the marking waits for the model to finish loading
+let pendingAutoFloor = false;           // set by startComposer() when loadModel() is still loading
+// Snapping only checked the ONE point the machine's base sits on -- fine for a point, but the
+// machine has real width and depth, and near the edge of a floor mask (next to a chair, a rug
+// edge, a wall) that single point can be on the floor while the box drawn around it visibly
+// spills onto whatever's next to it. lastValidX/Z is the last position where the FULL footprint
+// (see footprintOnFloor()) was confirmed clear, so a drag that would spill can slide back toward
+// it instead of jumping there anyway.
+let lastValidX = 0, lastValidZ = 0;
+let renderer, scene, camera, machine, ground, raycaster, ndc, needsRender = true;
+let started = false;
+
+const machineLabel = () => MODELS[modelKey].label.toLowerCase();
+
+// Applies the Rotate slider plus the current model's yaw correction — every place that turns
+// the machine goes through this instead of setting machine.rotation.y directly, so a model
+// swap can never leave the wrong offset applied.
+const applyRotation = () => {
+  if (!machine) return;
+  machine.rotation.y = THREE.MathUtils.degToRad(+sRot.value) + THREE.MathUtils.degToRad(MODELS[modelKey].yawOffsetDeg || 0);
+};
+
+// ---------- the photo's lens ----------
+// A phone's field of view varies a lot by lens (ultra-wide, 1x, 2x/3x zoom) and by orientation
+// (portrait vs landscape swaps which sensor side becomes the picture's height), and the machine's
+// size on screen depends on it directly. The photo's own EXIF says which lens when it still has
+// the tag; most shared photos (WhatsApp, Instagram, screenshots) have had it stripped, and then
+// calibrateCamera() works the lens out from the room itself, starting from the common 1x lens.
+function photoIsPortrait(){ return !photoBitmap || photoBitmap.height >= photoBitmap.width; }
+// Vertical field of view (radians) of a 35mm-equivalent focal length. Full frame is 36×24mm: held
+// in portrait the photo's height is the 36mm side, in landscape the 24mm side.
+function vfovForLens(f35){ return 2 * Math.atan((photoIsPortrait() ? 18 : 12) / f35); }
+async function readPhotoLens(file){
+  exifF35 = null;
+  try {
+    const exifr = await import('https://cdn.jsdelivr.net/npm/exifr@7/dist/full.esm.mjs');
+    const parse = exifr.parse || (exifr.default && exifr.default.parse);
+    const tags = parse ? await parse(file, { pick: ['FocalLengthIn35mmFilm'] }) : null;
+    if (tags && tags.FocalLengthIn35mmFilm) exifF35 = tags.FocalLengthIn35mmFilm;
+  } catch (e) { /* no network, unsupported, or no EXIF on this photo — calibration estimates it */ }
+}
+
+// ---------- "working on it" overlay (see the #busy styles) ----------
+const busyEl = document.getElementById('busy'), busyEmoji = document.getElementById('busyEmoji');
+const busyText = document.getElementById('busyText'), busySub = document.getElementById('busySub');
+const busyBar = document.getElementById('busyBar'), busyFill = document.getElementById('busyFill');
+let busyStep = null;   // which step owns the overlay, so one step finishing can't hide another's
+// pct: 0-100 for a download with known size, null for "working, no idea how long"
+// Each step's emoji cycles through a small themed set while it bobs, so the card never looks still.
+const BUSY_EMOJI = { model: ['🧺', '🫧', '👕'], ai: ['⏳', '⌛'], seg: ['🔍', '🛋️', '🚪'], measure: ['📏', '📐'], depth: ['📏', '📐'] };
+let busyCycle = null;
+function setBusy(step, emoji, text, sub = '', pct = null){
+  if (busyStep !== step) {                   // restart the bob so each new step visibly pops in
+    busyEmoji.style.animation = 'none'; void busyEmoji.offsetWidth; busyEmoji.style.animation = '';
+    const set = BUSY_EMOJI[step] || [emoji];
+    let i = 0; busyEmoji.textContent = set[0];
+    clearInterval(busyCycle);
+    if (set.length > 1 && !matchMedia('(prefers-reduced-motion: reduce)').matches)
+      busyCycle = setInterval(() => { busyEmoji.textContent = set[++i % set.length]; }, 1100);   // one change per bob
+  }
+  busyStep = step;
+  busyText.textContent = text; busySub.textContent = sub;
+  busyBar.classList.toggle('det', pct !== null);
+  busyFill.style.width = pct === null ? '' : Math.max(4, Math.min(100, pct)) + '%';
+  busyEl.classList.add('on');
+}
+function hideBusy(step){ if (step && busyStep !== step) return; busyStep = null; clearInterval(busyCycle); busyEl.classList.remove('on'); }
+// Resolves once the browser has painted: the AI and the camera fit both block the main thread, so
+// without this a new step's text would never get on screen before the wait it's describing.
+// (With a timer as well: a hidden page -- the customer switched apps mid-way -- paints nothing and
+// would otherwise stop right here until they came back.)
+const nextPaint = () => new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(r)); setTimeout(r, 150); });
+
+// ---------- upload flow ----------
+const readingEl = document.getElementById('reading'), qnotesEl = document.getElementById('qnotes');
+const pickRow = document.getElementById('pickRow');
+const takeBtn = document.getElementById('takeBtn'), galleryBtn = document.getElementById('galleryBtn');
+const fileCam = document.getElementById('fileCam');
+let sensorPitch = null;      // how far the phone was tilted down when the in-app camera took this photo (°), else null
+let previewURL = null;
+
+// Every photo, whichever way it came in: decode it, read its lens, look it over, show it to confirm.
+async function takePhotoFile(f, pitch = null){
+  if (!f) return;
+  sensorPitch = pitch;
+  readingEl.classList.add('on');   // decoding a 12 MP photo and fetching the EXIF reader takes a moment
+  uploadEl.classList.add('picked');                     // the intro gives way to the photo
+  preview.style.display = 'none'; confirmRow.style.display = 'none'; qnotesEl.replaceChildren();
+  pickRow.hidden = true;
+  try {
+    try { photoBitmap = await createImageBitmap(f, { imageOrientation: 'from-image' }); }
+    catch (err) { photoBitmap = await createImageBitmap(f); }
+  } catch (err) {
+    // e.g. a HEIC photo on a browser that can't open them
+    readingEl.classList.remove('on'); resetPicker();
+    showNotes([{ text: 'Couldn’t open that photo. Try another one — a JPG or PNG works best.' }]);
+    return;
+  }
+  await readPhotoLens(f);   // best-effort: the photo's real lens, if its EXIF still says
+  readingEl.classList.remove('on');
+  const notes = photoNotes(photoBitmap);
+  if (sensorPitch !== null) notes.push({ good: true, text: 'Your phone’s tilt (' + Math.round(sensorPitch) + '° down) was recorded with the photo — it helps get the size right.' });
+  showNotes(notes);
+  if (previewURL) URL.revokeObjectURL(previewURL);
+  preview.src = previewURL = URL.createObjectURL(f);
+  preview.style.display = '';                           // shown by #upload.picked
+  confirmRow.style.display = 'flex';
+}
+function showNotes(notes){
+  qnotesEl.replaceChildren(...notes.map((n) => Object.assign(document.createElement('div'), { className: 'qnote' + (n.good ? ' good' : ''), textContent: n.text })));
+}
+// Heads-ups about a photo that make the AI's job harder. Advice only -- it's the customer's photo.
+// Thresholds from the 16 test photos: sharp ones scored 778-5853 on the sharpness measure below and
+// even a slight blur dropped them to 8-47; their average brightness ran 0.33-0.57.
+function photoNotes(bm){
+  const notes = [], long = Math.max(bm.width, bm.height);
+  if (long < 700) notes.push({ text: 'This photo is quite small (' + bm.width + ' × ' + bm.height + ') — the full-size photo from your camera lets the AI see more.' });
+  const s = 256 / long, w = Math.max(3, Math.round(bm.width * s)), h = Math.max(3, Math.round(bm.height * s));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const ctx = c.getContext('2d', { willReadFrequently: true }); ctx.drawImage(bm, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data, g = new Float32Array(w * h);
+  let bright = 0, lit = 0;
+  for (let i = 0; i < w * h; i++) { g[i] = (0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]) / 255; bright += g[i]; if (g[i] > 0.45) lit++; }
+  // dark all over -- not just a dark sofa in a lit room
+  if (bright / (w * h) < 0.18 && lit < 0.1 * w * h) notes.push({ text: 'It’s quite dark — the AI finds the floor and furniture much better in good light.' });
+  // sharpness: how much fine detail there is (variance of the Laplacian, in 0-255 units)
+  let m = 0, m2 = 0, n = 0;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x, L = 255 * (4 * g[i] - g[i - 1] - g[i + 1] - g[i - w] - g[i + w]);
+    m += L; m2 += L * L; n++;
+  }
+  if (n && m2 / n - (m / n) ** 2 < 100) notes.push({ text: 'It looks blurry — hold the phone still (or tap to focus) and try again.' });
+  return notes;
+}
+// Back to "take or choose", clearing the inputs so picking the same file again still counts
+function resetPicker(){
+  uploadEl.classList.remove('picked');
+  preview.style.display = ''; confirmRow.style.display = 'none'; qnotesEl.replaceChildren();
+  readingEl.classList.remove('on');
+  pickRow.hidden = false;
+  fileInput.value = ''; fileCam.value = '';
+}
+fileInput.addEventListener('change', (e) => takePhotoFile(e.target.files && e.target.files[0]));
+fileCam.addEventListener('change', (e) => takePhotoFile(e.target.files && e.target.files[0]));
+document.getElementById('retake').addEventListener('click', resetPicker);
+/* After the photo is picked, go straight to marking the start and end points -- before anything is scanned. */
+document.getElementById('usephoto').addEventListener('click', () => startComposer('known'));
+/* a little confetti when the picture is saved */
+function confetti(){
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const set = ['🎉','✨','💖','🧺','⭐','🫧','🎊','💜'];
+  for (let i = 0; i < 24; i++) {
+    const e = document.createElement('span');
+    e.className = 'confetti'; e.textContent = set[i % set.length];
+    e.style.left = (35 + Math.random() * 30) + '%';
+    e.style.setProperty('--dx', (Math.random() * 280 - 140) + 'px');
+    e.style.setProperty('--dy', -(140 + Math.random() * 260) + 'px');
+    e.style.setProperty('--r', (Math.random() * 720 - 360) + 'deg');
+    e.style.animationDelay = (Math.random() * 0.15) + 's';
+    document.body.appendChild(e);
+    setTimeout(() => e.remove(), 1500);
+  }
+}
+document.getElementById('save').addEventListener('click', confetti);
+// Back: from the composer to a new photo, from the photo screen to the choice of machine
+document.getElementById('backBtn').addEventListener('click', () => {
+  if (cal.on) { closeCalib(); return; }
+  if (stageEl.style.display === 'block') { resetPicker(); showUpload(); }
+  else { resetPicker(); chooser.style.display = ''; }
+});
+
+// ---------- in-app camera: live view, a level, and the phone's tilt saved with the photo ----------
+// The one thing a photo can't say about itself -- how far the phone was tilted -- the phone's motion
+// sensor knows exactly, and it's what the sizing most often has to guess. Phones only: a computer's
+// webcam faces the wrong way for this. Anywhere it can't open (no permission, an in-app browser),
+// the phone's own camera app takes over through a plain file input.
+const camView = document.getElementById('camView'), camVideo = document.getElementById('camVideo');
+const camHint = document.getElementById('camHint'), camTilt = document.getElementById('camTilt');
+const camHorizon = document.getElementById('camHorizon'), shutter = document.getElementById('shutter');
+const tilt = { pitch: null, roll: null, hist: [] };
+let camStream = null;
+// With the camera on offer it's the main button and the gallery the second; otherwise (a computer)
+// choosing a photo is the main button.
+if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && matchMedia('(pointer: coarse)').matches) {
+  takeBtn.hidden = false; galleryBtn.classList.remove('go');
+  document.getElementById('galleryLabel').textContent = 'Gallery';
+}
+// Device orientation -> how far the back camera points below the horizon, and how far the picture
+// is rolled. The phone's "up" in its own frame is (-cosβ·sinγ, sinβ, cosβ·cosγ); the back camera looks
+// along -z, so its down-tilt is asin(cosβ·cosγ) -- the same in portrait and landscape.
+// The video's own intrinsic size follows the phone's physical rotation (mobile browsers rotate
+// the frame to match, same as the final captured photo does -- see photoIsPortrait()), so this
+// is a direct read of how the phone is currently held, no separate orientation API needed.
+function camIsLandscape(){ return camVideo.videoWidth > camVideo.videoHeight; }
+function onOrient(e){
+  if (e.beta == null || e.gamma == null) return;
+  // Landscape shots aren't supported downstream (placement/calibration assume a portrait
+  // photo) -- gate the shutter shut and tell the customer to rotate back, instead of letting
+  // them take one that won't work.
+  if (camIsLandscape()) {
+    shutter.disabled = true;
+    camHint.textContent = 'Rotate your phone to portrait to take the photo';
+    return;
+  }
+  shutter.disabled = false;
+  const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
+  const ux = -Math.cos(b) * Math.sin(g), uy = Math.sin(b), uz = Math.cos(b) * Math.cos(g);
+  const scr = (screen.orientation && screen.orientation.angle) || +window.orientation || 0;
+  tilt.pitch = Math.asin(Math.max(-1, Math.min(1, uz))) * 180 / Math.PI;
+  tilt.roll = ((Math.atan2(ux, uy) * 180 / Math.PI - scr) % 360 + 540) % 360 - 180;   // vs the screen's own up
+  tilt.hist.push(tilt.pitch); if (tilt.hist.length > 12) tilt.hist.shift();         // ~0.2 s, for a steady reading
+  const level = Math.abs(tilt.roll) < 2;
+  camHorizon.classList.add('on'); camHorizon.classList.toggle('level', level);
+  camHorizon.style.transform = 'rotate(' + tilt.roll.toFixed(1) + 'deg)';           // stays level with the room
+  camTilt.textContent = Math.round(tilt.pitch) + '°';
+  camHint.textContent = tilt.pitch < -3 ? 'Tilt the phone down a little — show the floor'
+    : tilt.pitch > 45 ? 'Tilt up a little — show some wall too, not just floor'
+    : Math.abs(tilt.roll) > 3 ? 'Hold the phone straight — line up the level'
+    : '✓ Good angle — take the photo';
+}
+async function openCamera(){
+  // iPhones ask before sharing motion data, and only from a tap -- this is that tap
+  try { if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === 'function') await DeviceOrientationEvent.requestPermission(); } catch (e) {}
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
+      facingMode: { ideal: 'environment' }, width: { ideal: 2560 }, height: { ideal: 1920 }, aspectRatio: { ideal: 4 / 3 } } });
+  } catch (e) {
+    camStream = null;
+    showNotes([{ text: 'The camera didn’t open here — take the photo with your camera app, then choose it.' }]);
+    fileCam.click();
+    return;
+  }
+  Object.assign(tilt, { pitch: null, roll: null, hist: [] });
+  camHint.textContent = 'Show the floor where the machine would go';
+  camTilt.textContent = ''; camHorizon.classList.remove('on');
+  shutter.disabled = false;
+  camVideo.srcObject = camStream;
+  camView.hidden = false;
+  window.addEventListener('deviceorientation', onOrient);
+  // Fires whenever the video's intrinsic width/height change -- the only signal on devices with
+  // no motion sensor (or that denied the motion-permission prompt), where onOrient never runs.
+  camVideo.addEventListener('resize', onVideoResize);
+  camVideo.play().catch(() => {});
+}
+function onVideoResize(){
+  if (camIsLandscape()) { shutter.disabled = true; camHint.textContent = 'Rotate your phone to portrait to take the photo'; }
+  else if (tilt.pitch == null) { shutter.disabled = false; }   // no tilt reading yet to judge angle by -- just clear the rotate warning
+}
+function closeCamera(){
+  window.removeEventListener('deviceorientation', onOrient);
+  camVideo.removeEventListener('resize', onVideoResize);
+  if (camStream) camStream.getTracks().forEach((t) => t.stop());
+  camStream = null; camVideo.srcObject = null; camView.hidden = true;
+}
+takeBtn.addEventListener('click', () => { qnotesEl.replaceChildren(); openCamera(); });
+document.getElementById('camClose').addEventListener('click', closeCamera);
+document.getElementById('camGallery').addEventListener('click', () => { closeCamera(); fileInput.click(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden && camStream) closeCamera(); });
+shutter.addEventListener('click', async () => {
+  const w = camVideo.videoWidth, h = camVideo.videoHeight;
+  if (!w || !h || w > h) return;                     // landscape: shouldn't have been clickable, but don't capture it either way
+  shutter.disabled = true;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d').drawImage(camVideo, 0, 0, w, h);
+  const pitch = tilt.hist.length ? tilt.hist.reduce((a, b) => a + b, 0) / tilt.hist.length : null;
+  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
+  closeCamera(); shutter.disabled = false;
+  if (blob) takePhotoFile(new File([blob], 'my-room.jpg', { type: 'image/jpeg' }), pitch);
+});
+
+function showUpload(){
+  stageEl.style.display = 'none';
+  dockEl.style.display = 'none';
+  hintEl.style.display = 'none';
+  dimBtn.hidden = true;                    // dimensions only mean something once the machine's there
+  closeSheets(); hideToast();
+  photoToken++;                            // a 3D scan still running for the last photo is dropped
+  uploadEl.style.display = 'flex';
+  updateDimChip();
+  // Get everything slow going while the customer is still choosing a photo, instead of one thing
+  // after another once they've picked it: the 3D view and the machine model (~3 MB), and the
+  // room AI (~15 MB, loaded and warmed up in its worker). The 3D view goes first on purpose --
+  // setting up WebGL while the AI's worker is busy warming up the same GPU stalled the page for
+  // 3.6 s in testing. Nothing here is waited on; the AI retries (and reports) later if it fails.
+  if (!started) initThree();
+  loadSeg().catch(() => {});
+}
+
+// Free the previous machine's GPU memory before swapping in another one — without this,
+// switching types repeatedly would leak a full mesh + textures every time.
+function disposeModel(){
+  if (!machine) return;
+  disposeDims();
+  scene.remove(machine);
+  machine.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const m of mats) {
+        for (const k of ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'aoMap']) {
+          if (m[k]) m[k].dispose();
+        }
+        m.dispose();
+      }
+    }
+  });
+  machine = null; modelSize = null; occluder = null;
+}
+
+// Load one machine: base-anchored (feet on y=0), centred on x/z, wrapped in a group, and
+// scaled so it stands at its real-world height whatever units the GLB was authored in.
+// Keeps the current floor position across a switch, since (unlike fit.html's live AR scan)
+// there is no floor-tracking cost here to redo — just swap the mesh where it already sits.
+function loadModel(key){
+  const cfg = MODELS[key];
+  if (!cfg) return;
+  const keepPos = machine ? machine.position.clone() : new THREE.Vector3(0, 0, 0);
+  disposeModel();
+  const label = cfg.label.toLowerCase(), sub = '';
+  setBusy('model', '🧺', 'Getting your machine…', sub);
+
+  new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).load(cfg.url, (gltf) => {
+    const g = new THREE.Group();
+    gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const c = box.getCenter(new THREE.Vector3());
+    modelSize = box.getSize(new THREE.Vector3());
+    // Each GLB is authored at a different scale, so normalise on height rather than trusting
+    // the file: this one stands at cfg.heightCm no matter how it was exported.
+    baseScale = modelSize.y > 0 ? (cfg.heightCm / 100) / modelSize.y : 1;
+    gltf.scene.position.x -= c.x;
+    gltf.scene.position.z -= c.z;
+    gltf.scene.position.y -= box.min.y;   // base on floor
+    g.add(gltf.scene);
+    machine = g;
+    machine.position.copy(keepPos);
+    machine.scale.setScalar(baseScale * (+sSize.value / 100));
+    scene.add(machine);
+    // Invisible box at the machine's exact bounds — used both to hit-test whether a touch
+    // started ON the machine (rotate) vs the floor around it (move), and to ray-test which
+    // dimension lines are hidden behind the machine, without testing against the full mesh.
+    occluder = new THREE.Mesh(
+      new THREE.BoxGeometry(modelSize.x, modelSize.y, modelSize.z),
+      new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false })
+    );
+    occluder.position.y = modelSize.y / 2;
+    machine.add(occluder);
+    applyRotation();
+    vSize.textContent = '≈' + curDims().H + 'cm';
+    buildDims();
+    updateDimChip();
+    hideBusy('model');   // a fresh photo's AI run (below) takes the overlay over in the same tick, so no flicker
+    needsRender = true;
+    // Compile its shaders now, in the background, rather than on the first frame it's drawn --
+    // that first frame can land while the AI worker is busy on the GPU, and then it stalls.
+    if (renderer.compileAsync) renderer.compileAsync(scene, camera).catch(() => {});
+    // The very first load for a fresh photo: the machine model just became available, so the
+    // auto floor-detect that startComposer() asked for (and was waiting on) can run now.
+    if (pendingMark) { pendingMark = false; aiBtn.disabled = calBtn.disabled = false; openCalib(); }
+    else if (pendingAutoFloor) {
+      pendingAutoFloor = false; runAIPlace();
+    } else if (floorMask && !placementOk(machine.position.x, machine.position.z)) {
+      // Not a fresh photo -- a machine-type switch that kept the old position (see keepPos
+      // above). A different model has a different width × depth × height, so a spot that fully
+      // fit the last machine can spill this one onto (or draw it through) furniture next to it.
+      // Refit it on the same floor rather than leaving it overlapping something.
+      const sc0 = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z));
+      const im0 = screenToImage(sc0.x, sc0.y);
+      const fitted = nearestValidFootprint(im0.fx, im0.fy);
+      if (fitted) placeAtImageCoord(fitted.fx, fitted.fy);
+    }
+  }, (e) => {
+    if (busyStep !== 'model') return;
+    if (e.lengthComputable) setBusy('model', '🧺', 'Getting your machine… ' + Math.round(e.loaded / e.total * 100) + '%', sub, e.loaded / e.total * 100);
+    else setBusy('model', '🧺', 'Getting your machine…', sub);
+  }, () => {
+    hideBusy('model');
+    hintEl.textContent = 'Could not load the ' + label + ' — check connection.'; hintEl.style.display = 'block';
+    pendingAutoFloor = false; floorLocking = false;   // nothing to detect on if the model itself never arrived
+    aiBtn.disabled = calBtn.disabled = false;
+  });
+}
+
+// ---- IKEA-style H×W×D dimension lines + labels wrapped around the machine (ported from
+// fit.html — same approach: real 3D line meshes + sprite labels parented to the machine, not
+// a screen-space overlay, so they naturally follow it as it turns and moves). ----
+const makeLabel = (text) => {
+  const fs = 44, padX = 24, padY = 14;
+  const meas = document.createElement('canvas').getContext('2d');
+  meas.font = 'bold ' + fs + 'px Arial';
+  const tw = Math.ceil(meas.measureText(text).width);
+  const c = document.createElement('canvas');
+  c.width = tw + padX * 2; c.height = fs + padY * 2;
+  const ctx = c.getContext('2d');
+  ctx.font = 'bold ' + fs + 'px Arial';
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(2, 2, c.width - 4, c.height - 4, 20); }
+  else { ctx.beginPath(); ctx.rect(2, 2, c.width - 4, c.height - 4); }
+  ctx.fillStyle = 'rgba(225,29,42,0.94)'; ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, c.width / 2, c.height / 2);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+  spr.renderOrder = 999;
+  const hm = 0.085;                       // label ~8.5 cm tall in world space
+  spr.scale.set(hm * c.width / c.height, hm, 1);
+  return spr;
+};
+
+const disposeDims = () => {
+  if (!dimGroup) return;
+  if (machine) machine.remove(dimGroup);
+  dimGroup.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
+  });
+  dimGroup = null;
+};
+
+// The datasheet size where there is one (see MODELS), else measured off the loaded GLB -- either
+// way × the Size slider, so the labels track what's on screen. To 0.1 cm: "87.5 × 59.8 × 65" is
+// exactly what IFB's datasheet says.
+const curDims = () => {
+  if (!modelSize) return { H: 0, W: 0, D: 0 };
+  const s = +sSize.value / 100, sp = MODELS[modelKey].specCm, r = (v) => +v.toFixed(1);
+  if (sp) return { H: r(sp.H * s), W: r(sp.W * s), D: r(sp.D * s) };
+  const k = baseScale * s * 100;
+  return { H: r(modelSize.y * k), W: r(modelSize.x * k), D: r(modelSize.z * k) };
+};
+
+const buildDims = () => {
+  if (!machine || !modelSize) return;
+  disposeDims();
+  dimSets = [];
+  dimGroup = new THREE.Group();
+  const hw = modelSize.x / 2, H = modelSize.y, hd = modelSize.z / 2, off = 0.05, t = 0.007;
+  const cd = curDims();
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const cand = (geo, linePos, text, labelPos, pts) => {
+    const line = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95 }));
+    line.position.copy(linePos);
+    const label = makeLabel(text); label.position.copy(labelPos);
+    dimGroup.add(line); dimGroup.add(label);
+    return { line, label, pts, mid: linePos.clone() };
+  };
+
+  // HEIGHT — all 4 vertical corners
+  const hGeo = () => new THREE.BoxGeometry(t, H, t);
+  const hSamp = (x, z) => [V(x, 0.05, z), V(x, H / 2, z), V(x, H - 0.05, z)];
+  const hLabel = 'H ' + cd.H + ' cm';
+  dimSets.push({ name: 'H', cands: [
+    cand(hGeo(), V(hw + off, H / 2, hd + off),   hLabel, V(hw + off + 0.03, H / 2, hd + off),   hSamp(hw + off, hd + off)),
+    cand(hGeo(), V(-hw - off, H / 2, hd + off),  hLabel, V(-hw - off - 0.03, H / 2, hd + off),  hSamp(-hw - off, hd + off)),
+    cand(hGeo(), V(hw + off, H / 2, -hd - off),  hLabel, V(hw + off + 0.03, H / 2, -hd - off),  hSamp(hw + off, -hd - off)),
+    cand(hGeo(), V(-hw - off, H / 2, -hd - off), hLabel, V(-hw - off - 0.03, H / 2, -hd - off), hSamp(-hw - off, -hd - off)),
+  ]});
+
+  // WIDTH — front and back bottom edges
+  const wGeo = () => new THREE.BoxGeometry(modelSize.x, t, t);
+  const wSamp = (z) => [V(-hw + 0.05, 0.05, z), V(0, 0.05, z), V(hw - 0.05, 0.05, z)];
+  const wLabel = 'W ' + cd.W + ' cm';
+  dimSets.push({ name: 'W', cands: [
+    cand(wGeo(), V(0, 0.002, hd + off),  wLabel, V(0, 0.06, hd + off + 0.03),  wSamp(hd + off)),
+    cand(wGeo(), V(0, 0.002, -hd - off), wLabel, V(0, 0.06, -hd - off - 0.03), wSamp(-hd - off)),
+  ]});
+
+  // DEPTH — left and right bottom edges
+  const dGeo = () => new THREE.BoxGeometry(t, t, modelSize.z);
+  const dSamp = (x) => [V(x, 0.05, -hd + 0.05), V(x, 0.05, 0), V(x, 0.05, hd - 0.05)];
+  const dLabel = 'D ' + cd.D + ' cm';
+  dimSets.push({ name: 'D', cands: [
+    cand(dGeo(), V(hw + off, 0.002, 0),  dLabel, V(hw + off + 0.03, 0.06, 0),  dSamp(hw + off)),
+    cand(dGeo(), V(-hw - off, 0.002, 0), dLabel, V(-hw - off - 0.03, 0.06, 0), dSamp(-hw - off)),
+  ]});
+
+  dimGroup.visible = dimsOn;
+  machine.add(dimGroup);
+};
+
+// Is this sample point un-occluded by the machine from the current camera?
+const clearPt = (localPt) => {
+  _wp.copy(localPt); machine.localToWorld(_wp);
+  _dir.copy(_wp).sub(_cam);
+  const dist = _dir.length();
+  raycaster.set(_cam, _dir.normalize());
+  const hit = raycaster.intersectObject(occluder, false);
+  return !(hit.length && hit[0].distance < dist - 0.02);
+};
+
+// Show only the best-facing candidate per axis, so a dimension never draws through the machine.
+const updateDimOcclusion = () => {
+  if (!dimSets.length || !occluder || !camera || !machine) return;
+  machine.updateWorldMatrix(true, true);
+  camera.getWorldPosition(_cam);
+  for (const set of dimSets) {
+    let best = null, bestVis = -1, bestDist = Infinity;
+    for (const c of set.cands) {
+      c.line.visible = false; c.label.visible = false;
+      let vis = 0;
+      for (const p of c.pts) if (clearPt(p)) vis++;
+      _wp.copy(c.mid); machine.localToWorld(_wp);
+      const md = _wp.distanceTo(_cam);
+      if (vis > bestVis || (vis === bestVis && md < bestDist)) { best = c; bestVis = vis; bestDist = md; }
+    }
+    if (best && bestVis > 0) { best.line.visible = true; best.label.visible = true; }
+  }
+};
+
+// The machine's name and height in the top bar -- the height follows the Size setting
+function updateDimChip(){
+  const d = curDims();
+  machineChipText.textContent = MODELS[modelKey].label + (d.H ? ' · ' + d.H + ' cm' : '');
+}
+
+// How to move it, for a moment. Runs once the machine has actually been placed -- telling people
+// to drag something they can't see yet just confuses.
+let hintTimer = null;
+function showDragHint(){
+  hintEl.textContent = 'Drag to move it 👆 · two fingers to spin 🌀';
+  hintEl.style.display = 'block';
+  clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => { hintEl.style.display = 'none'; }, 3500);
+}
+
+function startComposer(sizeMode = 'ai'){
+  uploadEl.style.display = 'none';
+  stageEl.style.display = 'block';
+  dockEl.style.display = 'flex';
+  dimBtn.hidden = false;
+  hintEl.style.display = 'none';           // shown once the machine is placed (showDragHint)
+  setPill(null);                           // and so is how it was sized
+  // Every call here follows a fresh photo confirmation, so any previous floor mask belongs to
+  // a different picture and must not keep constraining this one. Re-detect automatically --
+  // the customer should never have to find and tap the AI button just to get floor-only
+  // placement; it's the default now, with the button left for a manual retry.
+  floorMask = null;
+  obstacleMask = null;
+  lastSeg = null; manualRefs = []; freePlaced = false; hideToast();   // a new photo: nothing measured on it yet
+  photoToken++; lastDepth = null; DEPTH.pendingApply = false; DEPTH.offer = false; lastCalib = null;
+  calBtn.classList.remove('glow');
+  // the last photo's fit doesn't apply to this one (the phone's measured tilt does, if there is one)
+  cam = { ...CAM_DEFAULT, f35: exifF35 || CAM_DEFAULT.f35, pitchDeg: sensorPitch ?? CAM_DEFAULT.pitchDeg };
+  sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
+  floorLocking = true;
+  if (!started) initThree();          // normally already done by showUpload()
+  scanDeferred = sizeMode === 'known';   // they know a size: mark it first, then scan with it in hand
+  if (scanDeferred) {
+    if (machine) { calBtn.disabled = false; openCalib(); }
+    else { pendingMark = true; aiBtn.disabled = calBtn.disabled = true; }
+  }
+  else if (machine) runAIPlace();     // model's in -- detect this photo's floor right away
+  else { pendingAutoFloor = true; aiBtn.disabled = calBtn.disabled = true; }   // still downloading: loadModel() starts the run once it's in
+  updateDimChip();
+  resize();
+  drawPhoto();
+  needsRender = true;
+}
+
+// ---------- three.js composer ----------
+function initThree(){
+  started = true;
+  renderer = new THREE.WebGLRenderer({ canvas: glCanvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(DPR);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+  scene = new THREE.Scene();
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+  camera = new THREE.PerspectiveCamera(50, 1, 0.05, 200);   // fov/aspect/pose all set by updateCamera()
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x445, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 2.1);
+  sun.position.set(2, 6, 3.2);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.near = 0.5; sun.shadow.camera.far = 40;
+  sun.shadow.bias = -0.0005;
+  scene.add(sun);
+
+  // shadow-catcher / raycast ground
+  // big enough to reach the horizon of a near-level shot -- the camera can stand ~15 m back
+  ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.ShadowMaterial({ opacity: 0.34 }));
+  ground.rotateX(-Math.PI / 2);
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  raycaster = new THREE.Raycaster();
+  ndc = new THREE.Vector2();
+
+  loadModel(modelKey);
+  updateCamera();
+
+  // --- interaction ---
+  // One finger moves the machine, snapping to the AI floor mask when there is one; two fingers
+  // turn it (see the gestures note further down).
+  //
+  // A plain drag always snaps to the AI's floor mask -- that's the whole point of detecting
+  // the floor. But the AI can be wrong (a rug it missed, a step it called "floor" when it
+  // isn't, a mask that hasn't finished yet), and when it is, the customer needs a way to
+  // place the machine exactly where their own eyes say it belongs. That's what a LONG PRESS
+  // does: press and hold without dragging, and once held ends it drops the machine at that
+  // exact point, floor mask or not, for just that one placement -- the very next plain drag
+  // goes back to snapping normally. Moving before the hold completes cancels it, so a normal
+  // drag can never accidentally turn into a free placement.
+  const LONG_PRESS_MS = 550, LONG_PRESS_TOL = 10;   // ms to hold · px of wiggle still counted as "held still"
+  let dragMode = null;
+  let downX = 0, downY = 0, longPressTimer = null;
+  const toNDC = (x, y) => { ndc.set((x / window.innerWidth) * 2 - 1, -(y / stageH()) * 2 + 1); };
+  const hitsMachine = (x, y) => {
+    if (!occluder) return false;
+    toNDC(x, y);
+    raycaster.setFromCamera(ndc, camera);
+    return raycaster.intersectObject(occluder, false).length > 0;
+  };
+  // Places the machine at the exact screen point, no floor snapping -- the manual-override half
+  // of placement (long press). Still records a valid anchor when the result happens to clear
+  // the floor check, so a plain drag right after has something sane to slide back from.
+  const placeRaw = (x, y) => {
+    if (!machine) return;
+    const p = groundHit(x, y);
+    if (!p) return;
+    machine.position.set(p.x, 0, p.z); needsRender = true;
+    freePlaced = true;
+    if (placementOk(p.x, p.z)) { lastValidX = p.x; lastValidZ = p.z; }
+  };
+  const moveTo = (x, y) => {
+    if (!machine) return;
+    freePlaced = false;
+    let sx = x, sy = y;
+    if (floorMask) {                                   // washing machine goes on the FLOOR only → snap
+      const im = screenToImage(x, y);
+      if (!isFloorAt(im.fx, im.fy)) { const nf = nearestFloor(im.fx, im.fy); const s = imageToScreen(nf.fx, nf.fy); sx = s.x; sy = s.y; }
+    }
+    const p = groundHit(sx, sy);
+    if (!p) return;
+    let { x: tx, z: tz } = p;
+    if (floorMask && !placementOk(tx, tz)) {
+      // The anchor point itself is on the floor, but the machine's real width × depth from here
+      // would spill onto a chair/desk/wall, or be drawn through furniture in front of it -- slide
+      // back toward the last spot that was fully clear, stopping as soon as it isn't, instead of
+      // dropping it half into furniture just because its one anchor point landed on carpet.
+      const STEPS = 14;
+      let best = { x: lastValidX, z: lastValidZ };
+      for (let i = 1; i <= STEPS; i++) {
+        const t = i / STEPS, cx = lastValidX + (tx - lastValidX) * t, cz = lastValidZ + (tz - lastValidZ) * t;
+        if (placementOk(cx, cz)) best = { x: cx, z: cz }; else break;
+      }
+      tx = best.x; tz = best.z;
+    }
+    machine.position.set(tx, 0, tz); needsRender = true;
+    if (!floorMask || placementOk(tx, tz)) { lastValidX = tx; lastValidZ = tz; }
+  };
+  const clearLongPress = () => { clearTimeout(longPressTimer); longPressTimer = null; };
+  // Turning: the Turn slider is the source of truth (applyRotation() reads it), so set that.
+  const setTurn = (deg) => {
+    if (!machine) return;
+    deg = ((deg % 360) + 360) % 360;
+    sRot.value = Math.round(deg);
+    vRot.textContent = sRot.value + '°';
+    applyRotation();
+    needsRender = true;
+  };
+  // Gestures: ONE finger moves the machine, but only once it actually drags -- a plain tap
+  // anywhere on the floor no longer teleports it there. Starting on the machine itself carries
+  // it along from where it was grabbed (no jump); starting elsewhere waits for the finger to
+  // move past LONG_PRESS_TOL before the machine starts following it. TWO fingers twist to turn
+  // it, like turning an object on a table: the machine turns by as much as the line between the
+  // fingers does. A mouse wheel turns it on a computer. Long-press still places it exactly under
+  // the finger, floor mask or not.
+  const touches = new Map();                         // pointerId -> {x, y}
+  let grabDX = 0, grabDY = 0, twistBase = 0, twistRot = 0, downAt = 0, preGesture = null;
+  const twistAngle = () => { const [a, b] = [...touches.values()]; return Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI; };
+  glCanvas.addEventListener('pointerdown', (e) => {
+    glCanvas.setPointerCapture(e.pointerId);
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (touches.size >= 2) {                         // second finger: stop moving, start turning
+      clearLongPress();
+      if (touches.size === 2 && machine) {
+        // Two fingers never land at exactly the same instant, and the first one's touch already
+        // moved the machine to it -- a second finger soon after means it was a twist all along.
+        if (preGesture && performance.now() - downAt < 400) { machine.position.copy(preGesture.pos); freePlaced = preGesture.free; needsRender = true; }
+        dragMode = 'twist'; twistBase = twistAngle(); twistRot = +sRot.value;
+      }
+      return;
+    }
+    downX = e.clientX; downY = e.clientY; downAt = performance.now();
+    preGesture = machine ? { pos: machine.position.clone(), free: freePlaced } : null;
+    grabDX = grabDY = 0;
+    const grabbedMachine = !!(machine && hitsMachine(e.clientX, e.clientY));
+    if (grabbedMachine) {
+      // carry it from where it was grabbed: keep the offset between the finger and its base
+      const b = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z));
+      grabDX = b.x - e.clientX; grabDY = b.y - e.clientY;
+    }
+    if (floorLocking) {
+      // Floor detection for this photo hasn't finished yet — there's no floorMask to snap a
+      // plain drag to, so ignore it (see the note by the flag's declaration). A long press
+      // still works though: holding still is the customer explicitly asking to place it
+      // themselves, floor mask or not, so that's honoured even during the lock.
+      dragMode = null;
+    } else if (grabbedMachine) {
+      // Grabbed the machine itself: carry it from here right away, no jump.
+      dragMode = 'move'; moveTo(e.clientX + grabDX, e.clientY + grabDY);
+    } else {
+      // Touched empty floor: don't jump the machine there on a plain tap -- wait for the
+      // finger to actually drag (see pointermove) before it starts following it.
+      dragMode = 'pending';
+    }
+    clearLongPress();
+    longPressTimer = setTimeout(() => {
+      longPressTimer = null;
+      dragMode = 'free';
+      placeRaw(downX, downY);
+      if (navigator.vibrate) try { navigator.vibrate(15); } catch (err) {}
+      toast('📍 Placed exactly there. Drag it to snap back to the floor.');
+    }, LONG_PRESS_MS);
+  });
+  glCanvas.addEventListener('pointermove', (e) => {
+    if (!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (dragMode === 'twist') {
+      if (touches.size >= 2) {
+        let d = twistAngle() - twistBase; d = ((d + 540) % 360) - 180;   // shortest way round
+        setTurn(twistRot - d);                       // clockwise twist on screen = clockwise from above
+      }
+      return;
+    }
+    if (touches.size > 1) return;
+    if (dragMode === 'free') { placeRaw(e.clientX, e.clientY); return; }
+    // Moved more than a light wiggle since pointerdown → this is a drag, not a held press.
+    const dragged = Math.hypot(e.clientX - downX, e.clientY - downY) > LONG_PRESS_TOL;
+    if (longPressTimer && dragged) clearLongPress();
+    if (dragMode === 'pending') {
+      // A tap on empty floor doesn't move the machine -- only promote to 'move' once the
+      // finger has actually dragged, so it starts following from here, not from the tap.
+      if (!dragged) return;
+      dragMode = 'move';
+    }
+    if (dragMode === 'move') moveTo(e.clientX + grabDX, e.clientY + grabDY);
+  });
+  const endPointer = (e) => {
+    touches.delete(e.pointerId);
+    clearLongPress();
+    if (dragMode === 'twist') {
+      if (touches.size >= 2) { twistBase = twistAngle(); twistRot = +sRot.value; return; }   // a third finger lifted
+      settlePlacement();                             // a turn can swing the footprint into furniture
+      dragMode = touches.size ? 'none' : null;       // one finger still down: don't let it start moving
+      return;
+    }
+    if (!touches.size) dragMode = null;
+  };
+  glCanvas.addEventListener('pointerup', endPointer);
+  glCanvas.addEventListener('pointercancel', endPointer);
+  glCanvas.addEventListener('wheel', (e) => {
+    if (!machine || cal.on) return;
+    e.preventDefault();
+    setTurn(+sRot.value + (e.deltaY > 0 ? 5 : -5));
+    clearTimeout(glCanvas._wheelSettle);
+    glCanvas._wheelSettle = setTimeout(settlePlacement, 250);
+  }, { passive: false });
+
+  // render loop (renders only when something changed)
+  const tick = () => {
+    if (needsRender && renderer) {
+      updateDimOcclusion();          // re-pick the best-facing H/W/D edges for this view
+      renderer.render(scene, camera);
+      needsRender = false;
+    }
+    requestAnimationFrame(tick);
+  };
+  tick();
+
+  window.addEventListener('resize', () => { resize(); drawPhoto(); needsRender = true; });
+
+  // The dock's height isn't fixed -- the AI status line changes length several times during
+  // runAIPlace() and can wrap differently, which changes how much of the column .dock takes
+  // and therefore how tall #stage actually is. A plain resize listener only fires for the
+  // window itself, so it would miss that; watching #stage directly catches every cause.
+  new ResizeObserver(() => { resize(); drawPhoto(); needsRender = true; }).observe(stageEl);
+}
+
+// Put the virtual camera exactly where the phone was: cam.hc above the floor, tilted down by
+// cam.pitchDeg, seeing through cam.f35's lens. Everything the machine's on-screen size depends on
+// is in those three numbers -- see calibrateCamera() for where they come from.
+function updateCamera(){
+  if (!camera) return;
+  const W = window.innerWidth, H = stageH();
+  // The photo is drawn CONTAIN-fit and centred, so it may not fill the stage's height: the stage's
+  // field of view is the photo's, stretched by how much taller the stage is than the drawn photo.
+  let fov = vfovForLens(cam.f35);
+  if (photoBitmap) { const p = coverParams(); fov = 2 * Math.atan(Math.tan(fov / 2) * H / (photoBitmap.height * p.s)); }
+  camera.fov = THREE.MathUtils.radToDeg(fov);
+  camera.aspect = W / H;
+  // Stand back far enough that the middle of the view lands on the world origin -- where the
+  // machine starts and where the sun's shadow is aimed -- or 5° worth of it for a level shot.
+  const th = THREE.MathUtils.degToRad(cam.pitchDeg);
+  camera.position.set(0, cam.hc, cam.hc / Math.tan(Math.max(th, THREE.MathUtils.degToRad(5))));
+  camera.rotation.set(-th, 0, 0);
+  camera.updateProjectionMatrix();
+  // three.js only refreshes the camera's world matrix when it next renders -- and the first
+  // placement on a fresh photo raycasts right after this, before any frame. Without this it aimed
+  // with the previous photo's camera and dropped the machine metres from where it was meant to go.
+  camera.updateMatrixWorld(true);
+  needsRender = true;
+}
+
+function resize(){
+  const w = window.innerWidth, h = stageH();
+  if (renderer) { renderer.setSize(w, h, false); glCanvas.width = w * DPR; glCanvas.height = h * DPR; renderer.setSize(w, h, false); }
+  glCanvas.width = w * DPR; glCanvas.height = h * DPR;
+  bg.width = w * DPR; bg.height = h * DPR;
+  scanEl.width = w * DPR; scanEl.height = h * DPR;
+  drawScan();       // resizing a canvas clears it
+  renderCalib();    // calibration dots are kept in photo coordinates -- redraw them where the photo now is
+  if (cal.on) placeCalBar();
+  updateCamera();   // the stage's shape changes how the photo's field of view maps onto it
+}
+
+// draw the photo into #bg with "cover" fit
+// Draws the whole photo, never cropped -- CONTAIN fit, not COVER. Most phone photos are tall
+// (portrait), and the composer frame is now shorter than it used to be (the dock lives below
+// it, not on top of it -- see the fix above this one), so a squarer/wider frame than the
+// photo's own aspect ratio. COVER fills the frame by cropping whatever overflows; on a
+// portrait photo in a squarer frame that meant losing real content off the top and bottom.
+// Fills the leftover space with a blurred, darkened copy of the same photo rather than blank
+// bars -- same pattern as Instagram Stories / Spotify's blurred album-art backdrop.
+function drawPhoto(){
+  if (!photoBitmap) return;
+  const ctx = bg.getContext('2d');
+  const cw = bg.width, ch = bg.height, iw = photoBitmap.width, ih = photoBitmap.height;
+  ctx.clearRect(0, 0, cw, ch);
+
+  const coverS = Math.max(cw / iw, ch / ih) * 1.15;   // +15% headroom so the blur never reveals a bare edge
+  const cdw = iw * coverS, cdh = ih * coverS;
+  ctx.save();
+  ctx.filter = 'blur(24px) brightness(0.55)';
+  ctx.drawImage(photoBitmap, (cw - cdw) / 2, (ch - cdh) / 2, cdw, cdh);
+  ctx.restore();
+
+  const s = Math.min(cw / iw, ch / ih);               // CONTAIN -- the whole photo, always
+  const dw = iw * s, dh = ih * s;
+  ctx.drawImage(photoBitmap, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+}
+
+// ---------- sliders ----------
+sSize.addEventListener('input', () => {
+  vSize.textContent = '≈' + curDims().H + 'cm';
+  if (machine) { machine.scale.setScalar(baseScale * (+sSize.value / 100)); needsRender = true; }
+  updateDimChip();
+  if (dimGroup) buildDims();   // rebuild so the H/W/D labels show the new numbers
+});
+sRot.addEventListener('input', () => {
+  vRot.textContent = sRot.value + '°';
+  applyRotation(); needsRender = true;
+});
+// Manual override of the fitted tilt (calibrateCamera() sets the slider to what it found)
+sAng.addEventListener('input', () => { vAng.textContent = sAng.value + '°'; cam.pitchDeg = +sAng.value; updateCamera(); });
+
+// ---------- save / share ----------
+// The picture as composed, at the photo's own resolution and cropped to it. It used to be the
+// stage copied at screen size -- blurred side bars and all, and ~750 px wide on a phone however
+// big the photo. Now the photo is drawn from its own pixels and the machine is rendered on top at
+// the same size, through a camera with the photo's exact field of view (the stage's is stretched
+// to cover the bars). Up to 2560 px on the long side: sharp enough to print, and a size phones'
+// GPUs draw without trouble.
+const saveBtn = document.getElementById('save');
+function composePicture(){
+  const gl = renderer.getContext(), vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS);
+  const cap = Math.min(2560, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), vp[0], vp[1]);
+  const iw = photoBitmap.width, ih = photoBitmap.height, k = Math.min(1, cap / Math.max(iw, ih));
+  const W = Math.round(iw * k), H = Math.round(ih * k);
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(photoBitmap, 0, 0, W, H);
+  // All in one go, so the screen never shows the resized canvas (it's only painted after this).
+  const pr = renderer.getPixelRatio(), size = renderer.getSize(new THREE.Vector2()), fov = camera.fov, aspect = camera.aspect;
+  try {
+    renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+    camera.fov = THREE.MathUtils.radToDeg(vfovForLens(cam.f35)); camera.aspect = W / H; camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+    ctx.drawImage(glCanvas, 0, 0, W, H);                  // machine, shadow and (if on) its dimensions
+  } finally {
+    renderer.setPixelRatio(pr); renderer.setSize(size.x, size.y, false);
+    camera.fov = fov; camera.aspect = aspect; camera.updateProjectionMatrix();
+    renderer.render(scene, camera);
+  }
+  return new Promise((r) => out.toBlob(r, 'image/jpeg', 0.92));
+}
+saveBtn.addEventListener('click', async () => {
+  if (!renderer || !photoBitmap || saveBtn.disabled) return;
+  saveBtn.disabled = true;                                // one picture per tap
+  try {
+    const blob = await composePicture();
+    if (!blob) throw new Error('no image');
+    const file = new File([blob], 'IFB-washing-machine-in-my-room.jpg', { type: 'image/jpeg' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'IFB Washing Machine' }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }   // they closed the share sheet: fine
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    toast('Saved! Go flex it 🎉');
+  } catch (e) {
+    console.warn('Save failed:', e);
+    toast('Couldn’t save the picture — please try again.');
+  } finally {
+    saveBtn.disabled = false;
+  }
+});
+
+// ---------- AI: understand the room (segment objects) → place ONLY on the floor ----------
+const aiBtn = document.getElementById('aiBtn');
+const aiStatus = document.getElementById('aiStatus');
+const aiSet = (t) => { aiStatus.textContent = t; };
+
+// The AIs live in workers (phroom-ai-worker.js): loading one and running it block for seconds, and
+// on this page that froze taps and the upload screen. One worker per model, started on first use:
+// two models' GPU sessions can't take turns inside one onnxruntime -- a new photo's room scan that
+// landed during a 3D depth pass failed outright ("Session mismatch").
+function aiChannel(onProgress, onCrash){
+  const ch = { worker: null, nextId: 1, pending: new Map() };
+  const worker = () => {
+    if (!ch.worker) {
+      ch.worker = new Worker(new URL('phroom-ai-worker.js', import.meta.url), { type: 'module' });
+      ch.worker.onmessage = (e) => {
+        const m = e.data;
+        if (m.type === 'progress') { onProgress(m.pct); return; }
+        const p = ch.pending.get(m.id);
+        if (!p) return;
+        ch.pending.delete(m.id);
+        if (m.type === 'error') p.reject(new Error(m.message)); else p.resolve(m);
+      };
+      // the worker itself failed (couldn't load, crashed): fail whatever was waiting, start fresh next time
+      ch.worker.onerror = (e) => {
+        for (const p of ch.pending.values()) p.reject(new Error(e.message || 'AI worker failed'));
+        ch.pending.clear(); ch.worker = null; onCrash();
+      };
+    }
+    return ch.worker;
+  };
+  return (msg) => {
+    const id = ch.nextId++;
+    return new Promise((resolve, reject) => { ch.pending.set(id, { resolve, reject }); worker().postMessage({ ...msg, id }); });
+  };
+}
+// The room AI (what's floor, wall, furniture). AI.seg is set -- to a function that asks its worker to
+// read a photo -- once the model is loaded and warmed up.
+const AI = { seg: null, ready: null, pct: null };
+const aiCall = aiChannel((pct) => { AI.pct = pct; if (busyStep === 'ai') showAILoading(); }, () => { AI.ready = null; AI.seg = null; });
+// One shared load: showUpload() starts it early and runAIPlace() awaits the same promise, so the
+// ~15 MB model is never fetched twice. A failed load clears itself so the next call can retry.
+function loadSeg(){
+  if (!AI.ready) {
+    AI.ready = aiCall({ type: 'load' })
+      .then(() => (AI.seg = async (url) => (await aiCall({ type: 'segment', image: url })).out))
+      .catch((e) => { AI.ready = null; throw e; });
+  }
+  return AI.ready;
+}
+// Once the file is in, the AI still takes a few seconds to set itself up -- a bar parked at 100%
+// looks stuck, so say what's happening instead.
+function showAILoading(){
+  if (AI.pct !== null && AI.pct >= 100) setBusy('ai', '⏳', 'Warming up…', '');
+  else setBusy('ai', '⏳', 'Warming up…' + (AI.pct ? ' ' + AI.pct + '%' : ''), '', AI.pct);
+}
+
+// The AI's view of the room, flashed over the photo once it's done: floor green, the room's own
+// surfaces muted, furniture in brighter colours. It shows the customer the app really did look at
+// their room -- and it's the same map the placement and sizing are worked out from.
+const scanEl = document.getElementById('scan');
+let scanMap = null;   // the small colour map, kept so resize() can redraw it
+// Paint the map over wherever the photo is drawn. Separate from revealScan() because resize()
+// clears the canvas -- and the stage resizes right as the map appears, when the status line under
+// it changes length -- which used to wipe the map before anyone saw it.
+function drawScan(){
+  if (!scanMap || !photoBitmap) return;
+  const ctx = scanEl.getContext('2d'), p = coverParams();
+  ctx.clearRect(0, 0, scanEl.width, scanEl.height);
+  ctx.imageSmoothingEnabled = true;                       // soft-edged blobs, not the 160-wide grid
+  ctx.drawImage(scanMap, p.ox * DPR, p.oy * DPR, p.iw * p.s * DPR, p.ih * p.s * DPR);
+}
+function revealScan(out){
+  const layers = out.filter((o) => o.mask), grids = layers.map((o) => unionMask([o]));
+  if (!grids.length || !photoBitmap) return;
+  const { w, h } = grids[0], small = document.createElement('canvas'); small.width = w; small.height = h;
+  const sctx = small.getContext('2d'), img = sctx.createImageData(w, h);
+  const FURNITURE = [[255, 196, 40], [0, 200, 255], [255, 120, 40], [255, 90, 200], [150, 255, 90]];
+  layers.forEach((o, i) => {
+    const l = o.label;
+    const rgba = /\b(floor|rug|carpet|mat)\b/i.test(l) ? [46, 230, 120, 150]
+      : /\bwall\b/i.test(l) ? [225, 29, 42, 70]
+      : /\b(ceiling|windowpane|window|sky|building|tree)\b/i.test(l) ? [124, 77, 255, 80]
+      : [...FURNITURE[i % FURNITURE.length], 135];
+    const d = grids[i].data;
+    for (let k = 0; k < w * h; k++) if (d[k]) img.data.set(rgba, k * 4);
+  });
+  sctx.putImageData(img, 0, 0);
+  scanMap = small;
+  drawScan();
+  scanEl.classList.add('show');
+}
+
+// 512, not 1024: the model works at 512×512 whatever it's given, and every mask it returns is
+// scaled back up to the input's size -- which is where most of the time went (hall.jpg: 6.7-8.3 s
+// at 1024 vs 2.4-3.0 s at 512 on WebGPU; 9.5-11 s vs 4.4 s on CPU) for masks this app only ever
+// reads on a 160-wide grid. Same labels found either way.
+function photoInputURL(max = 512){
+  const iw = photoBitmap.width, ih = photoBitmap.height, s = Math.min(1, max / Math.max(iw, ih));
+  const c = document.createElement('canvas'); c.width = Math.round(iw * s); c.height = Math.round(ih * s);
+  c.getContext('2d').drawImage(photoBitmap, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.9);
+}
+
+// Converts between screen px and photo-normalised coords. Must use the same fit as
+// drawPhoto()'s sharp foreground layer (CONTAIN, not COVER) --
+// this is what converts between screen pixels and photo-normalised coordinates for the AI
+// floor placement and drag-to-move snapping, so if it disagreed with what's actually drawn,
+// a tap would land on a different part of the photo than the one the customer is looking at.
+function coverParams(){
+  const iw = photoBitmap.width, ih = photoBitmap.height, W = window.innerWidth, H = stageH();
+  const s = Math.min(W / iw, H / ih);
+  return { iw, ih, s, ox: (W - iw * s) / 2, oy: (H - ih * s) / 2 };
+}
+function screenToImage(x, y){ const p = coverParams(); return { fx: ((x - p.ox) / p.s) / p.iw, fy: ((y - p.oy) / p.s) / p.ih }; }
+function imageToScreen(fx, fy){ const p = coverParams(); return { x: fx * p.iw * p.s + p.ox, y: fy * p.ih * p.s + p.oy }; }
+
+// Screen point → world (x,z) on the invisible ground plane. Shared by every placement path,
+// top-level (not just inside initThree()) so runAIPlace()/selectModel() can use it too.
+function groundHit(x, y){
+  ndc.set((x / window.innerWidth) * 2 - 1, -((y / stageH()) * 2 - 1));
+  camera.updateMatrixWorld(); ground.updateMatrixWorld();   // current poses, not the last frame's (see updateCamera)
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObject(ground)[0];
+  return hit ? { x: hit.point.x, z: hit.point.z } : null;
+}
+// World point → screen point -- the inverse of groundHit's NDC math, for going the other way:
+// given a corner of the machine's footprint, where does it land on screen (and so in the photo)?
+function worldToScreen(v){
+  camera.updateMatrixWorld();
+  const p = v.clone().project(camera);
+  return { x: (p.x + 1) / 2 * window.innerWidth, y: (1 - p.y) / 2 * stageH() };
+}
+// The four corners of the machine's actual footprint (its real width × depth, at its current
+// size and turn) around a candidate centre point -- as opposed to just that one centre point.
+function footprintCorners(cx, cz){
+  if (!modelSize || !machine) return null;
+  const s = baseScale * (+sSize.value / 100);
+  const hw = (modelSize.x * s) / 2, hd = (modelSize.z * s) / 2;
+  const rot = machine.rotation.y, cos = Math.cos(rot), sin = Math.sin(rot);
+  // Same turn three.js applies for rotation.y: x' = x·cos + z·sin, z' = −x·sin + z·cos. (This
+  // used to have both signs flipped -- turning the footprint the opposite way to the machine, so
+  // at the default 20° turn every floor check was testing a mirrored footprint.)
+  return [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([lx, lz]) =>
+    new THREE.Vector3(cx + lx * cos + lz * sin, 0, cz - lx * sin + lz * cos));
+}
+// Is the machine's WHOLE footprint on the floor from here, not just the point it's anchored to?
+// Each corner is projected back to a screen point and checked against the floor mask the same
+// way a drag point is -- so "on the floor" means the same thing everywhere it's asked. A corner
+// outside the photo isn't on the floor either: isFloorAt() clamps to the nearest edge cell, which
+// used to let the machine sit half off the bottom of the picture.
+function footprintOnFloor(cx, cz){
+  if (!floorMask) return true;
+  const corners = footprintCorners(cx, cz);
+  if (!corners) return true;
+  return corners.every((c) => {
+    const s = worldToScreen(c), im = screenToImage(s.x, s.y);
+    return im.fx >= 0 && im.fx <= 1 && im.fy >= 0 && im.fy <= 1 && isFloorAt(im.fx, im.fy);
+  });
+}
+// The whole machine box -- floor corners and top corners -- as it lands on the photo, as a convex
+// outline in photo coordinates: the region the renderer will actually paint over the picture.
+// backRow is the photo row of the footprint's farthest edge (farther on the floor = higher up).
+function machineOutline(cx, cz){
+  const base = footprintCorners(cx, cz);
+  if (!base) return null;
+  const top = modelSize.y * baseScale * (+sSize.value / 100);
+  const pts = [...base, ...base.map((v) => new THREE.Vector3(v.x, top, v.z))]
+    .map((v) => { const s = worldToScreen(v); return screenToImage(s.x, s.y); });
+  return { hull: convexHull(pts), backRow: Math.min(...pts.slice(0, 4).map((p) => p.fy)) };
+}
+function convexHull(pts){                             // monotone chain; returns [[fx,fy],...]
+  const p = pts.map((q) => [q.fx, q.fy]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [], upper = [];
+  for (const q of p) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop(); lower.push(q); }
+  for (const q of p.slice().reverse()) { while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop(); upper.push(q); }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
+}
+function insideHull(hull, x, y){
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i], b = hull[(i + 1) % hull.length];
+    if ((b[0] - a[0]) * (y - a[1]) - (b[1] - a[1]) * (x - a[0]) < 0) return false;
+  }
+  return true;
+}
+// Share of the outline allowed over nearer furniture. Not zero, because mask edges are soft, but
+// small: a drag slides the machine up to the first spot over this limit, so whatever is allowed
+// here is exactly how far it can poke into a nearer desk -- 6% left a visible sliver.
+const OBSTACLE_TOLERANCE = 0.02;
+// How much lower (as a share of photo height) furniture has to meet the floor than the machine's
+// back edge before it counts as nearer. Without it, a machine standing right in front of a desk
+// gets pushed away: the desk mask's soft bottom edge bleeds a row or two past where the desk
+// really ends. Real in-front cases (the bed) clear it by a wide margin.
+const OBSTACLE_DEPTH_MARGIN = 0.02;
+// Would the machine, drawn here, visibly cut through something standing in front of it?
+// footprintOnFloor() only asks whether the floor under the machine is clear; it never looks at
+// the furniture around it. And with no depth for the photo, the renderer always paints the
+// machine over the picture -- right for anything farther back (a machine standing in front of a
+// desk SHOULD cover part of the desk), wrong for anything nearer, which is what made it look sunk
+// into the bed. The one depth cue a single photo gives is where each thing meets the floor:
+// lower in the frame = nearer the camera. So an outline sample only counts against a spot when
+// the furniture under it reaches the floor lower down than the machine's own back edge.
+function blockedByObstacle(cx, cz){
+  if (!obstacleMask) return false;
+  const o = machineOutline(cx, cz);
+  if (!o || o.hull.length < 3) return false;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of o.hull) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+  const { w, h, data, base } = obstacleMask, N = 20;   // 21×21 grid -- fine enough to catch a thin sliver
+  let inside = 0, blocked = 0;
+  for (let i = 0; i <= N; i++) for (let j = 0; j <= N; j++) {
+    const fx = minX + (maxX - minX) * i / N, fy = minY + (maxY - minY) * j / N;
+    if (!insideHull(o.hull, fx, fy)) continue;
+    inside++;
+    if (fx < 0 || fx >= 1 || fy < 0 || fy >= 1) continue;
+    const k = ((fy * h) | 0) * w + ((fx * w) | 0);
+    if (data[k] && base[k] > o.backRow + OBSTACLE_DEPTH_MARGIN) blocked++;
+  }
+  return inside > 0 && blocked / inside > OBSTACLE_TOLERANCE;
+}
+// Everything a spot has to satisfy: the whole footprint on the floor, and nothing nearer than the
+// machine drawn through. Used everywhere the footprint check alone used to decide "is this OK".
+function placementOk(cx, cz){ return footprintOnFloor(cx, cz) && !blockedByObstacle(cx, cz); }
+// Nearest floor cell to (fx,fy) where the machine fits -- full footprint on the floor and clear
+// of nearer furniture (see placementOk()). A one-time grid scan (used only for the initial AI
+// placement and a model switch, never per drag frame), so the per-cell cost is fine. Returns null
+// if nothing on the whole detected floor can take the machine at its current size.
+function nearestValidFootprint(fx, fy){
+  if (!floorMask || !modelSize) return null;
+  const { w, h, data } = floorMask;
+  const cx = Math.min(w-1, Math.max(0, (fx*w)|0)), cy = Math.min(h-1, Math.max(0, (fy*h)|0));
+  let bx = -1, by = -1, bd = Infinity;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    if (!data[y*w+x]) continue;
+    const d = (x-cx)*(x-cx)+(y-cy)*(y-cy);
+    if (d >= bd) continue;
+    const sc = imageToScreen((x+0.5)/w, (y+0.5)/h);
+    const p = groundHit(sc.x, sc.y);
+    if (p && placementOk(p.x, p.z)) { bd = d; bx = x; by = y; }
+  }
+  return bx < 0 ? null : { fx: (bx+0.5)/w, fy: (by+0.5)/h };
+}
+
+// Downsampled union of some of the segmentation result's label masks
+function unionMask(layers){
+  if (!layers.length) return null;
+  const W = layers[0].mask.width, H = layers[0].mask.height, gw = 160, gh = Math.max(1, Math.round(gw * H / W));
+  const data = new Uint8Array(gw * gh);
+  for (const layer of layers){ const m = layer.mask.data;
+    for (let gy = 0; gy < gh; gy++) for (let gx = 0; gx < gw; gx++){
+      const sx = (gx / gw * W) | 0, sy = (gy / gh * H) | 0;
+      if (m[sy * W + sx] > 127) data[gy * gw + gx] = 1;
+    } }
+  return { w: gw, h: gh, data };
+}
+// Build a downsampled floor mask (union of floor/rug/carpet) from the segmentation result
+function buildFloorMask(out){
+  return unionMask(out.filter(o => /\b(floor|rug|carpet|mat)\b/i.test(o.label) && o.mask));
+}
+// Background surfaces (and outdoors, seen through a window) -- everything else the segmenter finds
+// counts as an obstacle. A complement list rather than a list of furniture names, because ADE20K
+// has 150 classes and a hand-picked list would silently miss whatever it forgot (a pouf, a laundry
+// basket, a person) -- exactly the things a machine shouldn't be drawn through.
+const NOT_OBSTACLE = /\b(floor|rug|carpet|mat|wall|ceiling|windowpane|window|door|light|sky|building|tree|grass|road|sidewalk|mountain|earth)\b/i;
+// Obstacle mask plus, per cell, the photo row where that obstacle meets the floor: walk down its
+// column to the bottom of the run it belongs to (one bottom-up pass, not a walk per lookup).
+function buildObstacleMask(out){
+  const m = unionMask(out.filter(o => !NOT_OBSTACLE.test(o.label) && o.mask));
+  if (!m) return null;
+  const { w, h, data } = m, base = new Float32Array(w * h);
+  for (let x = 0; x < w; x++) for (let y = h - 1; y >= 0; y--) {
+    const k = y * w + x;
+    if (data[k]) base[k] = (y + 1 < h && data[k + w]) ? base[k + w] : (y + 1) / h;
+  }
+  m.base = base;
+  return m;
+}
+function isFloorAt(fx, fy){ if (!floorMask) return true; const { w, h, data } = floorMask;
+  const gx = Math.min(w-1, Math.max(0, (fx*w)|0)), gy = Math.min(h-1, Math.max(0, (fy*h)|0)); return data[gy*w+gx] === 1; }
+function nearestFloor(fx, fy){                       // nearest floor cell (image-normalised)
+  if (!floorMask) return { fx, fy }; const { w, h, data } = floorMask;
+  const cx = Math.min(w-1, Math.max(0, (fx*w)|0)), cy = Math.min(h-1, Math.max(0, (fy*h)|0));
+  if (data[cy*w+cx] === 1) return { fx, fy };
+  let bx = -1, by = -1, bd = Infinity;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[y*w+x]){ const d = (x-cx)*(x-cx)+(y-cy)*(y-cy); if (d < bd){ bd = d; bx = x; by = y; } }
+  return bx < 0 ? { fx, fy } : { fx: (bx+0.5)/w, fy: (by+0.5)/h };
+}
+// Fraction of the whole frame the floor mask covers (see isTopDownShot below)
+function floorCoverage(mask){
+  if (!mask) return 0;
+  let n = 0; for (let i = 0; i < mask.data.length; i++) if (mask.data[i]) n++;
+  return n / (mask.w * mask.h);
+}
+
+// ---------- camera calibration: how high the phone was, how far it tilted, which lens ----------
+// The machine's size on screen comes entirely from the virtual camera: too high or tilted too far
+// down and it renders too big for the room, and vice versa. The camera used to be an orbit rig
+// whose angle and distance were guessed from how much of the frame was floor -- nothing about the
+// actual phone -- and on the test photos that drew the machine 1.5-2x too big wherever walls and a
+// ceiling were in view. Instead, fit the phone's height, tilt and lens to what the photo shows:
+//  1. things of known height standing on the floor -- a wall up to the ceiling, a door, wardrobe,
+//     sofa, kitchen counter or appliance: where one meets the floor says how far away it is, and
+//     where its top is says how tall it looks from there;
+//  2. vertical lines -- door and window frames, wall corners: a phone tilted down makes them lean
+//     together toward a point below the picture, and how fast gives the tilt;
+//  3. what's typical when the photo says nothing else: a phone at ~1.35 m with the 1x lens.
+// A grid search with a robust loss, so one mislabelled object can't drag the answer around.
+
+// H: typical height of the object's highest visible point (m); sig: log-spread of that height;
+// D: how far behind its floor-contact front edge that highest point sits (m) -- seen from above, a
+// counter shows its whole top, so its top edge in the photo is its BACK edge; family: labels
+// allowed at the bottom of the same column (a counter is mostly "cabinet" under its worktop) --
+// anything else there is something standing in front of its base, hiding where it meets the floor.
+const CAM_REFS = [
+  // a glass door's upper part is "windowpane", so only count doors with wall right above them.
+  // 2.05 m sits between India's usual 2.1 m (7 ft) door and the 2.03 m (6'8") common elsewhere.
+  { re: /\bdoor\b/i, H: 2.05, sig: 0.05, D: 0, name: 'door', family: /\bdoor\b/i, above: /\b(wall|ceiling)\b/i, upright: true },
+  { re: /\bwardrobe\b/i, H: 2.0, sig: 0.12, D: 0.6, name: 'wardrobe', family: /\b(wardrobe|cabinet)\b/i },
+  { re: /\brefrigerator\b/i, H: 1.75, sig: 0.1, D: 0.65, name: 'fridge', family: /\brefrigerator\b/i },
+  { re: /\b(counter|countertop|kitchen island)\b/i, H: 0.91, sig: 0.05, D: 0.6, name: 'kitchen counter', family: /\b(counter|countertop|kitchen island|cabinet)\b/i },
+  { re: /\b(washer|dishwasher)\b/i, H: 0.85, sig: 0.05, D: 0.6, name: 'washing machine', family: /\b(washer|dishwasher|cabinet)\b/i },
+  { re: /\bstove\b/i, H: 0.9, sig: 0.05, D: 0.6, name: 'stove', family: /\b(stove|cabinet|oven)\b/i },
+  { re: /\bsofa\b/i, H: 0.85, sig: 0.12, D: 0.9, name: 'sofa', family: /\bsofa\b/i },
+  // Left out on purpose after testing: chairs (seat, gas lift and base segment as separate pieces),
+  // beds (the top is sometimes the headboard, sometimes the duvet), "table" (coffee tables and
+  // nightstands land in it too) -- each measured anywhere from 0.2 m to 1.2 m on the test photos --
+  // and desks: office desks carry privacy partitions the model also calls "desk", so a 1 m
+  // partition got fitted as a 0.75 m desk and the machine came out 30% too big.
+];
+// Floor to ceiling. Indian homes mostly run 2.75-3.05 m (a 3 m floor-to-floor minus the slab);
+// Western ones 2.4-2.7 m. Centred on the Indian range, since that's where this is used.
+const WALL_REF = { name: 'wall height', H: 2.85, sig: 0.12, D: 0 };
+// the room itself, not things standing in it
+const CAM_BG = /\b(floor|rug|carpet|mat|wall|ceiling|windowpane|window|sky|building|tree|grass|road|sidewalk|mountain|earth|light|fence|railing)\b/i;
+
+// A door is taller than it is wide from anywhere in the room -- turning it only makes it look
+// narrower. So a "door" that comes out wider than tall is a piece of one (near_sofa1: the bottom rail
+// of a glass door, 4% of the photo tall, got measured as a 2.05 m door and the machine came out 30%
+// too small). Samples are grouped into side-by-side runs of columns, each checked on its own.
+function uprightOnly(samples){
+  const s = samples.slice().sort((a, b) => a.x - b.x), groups = [];
+  for (const q of s) { const g = groups[groups.length - 1]; if (g && q.x - g[g.length - 1].x <= 3) g.push(q); else groups.push([q]); }
+  return groups.filter((g) => {
+    const runs = g.map((q) => q.run).sort((a, b) => a - b), width = g[g.length - 1].x - g[0].x + 1;
+    return runs[runs.length >> 1] >= width;                         // grid cells are square in the photo
+  }).flat();
+}
+// Top and floor-contact rows of every reference object, one sample per photo column.
+function cameraRefSamples(out){
+  const layers = out.filter((o) => o.mask), grids = layers.map((o) => unionMask([o]));
+  if (!grids.length) return [];
+  const { w, h } = grids[0], lab = new Int16Array(w * h).fill(-1);
+  grids.forEach((g, i) => { for (let k = 0; k < w * h; k++) if (g.data[k]) lab[k] = i; });   // semantic masks don't overlap
+  const L = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? -1 : lab[y * w + x];
+  const is = (re) => (x, y) => { const l = L(x, y); return l >= 0 && re.test(layers[l].label); };
+  const isFloor = is(/\b(floor|rug|carpet|mat)\b/i), isWall = is(/\bwall\b/i), isCeil = is(/\bceiling\b/i);
+  const isBg = (x, y) => { const l = L(x, y); return l < 0 || CAM_BG.test(layers[l].label); };
+  const onFloor = (x, b) => isFloor(x, b + 1) || isFloor(x, b + 2);
+  const raw = [];
+  for (let x = 0; x < w; x++) {
+    // Things standing in the room: a run of non-background cells read top to bottom (bridging gaps
+    // of up to 2 cells), named by its top cell -- the top is what's being measured.
+    for (let y = 0; y < h;) {
+      if (isBg(x, y)) { y++; continue; }
+      const t = y; let b = y;
+      while (y < h) {
+        if (!isBg(x, y)) { b = y; y++; continue; }
+        if (y + 2 < h && (!isBg(x, y + 1) || !isBg(x, y + 2))) { y++; continue; }
+        break;
+      }
+      const ref = CAM_REFS.find((r) => r.re.test(layers[L(x, t)].label));
+      if (!ref || t === 0 || b - t < 2 || !onFloor(x, b)) continue;     // cut off by the top edge, a sliver, or not visibly on the floor
+      if (!ref.family.test(layers[L(x, b)].label)) continue;
+      if (ref.above) { const a = L(x, t - 1); if (a < 0 || !ref.above.test(layers[a].label)) continue; }
+      raw.push({ ref, top: t / h, base: (b + 1) / h, run: b - t + 1, x });
+    }
+    // A wall with ceiling right above it and floor right below spans one ceiling height.
+    for (let y = 0; y < h;) {
+      if (!isWall(x, y)) { y++; continue; }
+      const t = y; while (y < h && isWall(x, y)) y++; const b = y - 1;
+      if (b - t < 2 || !(isCeil(x, t - 1) || isCeil(x, t - 2)) || !onFloor(x, b)) continue;
+      raw.push({ ref: WALL_REF, top: t / h, base: (b + 1) / h, run: b - t + 1 });
+    }
+  }
+  const byName = {};
+  for (const s of raw) (byName[s.ref.name] ||= []).push(s);
+  const samples = [];
+  for (const arr of Object.values(byName)) {
+    // A column through a table's legs is a real measurement; one between them is only its top
+    // with floor seen underneath -- drop runs much shorter than the tallest of the same kind.
+    const maxRun = Math.max(...arr.map((s) => s.run));
+    let keep = arr.filter((s) => s.run >= 0.4 * maxRun);
+    if (arr[0].ref.upright) keep = uprightOnly(keep);
+    if (keep.length < 2) continue;                                   // a fragment, not a measurement
+    // 30 evenly spaced columns is plenty -- each kind of object counts as one observation anyway
+    if (keep.length > 30) keep = Array.from({ length: 30 }, (_, i) => keep[Math.floor(i * keep.length / 30)]);
+    for (const s of keep) samples.push({ ...s, wt: 1 / keep.length, gh: h });
+  }
+  return samples;
+}
+
+// Projection of the phone's camera in photo coordinates: rows are fractions of the photo's height
+// from the top; the phone is hc m up, tilted down th°, vertical field of view phi, centred.
+function photoCam(hc, thDeg, phi){
+  const th = thDeg * Math.PI / 180, c = Math.cos(th), s = Math.sin(th), k = 2 * Math.tan(phi / 2);
+  const row = (d, y) => { const zc = d * c - (y - hc) * s; return zc <= 1e-3 ? null : 0.5 - (d * s + (y - hc) * c) / zc / k; };
+  return {
+    // how far ahead is the floor point seen at row v (null at or above the horizon)
+    floorDist: (v) => { const q = (0.5 - v) * k, den = s - q * c; if (den <= 1e-4) return null; const d = hc / den * (c + q * s); return d > 0 ? d : null; },
+    // row of the highest visible point of something H tall whose front stands d away and whose top
+    // runs D further back (from above you see its back edge, from below its front edge)
+    topRow: (d, H, D) => { const a = row(d, H), b = D ? row(d + D, H) : null; return a === null && b === null ? null : Math.min(a ?? Infinity, b ?? Infinity); },
+  };
+}
+
+// Tilt from the photo's vertical lines. Tilting down makes vertical edges converge toward a point
+// f·cot(tilt) below the centre of the picture; vote over (tilt, roll) for the point that most of
+// the photo's long straight near-vertical edges aim at. Only long straight segments vote -- the
+// thousands of short texture edges that happen to be upright swamp the answer otherwise.
+// Returns r0 = tan(tilt)·tan(phi/2), which doesn't depend on the lens assumed (phi), plus how
+// confident the vote was.
+function tiltFromVerticals(phi){
+  if (!photoBitmap) return null;
+  // Our own box-filter downscale from (near-)native pixels: the browser's drawImage() scaling
+  // differs between its GPU and CPU paths, and that alone flipped the answer between two loads of
+  // the same photo while testing.
+  const sc = Math.min(1, 2400 / Math.max(photoBitmap.width, photoBitmap.height));
+  const iw = Math.round(photoBitmap.width * sc), ih = Math.round(photoBitmap.height * sc);
+  const cv = document.createElement('canvas'); cv.width = iw; cv.height = ih;
+  const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(photoBitmap, 0, 0, iw, ih);
+  const full = cx.getImageData(0, 0, iw, ih).data;
+  const k = Math.max(1, Math.ceil(Math.max(iw, ih) / 640)), W = Math.floor(iw / k), H = Math.floor(ih / k);
+  const g = new Float32Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let s = 0;
+    for (let yy = 0; yy < k; yy++) for (let xx = 0; xx < k; xx++) { const p = ((y * k + yy) * iw + x * k + xx) * 4; s += 0.299 * full[p] + 0.587 * full[p + 1] + 0.114 * full[p + 2]; }
+    g[y * W + x] = s / (k * k);
+  }
+  // near-vertical edge pixels (Sobel), with the direction of the edge
+  const ang = new Float32Array(W * H).fill(NaN);
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const i = y * W + x;
+    const gx = (g[i - W + 1] + 2 * g[i + 1] + g[i + W + 1]) - (g[i - W - 1] + 2 * g[i - 1] + g[i + W - 1]);
+    const gy = (g[i + W - 1] + 2 * g[i + W] + g[i + W + 1]) - (g[i - W - 1] + 2 * g[i - W] + g[i - W + 1]);
+    if (Math.hypot(gx, gy) < 40) continue;
+    let a = Math.atan2(gx, -gy); if (a < 0) a += Math.PI;             // edge direction, undirected
+    if (Math.abs(a - Math.PI / 2) <= Math.PI / 6) ang[i] = a;          // within 30° of vertical
+  }
+  // grow them into straight segments (neighbours within 8° of the seed's direction)
+  const seen = new Uint8Array(W * H), segs = [];
+  for (let i0 = 0; i0 < W * H; i0++) {
+    if (isNaN(ang[i0]) || seen[i0]) continue;
+    const a0 = ang[i0], pts = [], st = [i0]; seen[i0] = 1;
+    while (st.length) {
+      const i = st.pop(); pts.push(i); const x = i % W, y = (i / W) | 0;
+      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+        const j = (y + oy) * W + (x + ox);
+        if (!seen[j] && !isNaN(ang[j]) && Math.abs(ang[j] - a0) < Math.PI / 22.5) { seen[j] = 1; st.push(j); }
+      }
+    }
+    if (pts.length < 15) continue;
+    let mx = 0, my = 0; for (const i of pts) { mx += i % W; my += (i / W) | 0; } mx /= pts.length; my /= pts.length;
+    let sxx = 0, syy = 0, sxy = 0; for (const i of pts) { const dx = i % W - mx, dy = ((i / W) | 0) - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+    const t2 = 0.5 * Math.atan2(2 * sxy, sxx - syy), ux = Math.cos(t2), uy = Math.sin(t2);
+    let lo = Infinity, hi = -Infinity, wide = 0;
+    for (const i of pts) { const dx = i % W - mx, dy = ((i / W) | 0) - my, t = dx * ux + dy * uy; lo = Math.min(lo, t); hi = Math.max(hi, t); wide = Math.max(wide, Math.abs(dy * ux - dx * uy)); }
+    const len = hi - lo;
+    if (len < 0.05 * H || len < 6 * (wide + 0.5) || Math.abs(uy) < Math.cos(Math.PI / 6)) continue;   // long, thin, upright
+    segs.push([mx - W / 2, my - H / 2, ux, uy, len]);
+  }
+  if (segs.length < 5) return null;
+  const f = (H / 2) / Math.tan(phi / 2), tol = Math.PI / 180;
+  const score = (thd, rolld) => {
+    const th = thd * Math.PI / 180, r = rolld * Math.PI / 180, sr = Math.sin(r), cr = Math.cos(r);
+    const atInf = Math.abs(th) < 1e-3, dist = atInf ? 0 : f / Math.tan(th);
+    let s = 0;
+    for (const [x, y, dx, dy, len] of segs) {
+      let ex = sr, ey = cr;
+      if (!atInf) { ex = dist * sr - x; ey = dist * cr - y; const n = Math.hypot(ex, ey); ex /= n; ey /= n; }
+      const a = Math.acos(Math.min(1, Math.abs(dx * ex + dy * ey)));
+      if (a < tol) s += len * (1 - (a / tol) ** 2);
+    }
+    return s;
+  };
+  let best = { s: -1 };
+  for (let rolld = -6; rolld <= 6; rolld += 1.5) for (let thd = -20; thd <= 70; thd += 1) { const s = score(thd, rolld); if (s > best.s) best = { s, thd, rolld }; }
+  const b0 = best;
+  for (let rolld = b0.rolld - 1.5; rolld <= b0.rolld + 1.5; rolld += 0.5) for (let thd = b0.thd - 1.5; thd <= b0.thd + 1.5; thd += 0.25) { const s = score(thd, rolld); if (s > best.s) best = { s, thd, rolld }; }
+  const peak = best.s / Math.max(1, score(best.thd - 5, best.rolld), score(best.thd + 5, best.rolld));
+  if (peak < 1.15) return null;                                        // no clear answer
+  // A render that keeps verticals parallel on purpose reads as level here even when it looks down,
+  // so this is evidence the objects can overrule, not a hard constraint.
+  return { r0: Math.tan(best.thd * Math.PI / 180) * Math.tan(phi / 2), sig: peak > 2 ? 3 : 5 };
+}
+
+function cameraFitLoss(samples, hc, thDeg, f35, vp, lens, sensor = null){
+  const phi = vfovForLens(f35), pc = photoCam(hc, thDeg, phi);
+  const a = Math.log(hc / CAM_DEFAULT.hc) / 0.25, b = (thDeg - 15) / 25, c = Math.log(f35 / lens.f) / lens.sig;
+  let L = 0.5 * (a * a + b * b + c * c);
+  if (vp) { const r = (thDeg - Math.atan(vp.r0 / Math.tan(phi / 2)) * 180 / Math.PI) / vp.sig; L += Math.log(1 + r * r); }
+  // the phone's own motion sensor, when the in-app camera took the photo: good to a degree or two
+  if (sensor !== null) { const r = (thDeg - sensor) / 1.5; L += 0.5 * r * r; }
+  for (const q of samples) {
+    const d = pc.floorDist(q.base);
+    const v = d === null ? null : pc.topRow(d, q.ref.H, q.ref.D);
+    const hi = d === null ? null : pc.topRow(d, q.ref.H * Math.exp(q.ref.sig), q.ref.D);
+    const lo = d === null ? null : pc.topRow(d, q.ref.H * Math.exp(-q.ref.sig), q.ref.D);
+    if (v === null || hi === null || lo === null) { L += q.wt * 5; continue; }   // seen standing above the horizon: impossible here
+    const r = (v - q.top) / (Math.abs(lo - hi) / 2 + 1 / q.gh);        // height spread in rows, plus one mask cell
+    // Cauchy: one wild sample can't dominate. Except the depth scan when it's the only evidence --
+    // then it's the one thing known about this photo, and a Cauchy loss would let the "typical
+    // phone height" prior talk it out of a crouched or zoomed shot (kitchen1: 0.52 m up, 44 mm).
+    L += q.wt * (q.gauss ? 0.5 * r * r : Math.log(1 + r * r));
+  }
+  return L;
+}
+
+// Fit the phone's height, tilt and lens to the photo; see the section comment above. `manual` is
+// whatever the customer marked with Calibrate (see manualRefs): measured by a person, so it counts
+// for four automatic kinds of object, and its height is taken as nearly exact. `depth` is the photo's
+// depth map when the 3D pass has run (see depthSamples): it counts as one more kind of object.
+function calibrateCamera(out, manual = [], depth = null){
+  // EXIF lens when the photo still has it; otherwise the 1x lens is likeliest, but let the room say
+  const lens = exifF35 ? { f: exifF35, sig: 0.05 } : { f: CAM_DEFAULT.f35, sig: 0.35 };
+  const samples = [
+    // D: 0 -- the customer is asked for its front edge, straight above where it meets the floor
+    ...manual.map((m) => ({ ref: { name: m.name ? 'your ' + m.name : 'your measurement', H: m.H, sig: m.sig || 0.02, D: 0 }, top: m.top, base: m.base, wt: 4, gh: 400 })),
+    ...cameraRefSamples(out || []),
+  ];
+  // Alone, the depth scan also counts double: the photos with nothing else to go on were 20-60% off
+  // before it, and what's left of that shrank from 5-25% to 2-20% (twice vs once; 4× gained ~1% more).
+  const alone = !samples.length;
+  for (const s of depthSamples(depth)) samples.push({ ...s, gauss: alone, wt: s.wt * (alone ? 2 : 1) });
+  const vp = tiltFromVerticals(vfovForLens(lens.f));
+  const lenses = exifF35 ? [exifF35] : [13, 16, 20, 24, 26, 28, 32, 36, 42, 48, 55, 65, 77];   // ultra-wide … 3x zoom
+  let best = null;
+  const tryAt = (hc, th, f) => { const L = cameraFitLoss(samples, hc, th, f, vp, lens, sensorPitch); if (!best || L < best.L) best = { L, hc, th, f }; };
+  for (const f of lenses) for (let hc = 0.5; hc <= 2.5; hc += 0.1) for (let th = -10; th <= 60; th += 2) tryAt(hc, th, f);
+  const b0 = best;
+  for (let f = b0.f * 0.85; f <= b0.f * 1.151; f += b0.f * 0.05)
+    for (let hc = Math.max(0.5, b0.hc - 0.12); hc <= b0.hc + 0.12; hc += 0.02)
+      for (let th = b0.th - 2.5; th <= b0.th + 2.5; th += 0.25) tryAt(hc, th, f);
+  return { hc: best.hc, pitchDeg: best.th, f35: best.f, refs: [...new Set(samples.map((s) => s.ref.name))], manual: manual.length };
+}
+// "Sized from the …" for the status line, or an honest "best estimate" with a pointer to Calibrate
+// ---------- 3D depth: a second opinion on size when nothing in the photo has a known height ----------
+// Without a door, counter or the like in view, the sizing above is a guess -- 12-34% off on the test
+// photos. A depth AI (Metric3D v2, in phroom-ai-worker.js) says how far away every pixel of the
+// photo is, in metres; a plane fitted to the floor's pixels then gives the phone's height and tilt
+// with no reference at all. On the test photos that halved the guess's error. It's heavy (a 145 MB
+// download, a few seconds on the GPU), so it runs only after the machine is already placed, as a
+// refinement, and only where it's worth it: nothing of known height in view, or only the
+// wall-to-ceiling height, itself just a typical figure. depthMode() says when it may download by
+// itself and when the customer is asked first.
+const DEPTH = { loaded: false, cached: false, failed: false, offer: false, pct: null, busyToken: null, queue: Promise.resolve(), pendingApply: false, lastFit: null };
+const depthCall = aiChannel((pct) => {
+  DEPTH.pct = pct;
+  if (pct >= 100) DEPTH.t0 = performance.now();                // downloaded: the estimate starts now
+  showDepthStatus();
+}, () => { DEPTH.loaded = false; });
+let lastDepth = null;       // this photo's depth map {width, height, data}, canonical (see depthFloorCamera)
+let photoToken = 0;         // bumped for every new photo, so a late depth result can't land on the next one
+const DEPTH_MODEL_URL = 'https://huggingface.co/onnx-community/metric3d-vit-small/resolve/main/onnx/model.onnx';
+// What the depth scan contributes to calibrateCamera(): virtual 85 cm posts standing on the floor at
+// a few rows, as tall as the scan says they'd look there -- the same form as a detected object, and
+// what matters in the end (how big the machine is drawn at each spot on the floor).
+const DEPTH_REF = { name: '3D depth scan', H: 0.85, sig: 0.12, D: 0 };
+
+// The phone's height, tilt and roll from the depth map. The depth model works in a "canonical"
+// camera with a 1000 px focal length, so metres = depth × (the real focal length in the same pixels)
+// / 1000, which needs a lens: tested at 20-45 mm on the same photo, the machine size it led to moved
+// by only ±3%, so the usual lens will do. Floor pixels are back-projected to 3D, the plane most of
+// them lie on is found (RANSAC, seeded so the same photo always gives the same answer) and then
+// refined over its inliers (PCA). null when the floor didn't come out as one clean plane.
+function depthFloorCamera(dep, f35){
+  const { width: W, height: H, data } = dep;
+  const f = (H / 2) / Math.tan(vfovForLens(f35) / 2), k = f / 1000;
+  const step = Math.max(2, Math.round(Math.sqrt(W * H / 12000)));      // ~12k samples over the frame
+  const pts = [];
+  for (let y = 2; y < H - 2; y += step) for (let x = 2; x < W - 2; x += step) {
+    if (!isFloorAt((x + 0.5) / W, (y + 0.5) / H)) continue;
+    const Z = data[y * W + x] * k;
+    if (Z > 0.05 && Z < 50) pts.push([(x + 0.5 - W / 2) * Z / f, (y + 0.5 - H / 2) * Z / f, Z]);   // x right, y down, z ahead
+  }
+  if (pts.length < 150) return null;
+  const tol = (q) => 0.03 * Math.max(1, q[2] / 2);                    // depth gets less exact further away
+  const dist = (p, q) => Math.abs(p.n[0] * q[0] + p.n[1] * q[1] + p.n[2] * q[2] + p.d);
+  const plane = (a, b, c) => {
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]], L = Math.hypot(...n);
+    if (L < 1e-9) return null;
+    const m = n.map((q) => q / L);
+    return { n: m, d: -(m[0] * a[0] + m[1] * a[1] + m[2] * a[2]) };
+  };
+  let seed = 12345, best = null;
+  const pick = () => pts[(seed = (seed * 1103515245 + 12345) & 0x7fffffff) % pts.length];
+  for (let it = 0; it < 300; it++) {
+    const p = plane(pick(), pick(), pick()); if (!p) continue;
+    let n = 0; for (const q of pts) if (dist(p, q) < tol(q)) n++;
+    if (!best || n > best.inl) best = { ...p, inl: n };
+  }
+  if (!best) return null;
+  const inl = pts.filter((q) => dist(best, q) < tol(q));
+  // least-squares plane through the inliers: the normal is the covariance's smallest eigenvector,
+  // by inverse iteration from the RANSAC normal
+  const c = [0, 0, 0]; for (const q of inl) for (let i = 0; i < 3; i++) c[i] += q[i] / inl.length;
+  const C = [[1e-6, 0, 0], [0, 1e-6, 0], [0, 0, 1e-6]];
+  for (const q of inl) { const e = [q[0] - c[0], q[1] - c[1], q[2] - c[2]]; for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i][j] += e[i] * e[j]; }
+  const solve = (M, b) => {                                             // Gaussian elimination, 3×3
+    const m = M.map((r, i) => [...r, b[i]]);
+    for (let i = 0; i < 3; i++) {
+      let p = i; for (let r = i + 1; r < 3; r++) if (Math.abs(m[r][i]) > Math.abs(m[p][i])) p = r;
+      [m[i], m[p]] = [m[p], m[i]];
+      for (let r = 0; r < 3; r++) if (r !== i) { const g = m[r][i] / m[i][i]; for (let j = i; j < 4; j++) m[r][j] -= g * m[i][j]; }
+    }
+    return m.map((r, i) => r[3] / r[i]);
+  };
+  let n = best.n.slice();
+  for (let it = 0; it < 30; it++) { n = solve(C, n); const L = Math.hypot(...n); n = n.map((q) => q / L); }
+  if (n[1] > 0) n = n.map((q) => -q);                                   // point it up (image y runs down)
+  const hc = Math.abs(n[0] * c[0] + n[1] * c[1] + n[2] * c[2]);         // the camera is at the origin
+  const fit = { hc, pitchDeg: Math.asin(-n[2]) * 180 / Math.PI, rollDeg: Math.atan2(n[0], -n[1]) * 180 / Math.PI, inliers: inl.length / pts.length, points: pts.length };
+  // A floor that isn't one clean plane (mirror, glass, clutter the segmenter called floor), or a
+  // camera no phone photo comes from: don't use it.
+  const ok = fit.inliers >= 0.8 && fit.hc > 0.4 && fit.hc < 3 && fit.pitchDeg > -10 && fit.pitchDeg < 75 && Math.abs(fit.rollDeg) < 15;
+  return ok ? fit : null;
+}
+// n photo rows spread over where the floor is in view (rows at least 10% floor) -- where the machine can stand
+function floorRows(n){
+  const { w, h, data } = floorMask, rows = [];
+  for (let y = 0; y < h; y++) { let c = 0; for (let x = 0; x < w; x++) c += data[y * w + x]; if (c >= 0.1 * w) rows.push(y); }
+  if (rows.length < 3) return [];
+  const lo = rows[0], hi = rows[rows.length - 1] + 1;
+  return Array.from({ length: n }, (_, i) => (lo + (hi - lo) * (i + 0.5) / n) / h);
+}
+function depthSamples(dep){
+  if (!dep || !floorMask) return [];
+  const f35 = exifF35 || CAM_DEFAULT.f35, fit = depthFloorCamera(dep, f35);
+  DEPTH.lastFit = fit;
+  if (!fit) return [];
+  const pc = photoCam(fit.hc, fit.pitchDeg, vfovForLens(f35)), rows = floorRows(5), out = [];
+  for (const v of rows) {
+    const d = pc.floorDist(v), t = d === null ? null : pc.topRow(d, DEPTH_REF.H, 0);
+    if (t !== null) out.push({ ref: DEPTH_REF, top: t, base: v, wt: 1 / rows.length, gh: 400 });
+  }
+  return out.length >= 3 ? out : [];
+}
+// A photo aimed straight down at the floor has nothing else in frame -- no wall, no furniture,
+// no horizon -- for the AI to have found. There's then no visual cue at all for how far away or
+// how tilted the real camera was, so any angle/size guess for it would just be made up; better
+// to say so than to place the machine against a floor mask that's really "the entire photo".
+function isTopDownShot(mask, labels){
+  return floorCoverage(mask) > 0.85 && !labels.some((l) => /\bwall\b/i.test(l));
+}
+function autoFloorPoint(){                            // floor cell nearest centre & ~70% down = believable size
+  if (!floorMask) return { fx: 0.5, fy: 0.72 }; const { w, h, data } = floorMask, tx = w*0.5, ty = h*0.70;
+  let bx = -1, by = -1, bd = Infinity;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (data[y*w+x]){ const d = (x-tx)*(x-tx)+(y-ty)*(y-ty); if (d < bd){ bd = d; bx = x; by = y; } }
+  return bx < 0 ? { fx: 0.5, fy: 0.72 } : { fx: (bx+0.5)/w, fy: (by+0.5)/h };
+}
+function placeAtImageCoord(fx, fy){                   // image-normalised → screen → ground raycast
+  if (!machine) return;
+  const sc = imageToScreen(fx, fy);
+  const p = groundHit(sc.x, sc.y);
+  if (!p) return;
+  machine.position.set(p.x, 0, p.z); needsRender = true;
+  if (placementOk(p.x, p.z)) { lastValidX = p.x; lastValidZ = p.z; }
+}
+function matchLighting(){
+  try {
+    const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+    const cx = c.getContext('2d'); cx.drawImage(photoBitmap, 0, 0, 32, 32);
+    const d = cx.getImageData(0, 0, 32, 32).data; let lum = 0;
+    for (let i = 0; i < d.length; i += 4) lum += (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]);
+    lum /= (d.length / 4) * 255;
+    renderer.toneMappingExposure = Math.max(0.6, Math.min(1.4, 0.6 + lum));
+    needsRender = true;
+  } catch (e) {}
+}
+async function runAIPlace(){
+  if (!photoBitmap || !machine) { aiSet('Load a photo first.'); floorLocking = false; return; }
+  aiBtn.disabled = true; calBtn.disabled = true;
+  freePlaced = false;
+  // Keep the machine out of sight until it's been sized and placed -- otherwise it sits at a
+  // default spot and size for several seconds and then visibly jumps.
+  machine.visible = false; needsRender = true;
+  scanEl.classList.remove('show');
+  try {
+    if (!AI.seg) {
+      showAILoading();
+      aiSet('Loading AI (downloads ~15 MB the first time)…');
+      await loadSeg();
+    }
+    setBusy('seg', '🔍', 'Scanning your room…', '');
+    aiSet('Understanding the room…');
+    await nextPaint();
+    const out = await AI.seg(photoInputURL());
+    lastSeg = out;                            // kept so Calibrate can refit without re-running the AI
+    floorMask = buildFloorMask(out);
+    obstacleMask = buildObstacleMask(out);   // same segmentation pass -- no extra model call
+    revealScan(out);
+    if (!floorMask){
+      obstacleMask = null;
+      warnPill('No floor found', 'Couldn’t find the floor in this photo — drag the machine into place, or retake it showing more floor.');
+      return;
+    }
+    const labels = [...new Set(out.map(o => o.label))];
+    if (isTopDownShot(floorMask, labels)) {
+      // Nearly the whole frame is "floor" and no wall was found either -- this is a straight-
+      // down shot with no room in it at all, so there's no honest angle or size to guess.
+      // Leaving floorMask set would otherwise let a drag "snap" to what is really just the
+      // entire photo, which isn't a floor constraint at all.
+      floorMask = null; obstacleMask = null;
+      warnPill('Only floor in view', 'This points straight down at the floor — retake it showing some of the room (a wall or furniture) so the size can be judged.');
+      return;
+    }
+    setBusy('measure', '📐', 'Doing the math…', '');
+    await nextPaint();                        // the fit below blocks for a moment -- show the step first
+    const calib = calibrateCamera(out, manualRefs, lastDepth);
+    cam = { hc: calib.hc, pitchDeg: calib.pitchDeg, f35: calib.f35 };
+    sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
+    updateCamera();
+    matchLighting();
+    let p = autoFloorPoint();
+    placeAtImageCoord(p.fx, p.fy);
+    // Say what the size was judged from -- or that nothing in view could anchor it, with Measure
+    // (which fixes exactly that case) pulsing.
+    showSizeStatus(calib);
+    calBtn.classList.toggle('glow', !calib.refs.length);
+    // autoFloorPoint() only picked a single centre point -- re-check with the machine's real
+    // size (now that the model, and so modelSize, is loaded) and, if that spot would spill it
+    // off the floor or draw it through furniture in front of it, search for the nearest spot on
+    // this floor where it really does fit.
+    if (!placementOk(machine.position.x, machine.position.z)) {
+      const fitted = nearestValidFootprint(p.fx, p.fy);
+      if (fitted) placeAtImageCoord(fitted.fx, fitted.fy);
+      else toast('No open floor big enough clear of the furniture — long-press where you want it.', '', null, 7000);
+    }
+    // Where the photo gave no firm ruler, the 3D scan runs now, before the machine is shown, so it
+    // appears once, at its final size, instead of appearing and then changing.
+    await depthStep(calib);
+  } catch (e) {
+    console.warn('Room AI failed:', e);
+    warnPill('Room AI unavailable', 'The room AI couldn’t run here — drag the machine into place by hand.');
+  } finally {
+    aiBtn.disabled = false; calBtn.disabled = false;
+    floorLocking = false;   // whatever happened, the drag lock was only ever for this one detection pass
+    if (machine) { machine.visible = true; needsRender = true; }
+    hideBusy();
+    // let the AI's view of the room linger a beat as the machine appears, then fade it
+    setTimeout(() => scanEl.classList.remove('show'), 1400);
+    showDragHint();
+  }
+}
+// Reset: back where the AI placed it, facing the starting way
+aiBtn.addEventListener('click', () => { closeSheets(); sRot.value = 20; sRot.dispatchEvent(new Event('input')); runAIPlace(); });
+
+// ---------- 3D depth pass: when it runs, and what the customer sees (see depthFloorCamera) ----------
+const depthOfferEl = document.getElementById('depthOffer');
+// 'auto': run it now; 'offer': ask first (in "Get the exact size", from the size pill); 'off': not on this device.
+// The first 145 MB download happens by itself only on a computer (mouse-type pointer) that isn't
+// on mobile data. A phone always asks first, even on Wi-Fi: it's real money on a prepaid pack, and
+// a model this size is a lot to spring on a budget phone's memory. Once downloaded it's cached and
+// just runs.
+async function depthMode(){
+  const conn = navigator.connection || {};
+  if (!navigator.gpu || DEPTH.failed || conn.saveData) return 'off';
+  if (navigator.deviceMemory && navigator.deviceMemory < 4) return 'off';   // too big for the phone's memory
+  if (DEPTH.loaded || await depthCached()) return 'auto';
+  return matchMedia('(pointer: fine)').matches && conn.type !== 'cellular' ? 'auto' : 'offer';
+}
+async function depthCached(){
+  try { DEPTH.cached = !!(await (await caches.open('transformers-cache')).match(DEPTH_MODEL_URL)); } catch (e) { DEPTH.cached = false; }
+  return DEPTH.cached;
+}
+// Part of placing: is a 3D pass worth it for this photo, and may it run by itself? If so it runs
+// here, on the progress overlay, and placing waits for it -- up to a minute, so a slow first-time
+// download can't hold the machine back for ever (it then finishes in the background).
+async function depthStep(calib){
+  DEPTH.offer = false;
+  if (lastDepth || manualRefs.length) return;                   // done already / the customer's own marks win
+  if (calib.refs.some((r) => r !== WALL_REF.name)) return;      // a door, counter, sofa... already sized it
+  const token = photoToken, mode = await depthMode();
+  if (token !== photoToken) return;
+  if (mode === 'offer') { if (!calib.refs.length) DEPTH.offer = true; return; }
+  if (mode !== 'auto') return;
+  setBusy('depth', '📏', 'Doing the math…', '', 0);
+  const tick = setInterval(showDepthStatus, 250);
+  try { await Promise.race([refineWithDepth(), new Promise((r) => setTimeout(r, 60000))]); }
+  finally { clearInterval(tick); }
+}
+depthOfferEl.addEventListener('click', () => { closeSheets(); refineWithDepth(); });
+// The overlay while the scan works: the download's progress the first time, then a bar and the
+// time left, estimated from the last run on this device (the very first run also sets up the
+// GPU, ~8 s). A cached model reports "progress" too, while it's read back from disk.
+function showDepthStatus(){
+  if (DEPTH.busyToken === null || DEPTH.busyToken !== photoToken || busyStep !== 'depth') return;
+  // not loaded yet: no countdown until there's something to count (the download, then the run)
+  if (!DEPTH.loaded && (DEPTH.pct === null || DEPTH.pct < 100)) {
+    const dl = DEPTH.pct !== null && !DEPTH.cached;
+    setBusy('depth', '📏', 'Warming up…' + (dl ? ' ' + DEPTH.pct + '%' : ''), '', dl ? DEPTH.pct : null);
+    return;
+  }
+  const est = DEPTH.loaded ? (DEPTH.lastMs || 2500) : 8000, el = performance.now() - DEPTH.t0, left = Math.ceil((est - el) / 1000);
+  setBusy('depth', '📏', 'Doing the math…', left > 0 ? 'About ' + left + ' s left' : 'Almost done…', Math.min(95, 100 * el / est));
+}
+function refineWithDepth(){
+  const token = photoToken, url = photoInputURL(768);   // the model reads ~518 px anyway
+  DEPTH.offer = false;
+  const warm = DEPTH.loaded;
+  DEPTH.busyToken = token; DEPTH.pct = null; DEPTH.t0 = performance.now(); showDepthStatus();
+  // one photo at a time: a second run can't share the model while the first is on it
+  const job = DEPTH.queue.then(() => depthCall({ type: 'depth', image: url }));
+  DEPTH.queue = job.catch(() => {});
+  return job.then((r) => {
+    if (warm) DEPTH.lastMs = performance.now() - DEPTH.t0;       // for the next estimate
+    DEPTH.loaded = true;
+    if (token !== photoToken) return;                           // they've moved on to another photo
+    lastDepth = { width: r.width, height: r.height, data: r.data };
+    if (cal.on) DEPTH.pendingApply = true; else applyDepth();   // not while they're marking points
+  }).catch((e) => {
+    console.warn('3D scan failed:', e);
+    DEPTH.fails = (DEPTH.fails || 0) + 1;
+    if (/no-webgpu/.test(e.message) || DEPTH.fails >= 2) DEPTH.failed = true;   // don't keep trying (and saying so) every photo
+    if (token === photoToken) {
+      if (lastCalib) showSizeStatus(lastCalib);                 // back to saying it's an estimate
+    }
+  }).finally(() => {
+    if (DEPTH.busyToken === token) DEPTH.busyToken = null;
+  });
+}
+// Refit with the scan. Nothing changes if the floor didn't scan cleanly.
+function applyDepth(){
+  DEPTH.pendingApply = false;
+  if (!machine || !lastDepth) return;
+  const calib = refitCamera();
+  if (!calib) return;
+  if (!calib.refs.includes(DEPTH_REF.name)) {
+    console.warn('3D scan: the floor didn’t come out as one clean plane -- size left as it was');
+  }
+  // a background job: the size just settles, nothing is announced
+}
+// On-screen height (share of the photo's height) of the machine standing with its front edge at row
+// v, under camera c -- what the sizing is ultimately about.
+function machineHeightAt(v, c = cam){
+  const pc = photoCam(c.hc, c.pitchDeg, vfovForLens(c.f35)), d = pc.floorDist(v);
+  if (d === null || !modelSize) return null;
+  const s = baseScale * (+sSize.value / 100), t = pc.topRow(d, modelSize.y * s, modelSize.z * s);
+  return t === null ? null : v - t;
+}
+
+// Where the machine's footprint centre is in the photo -- kept across a refit, so fixing the size
+// never moves the machine to a different spot in the picture.
+function machinePhotoPoint(){
+  const s = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z));
+  return screenToImage(s.x, s.y);
+}
+// After anything that changes the machine's footprint where it stands -- a bigger size, a turn, a
+// refit -- make sure it still fits (whole footprint on the floor, nothing nearer drawn through it),
+// else move it to the nearest spot that does. Skipped when the customer long-pressed it into place:
+// that was a deliberate "put it exactly here", which a slider shouldn't quietly undo.
+let freePlaced = false;
+function settlePlacement(){
+  if (!machine || !floorMask || freePlaced || placementOk(machine.position.x, machine.position.z)) return;
+  const at = machinePhotoPoint();
+  const fitted = nearestValidFootprint(at.fx, at.fy);
+  if (fitted) { placeAtImageCoord(fitted.fx, fitted.fy); needsRender = true; }
+}
+sSize.addEventListener('change', settlePlacement);
+sRot.addEventListener('change', settlePlacement);
+
+// ---------- sizing status: kept, not shown ----------
+// How the size was worked out (a detected object, the 3D scan, the customer's measurement, or a
+// best guess) is a background job -- the customer isn't told. The state is still kept for Measure's
+// flow and the debug hook.
+let pillKind = null, pillText = '', pillAction = null, lastCalib = null;
+function setPill(kind, text = '', action = null){ pillKind = kind; pillText = text; pillAction = action; }
+function warnPill(short, long){ setPill('warn', short); if (long) toast(long, '', null, 7000); }
+// In words people use: it's the ceiling height the wall reference measures
+const REF_WORDS = { 'wall height': 'ceiling height', '3D depth scan': '3D scan', 'kitchen counter': 'counter', 'washing machine': 'washer' };
+function showSizeStatus(calib){
+  lastCalib = calib;
+  if (calib.manual) {
+    const m = manualRefs[manualRefs.length - 1];
+    setPill('ok', manualRefs.length > 1 ? 'Exact size · from your ' + manualRefs.length + ' measurements'
+      : 'Exact size · from your ' + (m.name ? m.name + ' (' + Math.round(m.H * 100) + ' cm)' : Math.round(m.H * 100) + ' cm measurement'), openCalib);
+    return;
+  }
+  // real objects first; the ceiling height (only a typical figure) and the scan after them
+  const rank = (r) => (r === WALL_REF.name ? 1 : r === DEPTH_REF.name ? 2 : 0);
+  const refs = calib.refs.slice().sort((a, b) => rank(a) - rank(b)).map((r) => REF_WORDS[r] || r);
+  if (!refs.length) { setPill('est', 'Estimated size', openImprove); return; }
+  const list = refs.length > 3 ? refs.slice(0, 2).join(', ') + ' + ' + (refs.length - 2) + ' more'
+    : refs.length > 1 ? refs.slice(0, -1).join(', ') + ' & ' + refs[refs.length - 1] : refs[0];
+  setPill('ok', 'Sized from ' + (refs.length === 1 && refs[0] === '3D scan' ? 'a 3D scan of the room' : 'the ' + list), openCalib);
+}
+// Measure is reached from the pill: tapping it always starts measuring, and an estimate says so
+// ('Fix ›'). Making an estimate exact: straight to Measure, or -- where the 3D scan is on offer (a phone that
+// hasn't downloaded it) -- a choice of the two.
+function openImprove(){ if (DEPTH.offer) openSheet(improveEl); else openCalib(); }
+
+// ---------- bottom sheets: machine, adjust, exact size ----------
+const adjustEl = document.getElementById('adjust'), improveEl = document.getElementById('improve');
+function openSheet(el){ closeSheets(); el.classList.add('open'); if (el === menu) machineChip.setAttribute('aria-expanded', 'true'); }
+function closeSheets(){
+  for (const el of [menu, adjustEl, improveEl]) el.classList.remove('open');
+  machineChip.setAttribute('aria-expanded', 'false');
+}
+for (const el of [adjustEl, improveEl]) el.addEventListener('click', (e) => { if (e.target === el) closeSheets(); });
+document.getElementById('adjustBtn').addEventListener('click', () => openSheet(adjustEl));
+// quick 45° turns in the Rotate sheet
+const turnBy = (d) => { sRot.value = ((+sRot.value + d) % 360 + 360) % 360; sRot.dispatchEvent(new Event('input')); sRot.dispatchEvent(new Event('change')); };
+document.getElementById('rotL').addEventListener('click', () => turnBy(45));
+document.getElementById('rotR').addEventListener('click', () => turnBy(-45));
+document.getElementById('adjustDone').addEventListener('click', closeSheets);
+document.getElementById('improveMeasure').addEventListener('click', () => { closeSheets(); openCalib(); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSheets(); });
+
+// ---------- toast: a short notice over the photo, optionally with one action (Undo) ----------
+const toastEl = document.getElementById('toast'), toastText = document.getElementById('toastText'), toastBtn = document.getElementById('toastBtn');
+let toastTimer = null, toastAction = null;
+function toast(msg, actionLabel = '', action = null, ms = 5000){
+  clearTimeout(hintTimer); hintEl.style.display = 'none';   // same spot at the bottom of the photo
+  toastText.textContent = msg;
+  toastBtn.textContent = actionLabel; toastBtn.hidden = !action; toastAction = action;
+  toastEl.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, ms);
+}
+function hideToast(){ clearTimeout(toastTimer); toastEl.classList.remove('on'); toastAction = null; }
+toastBtn.addEventListener('click', () => { const f = toastAction; hideToast(); if (f) f(); });
+
+// ---------- calibrate: the customer marks something of known height ----------
+// The automatic sizing needs a door, counter, wall-to-ceiling line or similar in view; a photo with
+// none of those can only be guessed, and on the test photos that guess was off by 12-30%. This fixes
+// it in three steps: touch the bottom of something (where it meets the floor), touch its top, say
+// what it is. That's one exact reference -- the same kind of evidence calibrateCamera() gets from a
+// detected door, but measured by a person, so it outweighs everything automatic.
+const calBtn = document.getElementById('calBtn');
+const calibEl = document.getElementById('calib'), calibSvg = document.getElementById('calibSvg'), loupe = document.getElementById('loupe');
+const calBar = document.getElementById('calBar'), calStepNo = document.getElementById('calStepNo'), calStep = document.getElementById('calStep');
+const calNext = document.getElementById('calNext'), calCancel = document.getElementById('calCancel');
+const calSheet = document.getElementById('calSheet'), calCm = document.getElementById('calCm');
+const calApply = document.getElementById('calApply'), calRemark = document.getElementById('calRemark'), calReset = document.getElementById('calReset');
+const calHint = document.getElementById('calHint');
+const calW = document.getElementById('calW'), calSheetSub = document.getElementById('calSheetSub');
+const cal = { on: false, base: null, top: null, drag: null, preset: null, busy: false };   // points are photo fractions {fx, fy}
+
+const calScreen = (p) => imageToScreen(p.fx, p.fy);
+function calPhotoPoint(x, y){
+  const im = screenToImage(x, y);
+  return { fx: Math.min(1, Math.max(0, im.fx)), fy: Math.min(1, Math.max(0, im.fy)) };
+}
+function renderCalib(){
+  if (!cal.on || !photoBitmap) { calibSvg.innerHTML = ''; return; }
+  const b = cal.base && calScreen(cal.base), t = cal.top && calScreen(cal.top);
+  let s = '';
+  if (b && t) {
+    const x = Math.min(b.x, t.x), y = Math.min(b.y, t.y), w = Math.abs(b.x - t.x), h = Math.abs(b.y - t.y);
+    s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="rgba(255,255,255,.08)" stroke="rgba(0,0,0,.55)" stroke-width="6"/>`;
+    s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="7 5"/>`;
+  }
+  // bottom: green, with a short floor line; top: blue
+  if (b) s += `<line x1="${b.x - 20}" y1="${b.y}" x2="${b.x + 20}" y2="${b.y}" stroke="#2ee67b" stroke-width="3" stroke-linecap="round"/>`
+            + `<circle cx="${b.x}" cy="${b.y}" r="10" fill="#2ee67b" stroke="#fff" stroke-width="3"/>`;
+  if (t) s += `<circle cx="${t.x}" cy="${t.y}" r="10" fill="#4aa3ff" stroke="#fff" stroke-width="3"/>`;
+  if (b) s += `<text x="${b.x}" y="${b.y + 28}" text-anchor="middle" fill="#fff" stroke="rgba(0,0,0,.6)" stroke-width="3" paint-order="stroke" font-size="12" font-weight="700">start</text>`;
+  if (t) s += `<text x="${t.x}" y="${t.y - 18}" text-anchor="middle" fill="#fff" stroke="rgba(0,0,0,.6)" stroke-width="3" paint-order="stroke" font-size="12" font-weight="700">end</text>`;
+  calibSvg.innerHTML = s;
+}
+// A 3× magnifier just above the finger, with a crosshair on the exact point being marked
+function showLoupe(p){
+  const size = 118, zoom = 3, cp = coverParams(), sc = calScreen(p);
+  loupe.width = loupe.height = Math.round(size * DPR);
+  let x = sc.x - size / 2, y = sc.y - size - 36;
+  if (y < 8) y = sc.y + 36;                                       // near the top: show it below instead
+  x = Math.min(window.innerWidth - size - 6, Math.max(6, x));
+  loupe.style.left = x + 'px'; loupe.style.top = y + 'px'; loupe.style.display = 'block';
+  const ctx = loupe.getContext('2d'), W = loupe.width, src = size / (zoom * cp.s);
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, W);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(photoBitmap, p.fx * cp.iw - src / 2, p.fy * cp.ih - src / 2, src, src, 0, 0, W, W);
+  ctx.lineWidth = 3 * DPR; ctx.strokeStyle = 'rgba(0,0,0,.6)';
+  ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, W); ctx.moveTo(0, W / 2); ctx.lineTo(W, W / 2); ctx.stroke();
+  ctx.lineWidth = 1.2 * DPR; ctx.strokeStyle = cal.drag === 'top' ? '#4aa3ff' : '#2ee67b';
+  ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, W); ctx.moveTo(0, W / 2); ctx.lineTo(W, W / 2); ctx.stroke();
+}
+const hideLoupe = () => { loupe.style.display = 'none'; };
+function calUpdateStep(msg){
+  calNext.hidden = true;
+  calBar.dataset.step = !cal.base ? '1' : !cal.top ? '2' : '3';
+  if (!cal.base) {
+    calStepNo.textContent = 'Step 1 of 3';
+    calStep.textContent = msg || 'Tap the start point: the bottom corner of a door, table or cabinet, where it meets the floor.';
+  } else if (!cal.top) {
+    calStepNo.textContent = 'Step 2 of 3';
+    // the front edge: on anything below eye level the whole top shows, and its back edge sits
+    // higher in the photo -- marking that instead reads a 75 cm desk as ~90 cm
+    calStep.textContent = msg || 'Now tap the end point: the opposite top corner of the same thing.';
+  } else {
+    calStepNo.textContent = 'Step 3 of 3';
+    calStep.textContent = 'Drag a dot to fine-tune, then tap Next. We will measure it.';
+    calNext.hidden = false;
+  }
+  placeCalBar();
+}
+// The step card goes at the top or the bottom of the photo, whichever is clear of the marks: the
+// top while the customer looks for a bottom point (those are low in the photo), then the bottom
+// unless that bottom point is down there itself, and after that wherever both dots can be seen.
+function placeCalBar(){
+  const H = stageEl.clientHeight, bh = calBar.offsetHeight || 64;
+  const topBand = topBar.offsetHeight + bh + 14, botBand = H - bh - 24;   // stage px covered by the card, plus margin
+  const ys = [cal.base, cal.top].filter(Boolean).map((p) => calScreen(p).y);
+  const clearTop = ys.every((y) => y > topBand), clearBot = ys.every((y) => y < botBand);
+  const atBottom = calBar.classList.contains('bottom');
+  let bottom;
+  if (!cal.base) bottom = false;
+  else if (!cal.top) bottom = clearBot;
+  else bottom = atBottom ? (clearBot || !clearTop) : (!clearTop && clearBot);   // move only when it helps
+  calBar.classList.toggle('bottom', bottom);
+}
+// While marking, everything else is locked (inert): Save would capture the photo without the machine,
+// and Change photo or a model switch would pull the photo out from under the marks.
+const topBar = document.querySelector('.top');
+function openCalib(){
+  if (!photoBitmap || !machine || calBtn.disabled) return;
+  Object.assign(cal, { on: true, base: null, top: null, drag: null, preset: null });
+  machine.visible = false; needsRender = true;                   // out of the way of what's being marked
+  clearTimeout(hintTimer); hintEl.style.display = 'none';
+  closeSheets(); hideToast();
+  dockEl.inert = true; topBar.inert = true;
+  calibEl.classList.add('on'); calBar.classList.add('on');
+  calUpdateStep(); renderCalib();
+}
+function closeCalib(){
+  Object.assign(cal, { on: false, drag: null });
+  calibEl.classList.remove('on'); calBar.classList.remove('on'); calSheet.classList.remove('open');
+  dockEl.inert = false; topBar.inert = false;
+  hideLoupe(); renderCalib();
+  if (machine) { machine.visible = true; needsRender = true; }
+  if (scanDeferred) { scanDeferred = false; runAIPlace(); return; }   // marked (or skipped): now scan, using the mark
+  if (DEPTH.pendingApply) applyDepth();        // the 3D scan finished while they were marking
+  else showDepthStatus();                      // or is still running: say so again
+}
+/* What the camera fit says the marked box measures in real life: the start point sits on the floor, so
+   its world position is known; a vertical plane through it facing the camera holds the end point, which
+   gives the height (above the floor) and the width (sideways) of the box. Metres. */
+let calEst = null, calAutoH = 0, calAutoW = 0;
+function estimateMarked(){
+  if (!cal.base || !cal.top || !camera) return null;
+  const sb = calScreen(cal.base), st = calScreen(cal.top);
+  const P = groundHit(sb.x, sb.y); if (!P) return null;
+  camera.updateMatrixWorld();
+  const cp = camera.position;
+  const n = new THREE.Vector3(P.x - cp.x, 0, P.z - cp.z); if (n.lengthSq() < 1e-6) return null; n.normalize();
+  ndc.set((st.x / window.innerWidth) * 2 - 1, -((st.y / stageH()) * 2 - 1));
+  raycaster.setFromCamera(ndc, camera);
+  const ray = raycaster.ray, den = ray.direction.dot(n); if (Math.abs(den) < 1e-4) return null;
+  const k = ((P.x - ray.origin.x) * n.x + (P.z - ray.origin.z) * n.z) / den; if (k <= 0) return null;
+  const Q = ray.origin.clone().addScaledVector(ray.direction, k);
+  const H = Q.y, W = Math.abs((Q.x - P.x) * -n.z + (Q.z - P.z) * n.x);
+  return H > 0.05 && isFinite(H) && isFinite(W) ? { H, W } : null;
+}
+// Next: the first time, scan the room (the AI fit is what the height and width are measured with),
+// then show what the AI measured for the marked box, ready to edit.
+async function onMarksDone(){
+  if (!lastSeg) {
+    cal.busy = true; calBar.classList.remove('on'); calNext.hidden = true;
+    scanDeferred = false;
+    await runAIPlace();
+    cal.busy = false;
+    if (!cal.on) return;                              // they backed out while it scanned
+  }
+  openCalSheet();
+}
+function openCalSheet(){
+  calEst = estimateMarked();
+  calAutoH = calEst ? Math.round(calEst.H * 100) : 0;
+  calAutoW = calEst ? Math.round(calEst.W * 100) : 0;
+  calCm.value = calAutoH || ''; calW.value = calAutoW >= 10 ? calAutoW : '';
+  calCm.parentNode.className = 'calIn' + (calAutoH ? ' auto' : '');
+  calW.parentNode.className = 'calIn' + (calAutoW >= 10 ? ' auto' : '');
+  calReset.hidden = !manualRefs.length;
+  calSheet.classList.add('open');
+  calValidate();
+  if (!calEst) calHint.textContent = 'We could not measure this one. Type its size, or re-mark the corners.';
+  else if (calAutoW < 10) calHint.textContent = 'The width is too small to measure. Mark the opposite corner, or just edit the height.';
+}
+const calValid = (v) => v >= 20 && v <= 400;
+const calValidW = (v) => v >= 10 && v <= 400;
+function calValidate(){
+  const h = +calCm.value, w = calW.value === '' ? null : +calW.value;
+  const edH = calAutoH && Math.abs(h - calAutoH) >= 1, edW = calAutoW >= 10 && w !== null && Math.abs(w - calAutoW) >= 1;
+  calCm.parentNode.classList.toggle('edited', !!edH);
+  calW.parentNode.classList.toggle('edited', !!edW);
+  calCm.parentNode.classList.toggle('auto', !edH && !!calAutoH);
+  calW.parentNode.classList.toggle('auto', !edW && calAutoW >= 10);
+  const okH = calValid(h), okW = w === null || calValidW(w);
+  calApply.disabled = !(okH && okW);
+  calHint.classList.toggle('ok', okH && okW);
+  calHint.textContent = calCm.value !== '' && !okH ? 'Heights are in centimetres (20–400).'
+    : (w !== null && !okW) ? 'Widths are in centimetres (10–400).'
+    : (edH || edW) ? 'Edited. Apply will resize the machine to match.'
+    : calEst ? 'Auto-filled from the AI scan. Edit either one if you know it.' : calHint.textContent;
+}
+// Refit the camera with everything known about this photo (the AI's view plus the customer's marks),
+// keeping the machine at the same spot in the picture.
+function refitCamera(){
+  if (!machine || !lastSeg) return null;
+  const at = machinePhotoPoint();
+  const calib = calibrateCamera(lastSeg, manualRefs, lastDepth);
+  cam = { hc: calib.hc, pitchDeg: calib.pitchDeg, f35: calib.f35 };
+  sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
+  updateCamera();
+  placeAtImageCoord(at.fx, at.fy);
+  settlePlacement();
+  calBtn.classList.toggle('glow', !calib.refs.length);
+  showSizeStatus(calib);
+  needsRender = true;
+  return calib;
+}
+
+calibEl.addEventListener('pointerdown', (e) => {
+  if (!cal.on || cal.busy || calSheet.classList.contains('open')) return;
+  calibEl.setPointerCapture(e.pointerId);
+  const p = calPhotoPoint(e.clientX, e.clientY);
+  const near = (q) => q && Math.hypot(calScreen(q).x - e.clientX, calScreen(q).y - e.clientY) < 30;
+  if (near(cal.top)) cal.drag = 'top';
+  else if (near(cal.base)) cal.drag = 'base';
+  else if (!cal.base) cal.drag = 'base';
+  else if (!cal.top) cal.drag = 'top';
+  else return;                                                   // both set: only the dots move now
+  cal[cal.drag] = p;
+  calBar.classList.add('dragging');
+  renderCalib(); showLoupe(p);
+});
+calibEl.addEventListener('pointermove', (e) => {
+  if (!cal.drag) return;
+  const p = calPhotoPoint(e.clientX, e.clientY);
+  cal[cal.drag] = p; renderCalib(); showLoupe(p);
+});
+const calRelease = () => {
+  if (!cal.drag) return;
+  cal.drag = null; hideLoupe(); calBar.classList.remove('dragging');
+  // the top has to be above the bottom -- anything else can't be a height
+  if (cal.base && cal.top && cal.top.fy > cal.base.fy - 0.02) {
+    cal.top = null; renderCalib();
+    calUpdateStep('The end point has to be above the start point. Tap the opposite top corner.');
+    return;
+  }
+  calUpdateStep();
+};
+calibEl.addEventListener('pointerup', calRelease);
+calibEl.addEventListener('pointercancel', calRelease);
+
+calCm.addEventListener('input', calValidate);
+calW.addEventListener('input', calValidate);
+calCm.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !calApply.disabled) calApply.click(); });
+calW.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !calApply.disabled) calApply.click(); });
+calBtn.addEventListener('click', openCalib);
+calCancel.addEventListener('click', closeCalib);
+calNext.addEventListener('click', onMarksDone);
+calRemark.addEventListener('click', () => {
+  calSheet.classList.remove('open');
+  Object.assign(cal, { base: null, top: null, preset: null });
+  calBar.classList.add('on');
+  calUpdateStep(); renderCalib();
+});
+calApply.addEventListener('click', () => {
+  const h = +calCm.value, w = calW.value === '' ? null : +calW.value;
+  if (!calValid(h) || !cal.base || !cal.top) return;
+  // how far the customer moved each number from what the AI measured: one number edited sets the scale,
+  // both edited (and disagreeing) settle on the middle
+  const rh = calAutoH ? h / calAutoH : 1, rw = calAutoW >= 10 && w !== null ? w / calAutoW : 1;
+  const edH = Math.abs(rh - 1) > 0.005, edW = Math.abs(rw - 1) > 0.005;
+  if (!edH && !edW) { closeCalib(); toast('Using the AI’s size ✓'); return; }
+  let H;
+  if (edH && edW) H = (calEst ? calEst.H : h / 100) * Math.sqrt(rh * rw);
+  else if (edH) H = h / 100;
+  else H = calEst.H * rw;
+  const mark = { top: cal.top.fy, base: cal.base.fy, H, name: null, sig: 0.02 };
+  manualRefs.push(mark);
+  closeCalib();
+  refitCamera();
+  toast('Resized to match your measurement ✓', 'Undo', () => {
+    manualRefs = manualRefs.filter((m) => m !== mark); refitCamera();
+  }, 8000);
+});
+calReset.addEventListener('click', () => {
+  manualRefs = []; closeCalib(); refitCamera();
+  toast('Back to automatic sizing');
+});
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cal.on) closeCalib(); });
+
+// ---------- machine chooser + switcher ----------
+const chooser     = document.getElementById('chooser');
+const chooserList = document.getElementById('chooserList');
+const menu        = document.getElementById('menu');
+const menuList    = document.getElementById('menuList');
+const machineChip = document.getElementById('machineChip');
+
+// One card per machine: its picture, its name and one word on what it is. `end` is the chevron on
+// the first screen, the tick (shown on the current one) in the switcher.
+const optionMarkup = (k, end) =>
+  '<span class="thumb"><img src="' + MODELS[k].thumb + '" alt=""></span>' +
+  '<span class="txt"><span class="cn">' + MODELS[k].label + '</span><span class="cd">' + MODELS[k].desc + '</span></span>' +
+  '<span class="end" aria-hidden="true">' + end + '</span>';
+
+function renderLists(){
+  chooserList.innerHTML = '';
+  menuList.innerHTML = '';
+  for (const k of Object.keys(MODELS)) {
+    const a = document.createElement('button');
+    a.type = 'button'; a.className = 'choice'; a.innerHTML = optionMarkup(k, '›');
+    a.addEventListener('click', () => startWith(k));
+    chooserList.appendChild(a);
+
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'choice';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(k === modelKey));
+    b.innerHTML = optionMarkup(k, '✓');
+    b.addEventListener('click', () => selectModel(k));
+    menuList.appendChild(b);
+  }
+}
+
+function syncMenuChecks(){
+  [...menuList.children].forEach((el, i) => {
+    el.setAttribute('aria-checked', String(Object.keys(MODELS)[i] === modelKey));
+  });
+}
+
+function setMenu(open){ if (open) openSheet(menu); else closeSheets(); }
+
+// Switching mid-session swaps the mesh in place (see loadModel's keepPos) rather than
+// resetting the composition — there is no floor re-scan to redo here, unlike fit.html's AR
+// flow, so there is nothing to gain from throwing the current placement away.
+function selectModel(k){
+  setMenu(false);
+  if (k === modelKey) return;
+  modelKey = k;
+  syncMenuChecks();
+  updateDimChip();
+  if (started) loadModel(modelKey);
+}
+
+// First choice reveals the photo screen — the chooser is the true landing screen, so nobody
+// picks a photo before deciding what they're even placing in it.
+function startWith(k){
+  modelKey = k;
+  syncMenuChecks();
+  chooser.style.display = 'none';
+  showUpload();
+}
+
+machineChip.addEventListener('click', () => setMenu(!menu.classList.contains('open')));
+menu.addEventListener('click', (e) => { if (e.target === menu) setMenu(false); });
+renderLists();
+
+dimBtn.addEventListener('click', () => {
+  dimsOn = !dimsOn;
+  if (dimGroup) dimGroup.visible = dimsOn;
+  dimBtn.setAttribute('aria-pressed', String(dimsOn));
+  dimBtn.setAttribute('aria-label', dimsOn ? 'Hide dimensions' : 'Show dimensions');
+  needsRender = true;
+});
+
+
+// ---------- QA hook -- only with ?debug in the URL ----------
+// Lets a tester (or an automated check) read what the app worked out about a photo and drive the
+// placement. Nothing is exposed without the flag.
+if (new URLSearchParams(location.search).has('debug')) {
+  window.__phroomDebug = {
+    // still placing (AI running or the overlay up)? and what the size pill says
+    busy: () => aiBtn.disabled || busyEl.classList.contains('on'),
+    status: () => (pillKind ? pillKind + ': ' + pillText : ''),
+    cam: () => ({ hc: +cam.hc.toFixed(3), pitchDeg: +cam.pitchDeg.toFixed(2), f35: +cam.f35.toFixed(1) }),
+    labels: () => [...new Set((lastSeg || []).map((o) => o.label))],
+    seg: () => lastSeg,
+    refSamples: () => cameraRefSamples(lastSeg || []).map((s) => ({ name: s.ref.name, top: +s.top.toFixed(3), base: +s.base.toFixed(3) })),
+    refs: () => { const n = {}; for (const q of cameraRefSamples(lastSeg || [])) n[q.ref.name] = (n[q.ref.name] || 0) + 1; return n; },
+    manualRefs: () => manualRefs.map((m) => ({ ...m })),
+    // How tall something would have to be, under camera c (default: the fitted one), to meet the
+    // floor at photo row `base` with its top at row `top` -- D is how far back its top edge sits.
+    implied: (top, base, D = 0, c = cam) => {
+      const pc = photoCam(c.hc, c.pitchDeg, vfovForLens(c.f35)), d = pc.floorDist(base);
+      if (d === null) return null;
+      let lo = 0.02, hi = 10;
+      for (let i = 0; i < 50; i++) { const mid = (lo + hi) / 2, v = pc.topRow(d, mid, D); if (v === null || v < top) hi = mid; else lo = mid; }
+      return +((lo + hi) / 2).toFixed(3);
+    },
+    // on-screen height (share of photo height) of the machine standing with its front edge at row v
+    machineAt: (v, c = cam) => { const h = machineHeightAt(v, c); return h === null ? null : +h.toFixed(4); },
+    // the 3D pass: its floor-plane camera for this photo, and a way to run it regardless of mode
+    depthFit: () => DEPTH.lastFit && Object.fromEntries(Object.entries(DEPTH.lastFit).map(([k, v]) => [k, +v.toFixed(3)])),
+    hasDepth: () => !!lastDepth,
+    picture: () => composePicture(),          // the Save image as a Blob, without saving it
+    runDepth: () => refineWithDepth(),
+    depthMode: () => depthMode(),
+    placeAt: (fx, fy) => { placeAtImageCoord(fx, fy); needsRender = true; return placementOk(machine.position.x, machine.position.z); },
+    machinePhoto: () => { const o = machineOutline(machine.position.x, machine.position.z), at = machinePhotoPoint();
+      return { centre: [+at.fx.toFixed(3), +at.fy.toFixed(3)], top: +Math.min(...o.hull.map((p) => p[1])).toFixed(3), back: +o.backRow.toFixed(3), ok: placementOk(machine.position.x, machine.position.z) }; },
+    // simulate a calibration without the taps: mark rows top/base as an object `cm` tall
+    calibrate: (top, base, cm, name = null, sig = 0.02) => { manualRefs.push({ top, base, H: cm / 100, name, sig }); refitCamera(); return { ...cam }; },
+  };
+}
+
+// test hook: load a real room photo from a CORS-enabled URL (desktop verification)
+window.__loadUrlTest = async (url) => {
+  const blob = await (await fetch(url)).blob();
+  photoBitmap = await createImageBitmap(blob);
+  startComposer();
+  return true;
+};
+
+// expose a hook for automated verification (feeds a synthetic photo)
+window.__composeTest = async (w = 1280, h = 720) => {
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const x = c.getContext('2d');
+  const grd = x.createLinearGradient(0, 0, 0, h); grd.addColorStop(0, '#dfe6ee'); grd.addColorStop(1, '#b9c2cc');
+  x.fillStyle = grd; x.fillRect(0, 0, w, h);
+  x.fillStyle = '#a5aeb8'; x.fillRect(0, h * 0.68, w, h * 0.32);   // "floor"
+  photoBitmap = await createImageBitmap(c);
+  startComposer();
+  return true;
+};
+</script>
+</body>
+</html>
