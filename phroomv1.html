@@ -2610,7 +2610,10 @@ const calSheet = document.getElementById('calSheet'), calCm = document.getElemen
 const calApply = document.getElementById('calApply'), calRemark = document.getElementById('calRemark'), calReset = document.getElementById('calReset');
 const calHint = document.getElementById('calHint');
 const calW = document.getElementById('calW'), calSheetSub = document.getElementById('calSheetSub');
-const cal = { on: false, base: null, top: null, drag: null, preset: null, busy: false };   // points are photo fractions {fx, fy}
+const cal = { on: false, base: null, top: null, wA: null, wB: null, drag: null, preset: null, busy: false };
+// Two separate lines: HEIGHT (start at the floor, end at the top) and WIDTH (start on one side, end on the other).
+const CAL_ORDER = ['base', 'top', 'wA', 'wB'];
+const CAL_COL = { base: '#2ee67b', top: '#4aa3ff', wA: '#ffd84d', wB: '#ff8fb3' };   // points are photo fractions {fx, fy}
 
 const calScreen = (p) => imageToScreen(p.fx, p.fy);
 function calPhotoPoint(x, y){
@@ -2619,19 +2622,19 @@ function calPhotoPoint(x, y){
 }
 function renderCalib(){
   if (!cal.on || !photoBitmap) { calibSvg.innerHTML = ''; return; }
-  const b = cal.base && calScreen(cal.base), t = cal.top && calScreen(cal.top);
+  const S = {};
+  for (const k of CAL_ORDER) S[k] = cal[k] && calScreen(cal[k]);
   let s = '';
-  if (b && t) {
-    const x = Math.min(b.x, t.x), y = Math.min(b.y, t.y), w = Math.abs(b.x - t.x), h = Math.abs(b.y - t.y);
-    s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="rgba(255,255,255,.08)" stroke="rgba(0,0,0,.55)" stroke-width="6"/>`;
-    s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="7 5"/>`;
-  }
-  // bottom: green, with a short floor line; top: blue
-  if (b) s += `<line x1="${b.x - 20}" y1="${b.y}" x2="${b.x + 20}" y2="${b.y}" stroke="#2ee67b" stroke-width="3" stroke-linecap="round"/>`
-            + `<circle cx="${b.x}" cy="${b.y}" r="10" fill="#2ee67b" stroke="#fff" stroke-width="3"/>`;
-  if (t) s += `<circle cx="${t.x}" cy="${t.y}" r="10" fill="#4aa3ff" stroke="#fff" stroke-width="3"/>`;
-  if (b) s += `<text x="${b.x}" y="${b.y + 28}" text-anchor="middle" fill="#fff" stroke="rgba(0,0,0,.6)" stroke-width="3" paint-order="stroke" font-size="12" font-weight="700">start</text>`;
-  if (t) s += `<text x="${t.x}" y="${t.y - 18}" text-anchor="middle" fill="#fff" stroke="rgba(0,0,0,.6)" stroke-width="3" paint-order="stroke" font-size="12" font-weight="700">end</text>`;
+  const line = (p, q) => `<line x1="${p.x}" y1="${p.y}" x2="${q.x}" y2="${q.y}" stroke="rgba(0,0,0,.55)" stroke-width="6" stroke-linecap="round"/>`
+    + `<line x1="${p.x}" y1="${p.y}" x2="${q.x}" y2="${q.y}" stroke="#fff" stroke-width="2.5" stroke-dasharray="7 5" stroke-linecap="round"/>`;
+  const dot = (p, col) => `<circle cx="${p.x}" cy="${p.y}" r="10" fill="${col}" stroke="#fff" stroke-width="3"/>`;
+  const label = (p, text, dy) => `<text x="${p.x}" y="${p.y + dy}" text-anchor="middle" fill="#fff" stroke="rgba(0,0,0,.6)" stroke-width="3" paint-order="stroke" font-size="12" font-weight="700">${text}</text>`;
+  if (S.base && S.top) s += line(S.base, S.top);
+  if (S.wA && S.wB) s += line(S.wA, S.wB);
+  if (S.base) s += `<line x1="${S.base.x - 20}" y1="${S.base.y}" x2="${S.base.x + 20}" y2="${S.base.y}" stroke="#2ee67b" stroke-width="3" stroke-linecap="round"/>` + dot(S.base, CAL_COL.base) + label(S.base, 'H start', 28);
+  if (S.top) s += dot(S.top, CAL_COL.top) + label(S.top, 'H end', -18);
+  if (S.wA) s += dot(S.wA, CAL_COL.wA) + label(S.wA, 'W start', -18);
+  if (S.wB) s += dot(S.wB, CAL_COL.wB) + label(S.wB, 'W end', -18);
   calibSvg.innerHTML = s;
 }
 // A 3× magnifier just above the finger, with a crosshair on the exact point being marked
@@ -2648,26 +2651,24 @@ function showLoupe(p){
   ctx.drawImage(photoBitmap, p.fx * cp.iw - src / 2, p.fy * cp.ih - src / 2, src, src, 0, 0, W, W);
   ctx.lineWidth = 3 * DPR; ctx.strokeStyle = 'rgba(0,0,0,.6)';
   ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, W); ctx.moveTo(0, W / 2); ctx.lineTo(W, W / 2); ctx.stroke();
-  ctx.lineWidth = 1.2 * DPR; ctx.strokeStyle = cal.drag === 'top' ? '#4aa3ff' : '#2ee67b';
+  ctx.lineWidth = 1.2 * DPR; ctx.strokeStyle = CAL_COL[cal.drag] || '#2ee67b';
   ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, W); ctx.moveTo(0, W / 2); ctx.lineTo(W, W / 2); ctx.stroke();
 }
 const hideLoupe = () => { loupe.style.display = 'none'; };
+const CAL_TXT = [
+  'Height: tap the start point at the bottom, where it meets the floor.',
+  'Height: tap the end point at the top of the same thing, straight above.',
+  'Width: tap the start point on one side of it.',
+  'Width: tap the end point on the other side.',
+  'Drag any dot to fine-tune, then tap Next. We will measure it.',
+];
 function calUpdateStep(msg){
   calNext.hidden = true;
-  calBar.dataset.step = !cal.base ? '1' : !cal.top ? '2' : '3';
-  if (!cal.base) {
-    calStepNo.textContent = 'Step 1 of 3';
-    calStep.textContent = msg || 'Tap the start point: the bottom corner of a door, table or cabinet, where it meets the floor.';
-  } else if (!cal.top) {
-    calStepNo.textContent = 'Step 2 of 3';
-    // the front edge: on anything below eye level the whole top shows, and its back edge sits
-    // higher in the photo -- marking that instead reads a 75 cm desk as ~90 cm
-    calStep.textContent = msg || 'Now tap the end point: the opposite top corner of the same thing.';
-  } else {
-    calStepNo.textContent = 'Step 3 of 3';
-    calStep.textContent = 'Drag a dot to fine-tune, then tap Next. We will measure it.';
-    calNext.hidden = false;
-  }
+  const i = CAL_ORDER.findIndex((k) => !cal[k]), idx = i < 0 ? 4 : i;
+  calBar.dataset.step = idx < 2 ? String(idx + 1) : '3';
+  calStepNo.textContent = 'Step ' + (idx + 1) + ' of 5';
+  calStep.textContent = msg || CAL_TXT[idx];
+  if (idx === 4) calNext.hidden = false;
   placeCalBar();
 }
 // The step card goes at the top or the bottom of the photo, whichever is clear of the marks: the
@@ -2676,7 +2677,7 @@ function calUpdateStep(msg){
 function placeCalBar(){
   const H = stageEl.clientHeight, bh = calBar.offsetHeight || 64;
   const topBand = topBar.offsetHeight + bh + 14, botBand = H - bh - 24;   // stage px covered by the card, plus margin
-  const ys = [cal.base, cal.top].filter(Boolean).map((p) => calScreen(p).y);
+  const ys = CAL_ORDER.map((k) => cal[k]).filter(Boolean).map((p) => calScreen(p).y);
   const clearTop = ys.every((y) => y > topBand), clearBot = ys.every((y) => y < botBand);
   const atBottom = calBar.classList.contains('bottom');
   let bottom;
@@ -2690,7 +2691,7 @@ function placeCalBar(){
 const topBar = document.querySelector('.top');
 function openCalib(){
   if (!photoBitmap || !machine || calBtn.disabled) return;
-  Object.assign(cal, { on: true, base: null, top: null, drag: null, preset: null });
+  Object.assign(cal, { on: true, base: null, top: null, wA: null, wB: null, drag: null, preset: null });
   machine.visible = false; needsRender = true;                   // out of the way of what's being marked
   clearTimeout(hintTimer); hintEl.style.display = 'none';
   closeSheets(); hideToast();
@@ -2708,23 +2709,29 @@ function closeCalib(){
   if (DEPTH.pendingApply) applyDepth();        // the 3D scan finished while they were marking
   else showDepthStatus();                      // or is still running: say so again
 }
-/* What the camera fit says the marked box measures in real life: the start point sits on the floor, so
-   its world position is known; a vertical plane through it facing the camera holds the end point, which
-   gives the height (above the floor) and the width (sideways) of the box. Metres. */
+/* What the camera fit says the two marked lines measure in real life: the height line's start sits on the
+   floor, so its world position is known. A vertical plane through it, facing the camera, is taken as the
+   front of the thing: the height line's end gives its height above the floor, and the width line's two
+   ends, meeting the same plane, give its width sideways. Metres. */
 let calEst = null, calAutoH = 0, calAutoW = 0;
 function estimateMarked(){
-  if (!cal.base || !cal.top || !camera) return null;
+  if (!cal.base || !cal.top || !cal.wA || !cal.wB || !camera) return null;
   const sb = calScreen(cal.base), st = calScreen(cal.top);
   const P = groundHit(sb.x, sb.y); if (!P) return null;
   camera.updateMatrixWorld();
   const cp = camera.position;
   const n = new THREE.Vector3(P.x - cp.x, 0, P.z - cp.z); if (n.lengthSq() < 1e-6) return null; n.normalize();
-  ndc.set((st.x / window.innerWidth) * 2 - 1, -((st.y / stageH()) * 2 - 1));
-  raycaster.setFromCamera(ndc, camera);
-  const ray = raycaster.ray, den = ray.direction.dot(n); if (Math.abs(den) < 1e-4) return null;
-  const k = ((P.x - ray.origin.x) * n.x + (P.z - ray.origin.z) * n.z) / den; if (k <= 0) return null;
-  const Q = ray.origin.clone().addScaledVector(ray.direction, k);
-  const H = Q.y, W = Math.abs((Q.x - P.x) * -n.z + (Q.z - P.z) * n.x);
+  // where a screen point's ray meets the vertical plane through the start point, facing the camera
+  const onPlane = (sp) => {
+    ndc.set((sp.x / window.innerWidth) * 2 - 1, -((sp.y / stageH()) * 2 - 1));
+    raycaster.setFromCamera(ndc, camera);
+    const ray = raycaster.ray, den = ray.direction.dot(n); if (Math.abs(den) < 1e-4) return null;
+    const k = ((P.x - ray.origin.x) * n.x + (P.z - ray.origin.z) * n.z) / den; if (k <= 0) return null;
+    return ray.origin.clone().addScaledVector(ray.direction, k);
+  };
+  const Q = onPlane(st), A = onPlane(calScreen(cal.wA)), B = onPlane(calScreen(cal.wB));
+  if (!Q || !A || !B) return null;
+  const H = Q.y, W = Math.abs((B.x - A.x) * -n.z + (B.z - A.z) * n.x);
   return H > 0.05 && isFinite(H) && isFinite(W) ? { H, W } : null;
 }
 // Next: the first time, scan the room (the AI fit is what the height and width are measured with),
@@ -2750,7 +2757,7 @@ function openCalSheet(){
   calSheet.classList.add('open');
   calValidate();
   if (!calEst) calHint.textContent = 'We could not measure this one. Type its size, or re-mark the corners.';
-  else if (calAutoW < 10) calHint.textContent = 'The width is too small to measure. Mark the opposite corner, or just edit the height.';
+  else if (calAutoW < 10) calHint.textContent = 'The width line is too short to measure. Re-mark it, or just edit the height.';
 }
 const calValid = (v) => v >= 20 && v <= 400;
 const calValidW = (v) => v >= 10 && v <= 400;
@@ -2790,12 +2797,11 @@ calibEl.addEventListener('pointerdown', (e) => {
   if (!cal.on || cal.busy || calSheet.classList.contains('open')) return;
   calibEl.setPointerCapture(e.pointerId);
   const p = calPhotoPoint(e.clientX, e.clientY);
-  const near = (q) => q && Math.hypot(calScreen(q).x - e.clientX, calScreen(q).y - e.clientY) < 30;
-  if (near(cal.top)) cal.drag = 'top';
-  else if (near(cal.base)) cal.drag = 'base';
-  else if (!cal.base) cal.drag = 'base';
-  else if (!cal.top) cal.drag = 'top';
-  else return;                                                   // both set: only the dots move now
+  const dist = (q) => q ? Math.hypot(calScreen(q).x - e.clientX, calScreen(q).y - e.clientY) : Infinity;
+  const hit = CAL_ORDER.filter((k) => dist(cal[k]) < 30).sort((a, b) => dist(cal[a]) - dist(cal[b]))[0];
+  const next = CAL_ORDER.find((k) => !cal[k]);
+  cal.drag = next || hit;                                        // place the next dot first (the width line often starts where the height line does); once all four are set, move the nearest
+  if (!cal.drag) return;                                         // all four set and the touch missed them
   cal[cal.drag] = p;
   calBar.classList.add('dragging');
   renderCalib(); showLoupe(p);
@@ -2811,7 +2817,13 @@ const calRelease = () => {
   // the top has to be above the bottom -- anything else can't be a height
   if (cal.base && cal.top && cal.top.fy > cal.base.fy - 0.02) {
     cal.top = null; renderCalib();
-    calUpdateStep('The end point has to be above the start point. Tap the opposite top corner.');
+    calUpdateStep('The height end point has to be above the start point. Tap the top of the same thing.');
+    return;
+  }
+  // the width line has to run sideways, not up and down
+  if (cal.wA && cal.wB && Math.abs(cal.wA.fx - cal.wB.fx) < 0.03) {
+    cal.wB = null; renderCalib();
+    calUpdateStep('The width line has to run sideways. Tap the other side of it.');
     return;
   }
   calUpdateStep();
@@ -2828,7 +2840,7 @@ calCancel.addEventListener('click', closeCalib);
 calNext.addEventListener('click', onMarksDone);
 calRemark.addEventListener('click', () => {
   calSheet.classList.remove('open');
-  Object.assign(cal, { base: null, top: null, preset: null });
+  Object.assign(cal, { base: null, top: null, wA: null, wB: null, preset: null });
   calBar.classList.add('on');
   calUpdateStep(); renderCalib();
 });
