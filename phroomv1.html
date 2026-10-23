@@ -2610,10 +2610,12 @@ const calSheet = document.getElementById('calSheet'), calCm = document.getElemen
 const calApply = document.getElementById('calApply'), calRemark = document.getElementById('calRemark'), calReset = document.getElementById('calReset');
 const calHint = document.getElementById('calHint');
 const calW = document.getElementById('calW'), calSheetSub = document.getElementById('calSheetSub');
-const cal = { on: false, base: null, top: null, wA: null, wB: null, drag: null, preset: null, busy: false };
-// Two separate lines: HEIGHT (start at the floor, end at the top) and WIDTH (start on one side, end on the other).
-const CAL_ORDER = ['base', 'top', 'wA', 'wB'];
-const CAL_COL = { base: '#2ee67b', top: '#4aa3ff', wA: '#ffd84d', wB: '#ff8fb3' };   // points are photo fractions {fx, fy}
+const cal = { on: false, base: null, top: null, wB: null, drag: null, preset: null, busy: false };
+// Two lines that always touch at one corner: HEIGHT runs from the start (where the thing meets the floor)
+// up to its end, WIDTH runs from the same start sideways to its end. The start dot is shared, so moving it
+// moves both lines.
+const CAL_ORDER = ['base', 'top', 'wB'];
+const CAL_COL = { base: '#2ee67b', top: '#4aa3ff', wB: '#ff8fb3' };   // points are photo fractions {fx, fy}
 
 const calScreen = (p) => imageToScreen(p.fx, p.fy);
 function calPhotoPoint(x, y){
@@ -2630,10 +2632,14 @@ function renderCalib(){
   const dot = (p, col) => `<circle cx="${p.x}" cy="${p.y}" r="10" fill="${col}" stroke="#fff" stroke-width="3"/>`;
   const label = (p, text, dy) => `<text x="${p.x}" y="${p.y + dy}" text-anchor="middle" fill="#fff" stroke="rgba(0,0,0,.6)" stroke-width="3" paint-order="stroke" font-size="12" font-weight="700">${text}</text>`;
   if (S.base && S.top) s += line(S.base, S.top);
-  if (S.wA && S.wB) s += line(S.wA, S.wB);
-  if (S.base) s += `<line x1="${S.base.x - 20}" y1="${S.base.y}" x2="${S.base.x + 20}" y2="${S.base.y}" stroke="#2ee67b" stroke-width="3" stroke-linecap="round"/>` + dot(S.base, CAL_COL.base) + label(S.base, 'H start', 28);
+  if (S.base && S.wB) s += line(S.base, S.wB);
+  if (S.base && S.top && S.wB) {                       // a small square at the shared corner
+    const u = (p) => { const dx = p.x - S.base.x, dy = p.y - S.base.y, d = Math.hypot(dx, dy) || 1; return { x: dx / d * 18, y: dy / d * 18 }; };
+    const a = u(S.top), b = u(S.wB);
+    s += `<polyline points="${S.base.x + a.x},${S.base.y + a.y} ${S.base.x + a.x + b.x},${S.base.y + a.y + b.y} ${S.base.x + b.x},${S.base.y + b.y}" fill="none" stroke="#fff" stroke-width="2.5"/>`;
+  }
+  if (S.base) s += `<line x1="${S.base.x - 20}" y1="${S.base.y}" x2="${S.base.x + 20}" y2="${S.base.y}" stroke="#2ee67b" stroke-width="3" stroke-linecap="round"/>` + dot(S.base, CAL_COL.base) + label(S.base, 'start', 28);
   if (S.top) s += dot(S.top, CAL_COL.top) + label(S.top, 'H end', -18);
-  if (S.wA) s += dot(S.wA, CAL_COL.wA) + label(S.wA, 'W start', -18);
   if (S.wB) s += dot(S.wB, CAL_COL.wB) + label(S.wB, 'W end', -18);
   calibSvg.innerHTML = s;
 }
@@ -2656,19 +2662,18 @@ function showLoupe(p){
 }
 const hideLoupe = () => { loupe.style.display = 'none'; };
 const CAL_TXT = [
-  'Height: tap the start point at the bottom, where it meets the floor.',
-  'Height: tap the end point at the top of the same thing, straight above.',
-  'Width: tap the start point on one side of it.',
-  'Width: tap the end point on the other side.',
+  'Tap the start point: the bottom corner of the thing, where it meets the floor. Height and width both start here.',
+  'Height: tap the end point at the top, straight above the start.',
+  'Width: tap the end point on the other side. The width line starts from the same corner.',
   'Drag any dot to fine-tune, then tap Next. We will measure it.',
 ];
 function calUpdateStep(msg){
   calNext.hidden = true;
-  const i = CAL_ORDER.findIndex((k) => !cal[k]), idx = i < 0 ? 4 : i;
+  const i = CAL_ORDER.findIndex((k) => !cal[k]), idx = i < 0 ? 3 : i;
   calBar.dataset.step = idx < 2 ? String(idx + 1) : '3';
-  calStepNo.textContent = 'Step ' + (idx + 1) + ' of 5';
+  calStepNo.textContent = 'Step ' + (idx + 1) + ' of 4';
   calStep.textContent = msg || CAL_TXT[idx];
-  if (idx === 4) calNext.hidden = false;
+  if (idx === 3) calNext.hidden = false;
   placeCalBar();
 }
 // The step card goes at the top or the bottom of the photo, whichever is clear of the marks: the
@@ -2691,7 +2696,7 @@ function placeCalBar(){
 const topBar = document.querySelector('.top');
 function openCalib(){
   if (!photoBitmap || !machine || calBtn.disabled) return;
-  Object.assign(cal, { on: true, base: null, top: null, wA: null, wB: null, drag: null, preset: null });
+  Object.assign(cal, { on: true, base: null, top: null, wB: null, drag: null, preset: null });
   machine.visible = false; needsRender = true;                   // out of the way of what's being marked
   clearTimeout(hintTimer); hintEl.style.display = 'none';
   closeSheets(); hideToast();
@@ -2715,7 +2720,7 @@ function closeCalib(){
    ends, meeting the same plane, give its width sideways. Metres. */
 let calEst = null, calAutoH = 0, calAutoW = 0;
 function estimateMarked(){
-  if (!cal.base || !cal.top || !cal.wA || !cal.wB || !camera) return null;
+  if (!cal.base || !cal.top || !cal.wB || !camera) return null;
   const sb = calScreen(cal.base), st = calScreen(cal.top);
   const P = groundHit(sb.x, sb.y); if (!P) return null;
   camera.updateMatrixWorld();
@@ -2729,7 +2734,7 @@ function estimateMarked(){
     const k = ((P.x - ray.origin.x) * n.x + (P.z - ray.origin.z) * n.z) / den; if (k <= 0) return null;
     return ray.origin.clone().addScaledVector(ray.direction, k);
   };
-  const Q = onPlane(st), A = onPlane(calScreen(cal.wA)), B = onPlane(calScreen(cal.wB));
+  const Q = onPlane(st), A = onPlane(sb), B = onPlane(calScreen(cal.wB));
   if (!Q || !A || !B) return null;
   const H = Q.y, W = Math.abs((B.x - A.x) * -n.z + (B.z - A.z) * n.x);
   return H > 0.05 && isFinite(H) && isFinite(W) ? { H, W } : null;
@@ -2821,9 +2826,9 @@ const calRelease = () => {
     return;
   }
   // the width line has to run sideways, not up and down
-  if (cal.wA && cal.wB && Math.abs(cal.wA.fx - cal.wB.fx) < 0.03) {
+  if (cal.base && cal.wB && Math.abs(cal.base.fx - cal.wB.fx) < 0.03) {
     cal.wB = null; renderCalib();
-    calUpdateStep('The width line has to run sideways. Tap the other side of it.');
+    calUpdateStep('The width line has to run sideways from the start. Tap the other side.');
     return;
   }
   calUpdateStep();
@@ -2840,7 +2845,7 @@ calCancel.addEventListener('click', closeCalib);
 calNext.addEventListener('click', onMarksDone);
 calRemark.addEventListener('click', () => {
   calSheet.classList.remove('open');
-  Object.assign(cal, { base: null, top: null, wA: null, wB: null, preset: null });
+  Object.assign(cal, { base: null, top: null, wB: null, preset: null });
   calBar.classList.add('on');
   calUpdateStep(); renderCalib();
 });
