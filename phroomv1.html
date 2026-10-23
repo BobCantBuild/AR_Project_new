@@ -748,6 +748,7 @@ let obstacleMask = null;                // AI mask of furniture/people {w,h,data
 // blocks the move-the-machine drag during that window -- otherwise "only the floor, never
 // anywhere" would have a gap right at the start, before the AI has had a chance to look.
 let floorLocking = false;
+let holdMachine = false;               // the machine stays hidden until the customer confirms the size (Apply)
 let scanDeferred = false;               // "I know the size": the scan waits until they've marked it
 let pendingMark = false;                // ...and the marking waits for the model to finish loading
 let pendingAutoFloor = false;           // set by startComposer() when loadModel() is still loading
@@ -2412,11 +2413,11 @@ async function runAIPlace(){
   } finally {
     aiBtn.disabled = false; calBtn.disabled = false;
     floorLocking = false;   // whatever happened, the drag lock was only ever for this one detection pass
-    if (machine) { machine.visible = true; needsRender = true; }
+    if (machine && !holdMachine) { machine.visible = true; needsRender = true; }
     hideBusy();
     // let the AI's view of the room linger a beat as the machine appears, then fade it
     setTimeout(() => scanEl.classList.remove('show'), 1400);
-    showDragHint();
+    if (!holdMachine) showDragHint();
   }
 }
 // Reset: back where the AI placed it, facing the starting way
@@ -2705,6 +2706,7 @@ function openCalib(){
   calUpdateStep(); renderCalib();
 }
 function closeCalib(){
+  holdMachine = false;
   Object.assign(cal, { on: false, drag: null });
   calibEl.classList.remove('on'); calBar.classList.remove('on'); calSheet.classList.remove('open');
   dockEl.inert = false; topBar.inert = false;
@@ -2742,6 +2744,8 @@ function estimateMarked(){
 // Next: the first time, scan the room (the AI fit is what the height and width are measured with),
 // then show what the AI measured for the marked box, ready to edit.
 async function onMarksDone(){
+  holdMachine = true;                                 // scan and measure first; the machine is placed only after Apply
+  if (machine) { machine.visible = false; needsRender = true; }
   if (!lastSeg) {
     cal.busy = true; calBar.classList.remove('on'); calNext.hidden = true;
     scanDeferred = false;
@@ -2856,7 +2860,7 @@ calApply.addEventListener('click', () => {
   // both edited (and disagreeing) settle on the middle
   const rh = calAutoH ? h / calAutoH : 1, rw = calAutoW >= 10 && w !== null ? w / calAutoW : 1;
   const edH = Math.abs(rh - 1) > 0.005, edW = Math.abs(rw - 1) > 0.005;
-  if (!edH && !edW) { closeCalib(); toast('Using the AI’s size ✓'); return; }
+  if (!edH && !edW) { closeCalib(); showDragHint(); toast('Using the AI’s size ✓'); return; }
   let H;
   if (edH && edW) H = (calEst ? calEst.H : h / 100) * Math.sqrt(rh * rw);
   else if (edH) H = h / 100;
@@ -2865,6 +2869,7 @@ calApply.addEventListener('click', () => {
   manualRefs.push(mark);
   closeCalib();
   refitCamera();
+  showDragHint();
   toast('Resized to match your measurement ✓', 'Undo', () => {
     manualRefs = manualRefs.filter((m) => m !== mark); refitCamera();
   }, 8000);
