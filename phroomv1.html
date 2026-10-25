@@ -2912,7 +2912,8 @@ calApply.addEventListener('click', () => {
   // both edited (and disagreeing) settle on the middle
   const rh = calAutoH ? h / calAutoH : 1, rw = calAutoW >= 10 && w !== null ? w / calAutoW : 1;
   const edH = Math.abs(rh - 1) > 0.005, edW = Math.abs(rw - 1) > 0.005;
-  space = { H: document.getElementById('calNoTop').checked ? null : h, W: document.getElementById('calNoSide').checked || w === null ? null : w };
+  space = { H: document.getElementById('calNoTop').checked ? null : h, W: document.getElementById('calNoSide').checked || w === null ? null : w,
+    est: !edH && !edW };   // est: the numbers are still the AI's own estimate, nobody typed them in
   if (!edH && !edW) { closeCalib(); startPlacing(); return; }
   let H;
   if (edH && edW) H = (calEst ? calEst.H : h / 100) * Math.sqrt(rh * rw);
@@ -2962,7 +2963,11 @@ function anchorToSpace(){
   const m = markWorld(); if (!m || !machine) return;
   const d = curDims(), W = d.W / 100, D = d.D / 100;
   const u = new THREE.Vector3(m.B.x - m.P.x, 0, m.B.z - m.P.z); if (u.lengthSq() < 1e-6) return; u.normalize();
-  const c = m.P.clone().addScaledVector(u, W / 2 + GAP_SIDE / 100).addScaledVector(m.n, D / 2);
+  // Into the room behind the marked line if that is floor (a desk or counter opening); in front of
+  // it if behind is wall (a shelf on the wall) -- the machine can't stand inside the wall.
+  const probe = worldToScreen(m.P.clone().addScaledVector(m.n, 0.25)), pim = screenToImage(probe.x, probe.y);
+  const back = !floorMask || (pim.fx >= 0 && pim.fx <= 1 && pim.fy >= 0 && pim.fy <= 1 && isFloorAt(pim.fx, pim.fy));
+  const c = m.P.clone().addScaledVector(u, W / 2 + GAP_SIDE / 100).addScaledVector(m.n, back ? D / 2 : -(D / 2 + 0.02));
   let deg = Math.atan2(-m.n.x, -m.n.z) * 180 / Math.PI - (MODELS[modelKey].yawOffsetDeg || 0);
   deg = ((deg % 360) + 360) % 360;
   sRot.value = Math.round(deg); vRot.textContent = sRot.value + '°'; applyRotation();
@@ -3042,7 +3047,7 @@ function fitCheck(d){
   return res;
 }
 // What the room AI sees where the top half of the machine would be (a sink, counter, shelf...).
-const OVERHEAD = /\b(sink|counter|countertop|cabinet|shelf|kitchen island|wardrobe|chest of drawers|bookcase|table|desk|stove|oven)\b/i;
+const OVERHEAD = /\b(sink|counter|countertop|cabinet|shelf|kitchen island|table|desk)\b/i;
 function overheadThing(){
   if (!lastSeg || !occluder || !photoBitmap) return null;
   const box = new THREE.Box3().setFromObject(occluder);
@@ -3056,7 +3061,7 @@ function overheadThing(){
   const ytop = y0, ymid = y0 + (y1 - y0) * 0.5;
   let best = null, bestF = 0.12;
   for (const o of lastSeg) {
-    if (!o.mask || !OVERHEAD.test(o.label)) continue;
+    if (!o.mask || !OVERHEAD.test(o.label) || /pool|billiard|snooker|coffee/i.test(o.label)) continue;
     const { width: W, height: H, data } = o.mask; let hit = 0, all = 0;
     for (let gy = 0; gy < 12; gy++) for (let gx = 0; gx < 24; gx++) {
       const fx = x0 + (x1 - x0) * (gx + 0.5) / 24, fy = ytop + (ymid - ytop) * (gy + 0.5) / 12;
@@ -3083,7 +3088,10 @@ function showVerdict(){
   rows.push(['ℹ️', `Depth: ${d.D} cm, plus about ${GAP_BACK} cm behind for the hoses. A photo can't measure depth, so check it with a tape.`]);
   if (!spotOk) rows.push(['⚠️', 'The AI thinks part of this spot isn’t clear floor. Move it, or long-press to place it exactly.']);
   if (over && (!r.h || r.h.ok)) rows.push(['⚠️', `The AI sees a ${over} where the top of the machine would be. Check that it clears it.`]);
-  fitTitle.textContent = !r.ok ? '❌ Won’t fit here' : r.tight ? '👌 Tight fit' : (!spotOk || over) ? '⚠️ Fits the space, but check' : '✅ It fits!';
+  if (space && space.est && (space.H || space.W)) rows.push(['📏', 'These space sizes are the AI’s estimate from the photo. Measure the space with a tape and type it in for a sure answer.']);
+  fitTitle.textContent = space && space.est && (space.H || space.W)
+    ? (!r.ok ? '❌ Looks too small' : r.tight ? '👌 Looks like a tight fit' : '✅ Looks like it fits')
+    : !r.ok ? '❌ Won’t fit here' : r.tight ? '👌 Tight fit' : (!spotOk || over) ? '⚠️ Fits the space, but check' : '✅ It fits!';
   fitRows.innerHTML = rows.map(([i, t]) => `<div class="fitRow"><span class="fi">${i}</span><span>${t}</span></div>`).join('');
   fitOthers.replaceChildren();
   fitSheet.classList.add('open');
