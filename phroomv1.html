@@ -292,6 +292,32 @@
     background:rgba(255,255,255,.08);color:#fff;font-size:16px;font-weight:700}
   .calHint{font-size:12px;color:#ffb3aa;margin-top:-4px}
   .calHint.ok{color:var(--muted)}
+  .calTogs{display:flex;flex-wrap:wrap;gap:8px}
+  .calTog{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;
+    color:#fff;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2)}
+  .calTog input{width:16px;height:16px;accent-color:#ffd84d;margin:0}
+  .calTog:has(input:checked){border-color:#ffd84d;background:rgba(255,216,77,.14)}
+  /* placing the machine: a bar over the photo while the footprint box is dragged into place */
+  .placeBar{position:absolute;left:10px;right:10px;bottom:10px;z-index:6;display:none;align-items:center;gap:10px;
+    padding:10px 10px 10px 14px;border-radius:16px;color:#fff;font-size:13px;font-weight:600;line-height:1.35;
+    background:rgba(12,12,12,.9);border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(0,0,0,.45)}
+  .placeBar.on{display:flex}
+  .placeBar .pt{flex:1;min-width:0}
+  .placeBar .pt small{display:block;color:var(--muted);font-weight:500;font-size:12px;margin-top:2px}
+  /* the fit verdict: the photo and the machine stay visible above it */
+  #fitSheet{background:transparent;pointer-events:none}
+  #fitSheet .sheet{pointer-events:auto;max-height:62vh}
+  .fitTitle{font-weight:800;font-size:20px;letter-spacing:-.01em}
+  .fitRows{display:flex;flex-direction:column;gap:8px}
+  .fitRow{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;line-height:1.45}
+  .fitRow .fi{flex:none;width:22px;text-align:center}
+  .fitOthers{display:flex;flex-direction:column;gap:8px}
+  .fitOthers:empty{display:none}
+  .fitOther{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:14px;background:var(--card);border:1px solid var(--line);font-size:13.5px}
+  .fitOther .fo{flex:1;min-width:0}
+  .fitOther .fo b{display:block}
+  .fitOther .fo small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+  .fitWait{color:var(--muted);font-size:13px}
   .calGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .calField{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
   .calLbl{font-weight:600}
@@ -575,6 +601,10 @@
         <button class="iconBtn" id="calCancel" type="button" aria-label="Cancel measuring"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
     </div>
+    <div class="placeBar" id="placeBar" role="status" aria-live="polite">
+      <span class="pt">📍 Drag the box to where the machine will stand.<small>Two fingers turn it · long-press to put it exactly there</small></span>
+      <button class="btn small go" id="placeHere" type="button">Place here</button>
+    </div>
     <div class="toast" id="toast" role="status" aria-live="polite">
       <span id="toastText"></span>
       <button class="toastBtn" id="toastBtn" type="button" hidden></button>
@@ -631,15 +661,33 @@
     </div>
   </div>
 
+  <!-- After placing: will it fit in that space, and which other machines would -->
+  <div class="sheetWrap" id="fitSheet">
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fitTitle">
+      <span class="fitTitle" id="fitTitle"></span>
+      <div class="fitRows" id="fitRows"></div>
+      <div class="fitOthers" id="fitOthers"></div>
+      <button class="btn dark" id="fitOthersBtn" type="button">💡 What else fits here?</button>
+      <div class="sheetBtns">
+        <button class="btn dark" id="fitMove" type="button">Move it</button>
+        <button class="btn go" id="fitDone" type="button">Done</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Measure, last step: what was marked, and how tall it is -->
   <div class="calSheet" id="calSheet" role="dialog" aria-modal="true" aria-labelledby="calSheetTitle">
-    <span class="sheetTitle" id="calSheetTitle">Check the size 📏</span>
-    <span class="sheetSub" id="calSheetSub">The AI measured this from your photo. Change it if you know the real size.</span>
+    <span class="sheetTitle" id="calSheetTitle">Check the space 📏</span>
+    <span class="sheetSub" id="calSheetSub">The AI measured the free space from your photo. Change it if you know the real size.</span>
     <div class="calGrid">
-      <label class="calField" for="calCm"><span class="calLbl">Height</span>
+      <label class="calField" for="calCm"><span class="calLbl">Free height</span>
         <span class="calIn"><input id="calCm" type="number" inputmode="decimal" min="20" max="400" step="1" placeholder="cm" /><em>cm</em></span></label>
-      <label class="calField" for="calW"><span class="calLbl">Width</span>
+      <label class="calField" for="calW"><span class="calLbl">Free width</span>
         <span class="calIn"><input id="calW" type="number" inputmode="decimal" min="10" max="400" step="1" placeholder="cm" /><em>cm</em></span></label>
+    </div>
+    <div class="calTogs">
+      <label class="calTog"><input type="checkbox" id="calNoTop" /> Nothing above this spot</label>
+      <label class="calTog"><input type="checkbox" id="calNoSide" /> Open at the sides</label>
     </div>
     <span class="calHint" id="calHint" aria-live="polite"></span>
     <div class="sheetBtns">
@@ -748,6 +796,9 @@ let obstacleMask = null;                // AI mask of furniture/people {w,h,data
 // blocks the move-the-machine drag during that window -- otherwise "only the floor, never
 // anywhere" would have a gap right at the start, before the AI has had a chance to look.
 let floorLocking = false;
+let space = null;                       // the free space the customer measured, cm: {H, W} (null = no limit that way)
+let placing = false, placeTimer = null, footprint = null;
+let onModelLoaded = null;               // one-shot: runs when the next machine model has loaded
 let holdMachine = false;               // the machine stays hidden until the customer confirms the size (Apply)
 let scanDeferred = false;               // "I know the size": the scan waits until they've marked it
 let pendingMark = false;                // ...and the marking waits for the model to finish loading
@@ -1108,6 +1159,7 @@ function loadModel(key){
     if (renderer.compileAsync) renderer.compileAsync(scene, camera).catch(() => {});
     // The very first load for a fresh photo: the machine model just became available, so the
     // auto floor-detect that startComposer() asked for (and was waiting on) can run now.
+    if (onModelLoaded) { const f = onModelLoaded; onModelLoaded = null; setTimeout(f, 0); }
     if (pendingMark) { pendingMark = false; aiBtn.disabled = calBtn.disabled = false; openCalib(); }
     else if (pendingAutoFloor) {
       pendingAutoFloor = false; runAIPlace();
@@ -2663,9 +2715,9 @@ function showLoupe(p){
 }
 const hideLoupe = () => { loupe.style.display = 'none'; };
 const CAL_TXT = [
-  'Tap the start point: the bottom corner of the thing, where it meets the floor. Height and width both start here.',
-  'Height: tap the end point at the top, straight above the start.',
-  'Width: tap the end point on the other side. The width line starts from the same corner.',
+  'Tap the start point: the floor corner of the space where the machine will go. Height and width both start here.',
+  'Height: tap the top of the free space, like the underside of a sink or counter. Nothing above? Tap the top of a door or table.',
+  'Width: tap the other side of the space, like the next cabinet or wall.',
   'Drag any dot to fine-tune, then tap Next. We will measure it.',
 ];
 function calUpdateStep(msg){
@@ -2860,7 +2912,8 @@ calApply.addEventListener('click', () => {
   // both edited (and disagreeing) settle on the middle
   const rh = calAutoH ? h / calAutoH : 1, rw = calAutoW >= 10 && w !== null ? w / calAutoW : 1;
   const edH = Math.abs(rh - 1) > 0.005, edW = Math.abs(rw - 1) > 0.005;
-  if (!edH && !edW) { closeCalib(); showDragHint(); toast('Using the AI’s size ✓'); return; }
+  space = { H: document.getElementById('calNoTop').checked ? null : h, W: document.getElementById('calNoSide').checked || w === null ? null : w };
+  if (!edH && !edW) { closeCalib(); startPlacing(); return; }
   let H;
   if (edH && edW) H = (calEst ? calEst.H : h / 100) * Math.sqrt(rh * rw);
   else if (edH) H = h / 100;
@@ -2869,16 +2922,199 @@ calApply.addEventListener('click', () => {
   manualRefs.push(mark);
   closeCalib();
   refitCamera();
-  showDragHint();
-  toast('Resized to match your measurement ✓', 'Undo', () => {
-    manualRefs = manualRefs.filter((m) => m !== mark); refitCamera();
-  }, 8000);
+  startPlacing();
 });
 calReset.addEventListener('click', () => {
   manualRefs = []; closeCalib(); refitCamera();
   toast('Back to automatic sizing');
 });
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cal.on) closeCalib(); });
+
+// ---------- place it, then: will it fit in the space that was measured? ----------
+// The marks measure the free space (floor to the underside of a sink or counter, and the gap
+// between cabinets). The machine's footprint is shown as a box on the floor to drag into place;
+// once placed, its size is checked against that space with the gaps a machine needs
+// (2 cm above, 1 cm each side; 2.5 cm a side is comfortable).
+const placeBar = document.getElementById('placeBar'), fitSheet = document.getElementById('fitSheet');
+const fitTitle = document.getElementById('fitTitle'), fitRows = document.getElementById('fitRows'), fitOthers = document.getElementById('fitOthers');
+const GAP_TOP = 2, GAP_SIDE = 1, GAP_SIDE_COMFY = 2.5, GAP_BACK = 5;
+
+// The marked space in world terms: P = start corner on the floor, n = into the room (away from the
+// camera), B = the width line's end on the same front face.
+function markWorld(){
+  if (!cal.base || !cal.wB || !camera) return null;
+  const sb = calScreen(cal.base);
+  const P = groundHit(sb.x, sb.y); if (!P) return null;
+  camera.updateMatrixWorld();
+  const cp = camera.position;
+  const n = new THREE.Vector3(P.x - cp.x, 0, P.z - cp.z); if (n.lengthSq() < 1e-6) return null; n.normalize();
+  const sp = calScreen(cal.wB);
+  ndc.set((sp.x / window.innerWidth) * 2 - 1, -((sp.y / stageH()) * 2 - 1));
+  raycaster.setFromCamera(ndc, camera);
+  const ray = raycaster.ray, den = ray.direction.dot(n); if (Math.abs(den) < 1e-4) return null;
+  const k = ((P.x - ray.origin.x) * n.x + (P.z - ray.origin.z) * n.z) / den; if (k <= 0) return null;
+  const B = ray.origin.clone().addScaledVector(ray.direction, k);
+  return { P: new THREE.Vector3(P.x, 0, P.z), n, B };
+}
+// Start the box inside the measured space: front edge on the marked line, beside the start corner,
+// facing the camera.
+function anchorToSpace(){
+  const m = markWorld(); if (!m || !machine) return;
+  const d = curDims(), W = d.W / 100, D = d.D / 100;
+  const u = new THREE.Vector3(m.B.x - m.P.x, 0, m.B.z - m.P.z); if (u.lengthSq() < 1e-6) return; u.normalize();
+  const c = m.P.clone().addScaledVector(u, W / 2 + GAP_SIDE / 100).addScaledVector(m.n, D / 2);
+  let deg = Math.atan2(-m.n.x, -m.n.z) * 180 / Math.PI - (MODELS[modelKey].yawOffsetDeg || 0);
+  deg = ((deg % 360) + 360) % 360;
+  sRot.value = Math.round(deg); vRot.textContent = sRot.value + '°'; applyRotation();
+  machine.position.set(c.x, 0, c.z); freePlaced = true; needsRender = true;
+}
+function showFootprint(on){
+  if (!machine || !modelSize) return;
+  if (!footprint || footprint.parent !== machine) {
+    footprint = new THREE.Group();
+    const geo = new THREE.PlaneGeometry(modelSize.x, modelSize.z);
+    const fill = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x2ee67b, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide }));
+    const edge = new THREE.LineSegments(new THREE.EdgesGeometry(geo), new THREE.LineBasicMaterial({ color: 0xffffff }));
+    // a brighter strip along the front, so it's clear which way the door faces
+    const fz = (Math.abs(MODELS[modelKey].yawOffsetDeg || 0) === 180 ? -1 : 1) * modelSize.z * 0.46;
+    const front = new THREE.Mesh(new THREE.PlaneGeometry(modelSize.x, modelSize.z * 0.08), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide }));
+    front.position.y = fz;
+    for (const o of [fill, edge, front]) { o.rotation.x = -Math.PI / 2; footprint.add(o); }
+    front.position.set(0, 0, fz); front.rotation.x = -Math.PI / 2;
+    footprint.position.y = modelSize.y * 0.004;
+    footprint.userData.fill = fill;
+    machine.add(footprint);
+  }
+  footprint.visible = on;
+  if (machine.children[0]) machine.children[0].visible = !on;     // the machine model itself
+  if (dimGroup) dimGroup.visible = on ? false : dimsOn;
+  needsRender = true;
+}
+function tintFootprint(){
+  if (!footprint || !machine) return;
+  const ok = freePlaced || placementOk(machine.position.x, machine.position.z);
+  footprint.userData.fill.material.color.set(ok ? 0x2ee67b : 0xff5a5f);
+  needsRender = true;
+}
+function startPlacing(keep = false){
+  if (!machine) return;
+  placing = true;
+  if (!keep) anchorToSpace();
+  showFootprint(true);
+  dockEl.inert = true; topBar.inert = true;
+  clearTimeout(hintTimer); hintEl.style.display = 'none'; hideToast();
+  placeBar.classList.add('on');
+  clearInterval(placeTimer); placeTimer = setInterval(tintFootprint, 200); tintFootprint();
+}
+function placeHere(){
+  placing = false; clearInterval(placeTimer);
+  placeBar.classList.remove('on');
+  showFootprint(false);
+  showVerdict();
+}
+// A machine's size (cm) from its own GLB at its real height -- the same models the page shows.
+const dimCache = {};
+async function dimsOf(k){
+  const cfg = MODELS[k];
+  if (cfg.specCm) return { ...cfg.specCm };
+  if (dimCache[k]) return dimCache[k];
+  const r = (v) => +v.toFixed(1);
+  if (k === modelKey && modelSize) {
+    const s = cfg.heightCm / modelSize.y;
+    return dimCache[k] = { H: cfg.heightCm, W: r(modelSize.x * s), D: r(modelSize.z * s) };
+  }
+  const gltf = await new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(cfg.url);
+  const sz = new THREE.Box3().setFromObject(gltf.scene).getSize(new THREE.Vector3());
+  gltf.scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+  const s = cfg.heightCm / sz.y;
+  return dimCache[k] = { H: cfg.heightCm, W: r(sz.x * s), D: r(sz.z * s) };
+}
+function fitCheck(d){
+  const r1 = (v) => +v.toFixed(1);
+  const res = { h: null, w: null };
+  if (space && space.H) { const need = d.H + GAP_TOP; res.h = { need: r1(need), have: space.H, ok: space.H >= need, short: r1(need - space.H), spare: r1(space.H - d.H) }; }
+  if (space && space.W) {
+    const need = d.W + 2 * GAP_SIDE, comfy = d.W + 2 * GAP_SIDE_COMFY;
+    res.w = { need: r1(need), have: space.W, ok: space.W >= need, tight: space.W >= need && space.W < comfy, short: r1(need - space.W), spare: r1(space.W - d.W) };
+  }
+  res.ok = (!res.h || res.h.ok) && (!res.w || res.w.ok);
+  res.tight = res.ok && !!(res.w && res.w.tight);
+  return res;
+}
+// What the room AI sees where the top half of the machine would be (a sink, counter, shelf...).
+const OVERHEAD = /\b(sink|counter|countertop|cabinet|shelf|kitchen island|wardrobe|chest of drawers|bookcase|table|desk|stove|oven)\b/i;
+function overheadThing(){
+  if (!lastSeg || !occluder || !photoBitmap) return null;
+  const box = new THREE.Box3().setFromObject(occluder);
+  let x0 = 1, x1 = 0, y0 = 1, y1 = 0;
+  for (const x of [box.min.x, box.max.x]) for (const y of [box.min.y, box.max.y]) for (const z of [box.min.z, box.max.z]) {
+    const sc = worldToScreen(new THREE.Vector3(x, y, z)), im = screenToImage(sc.x, sc.y);
+    x0 = Math.min(x0, im.fx); x1 = Math.max(x1, im.fx); y0 = Math.min(y0, im.fy); y1 = Math.max(y1, im.fy);
+  }
+  x0 = Math.max(0, x0); x1 = Math.min(1, x1); y0 = Math.max(0, y0); y1 = Math.min(1, y1);
+  if (x1 <= x0 || y1 <= y0) return null;
+  const ytop = y0, ymid = y0 + (y1 - y0) * 0.5;
+  let best = null, bestF = 0.12;
+  for (const o of lastSeg) {
+    if (!o.mask || !OVERHEAD.test(o.label)) continue;
+    const { width: W, height: H, data } = o.mask; let hit = 0, all = 0;
+    for (let gy = 0; gy < 12; gy++) for (let gx = 0; gx < 24; gx++) {
+      const fx = x0 + (x1 - x0) * (gx + 0.5) / 24, fy = ytop + (ymid - ytop) * (gy + 0.5) / 12;
+      all++; if (data[((fy * H) | 0) * W + ((fx * W) | 0)] > 127) hit++;
+    }
+    if (hit / all > bestF) { bestF = hit / all; best = o.label.split(/[,;]/)[0].trim(); }
+  }
+  return best;
+}
+function showVerdict(){
+  const d = curDims(), r = fitCheck(d), label = MODELS[modelKey].label;
+  const spotOk = freePlaced || placementOk(machine.position.x, machine.position.z);
+  const over = overheadThing();
+  const rows = [];
+  if (r.h) rows.push(r.h.ok
+    ? ['✅', `Height: the ${label} is ${d.H} cm, the space is ${r.h.have} cm. ${r.h.spare} cm to spare above.`]
+    : ['❌', `Height: too tall. It needs ${r.h.need} cm (with a ${GAP_TOP} cm gap) and the space is ${r.h.have} cm, ${r.h.short} cm short. It would hit ${over ? 'the ' + over : 'what is above it'}.`]);
+  else rows.push(['✅', 'Height: nothing above this spot.']);
+  if (r.w) rows.push(!r.w.ok
+    ? ['❌', `Width: too wide. It needs ${r.w.need} cm (${GAP_SIDE} cm each side) and the space is ${r.w.have} cm, ${r.w.short} cm short.`]
+    : r.w.tight ? ['👌', `Width: ${d.W} cm in a ${r.w.have} cm space. It fits, but only ${r.w.spare} cm to spare; ${GAP_SIDE_COMFY} cm a side is comfortable.`]
+    : ['✅', `Width: ${d.W} cm in a ${r.w.have} cm space. ${r.w.spare} cm to spare.`]);
+  else rows.push(['✅', 'Width: open at the sides.']);
+  rows.push(['ℹ️', `Depth: ${d.D} cm, plus about ${GAP_BACK} cm behind for the hoses. A photo can't measure depth, so check it with a tape.`]);
+  if (!spotOk) rows.push(['⚠️', 'The AI thinks part of this spot isn’t clear floor. Move it, or long-press to place it exactly.']);
+  if (over && (!r.h || r.h.ok)) rows.push(['⚠️', `The AI sees a ${over} where the top of the machine would be. Check that it clears it.`]);
+  fitTitle.textContent = !r.ok ? '❌ Won’t fit here' : r.tight ? '👌 Tight fit' : (!spotOk || over) ? '⚠️ Fits the space, but check' : '✅ It fits!';
+  fitRows.innerHTML = rows.map(([i, t]) => `<div class="fitRow"><span class="fi">${i}</span><span>${t}</span></div>`).join('');
+  fitOthers.replaceChildren();
+  fitSheet.classList.add('open');
+}
+async function showOthers(){
+  fitOthers.innerHTML = '<span class="fitWait">Checking the other machines…</span>';
+  const items = [];
+  for (const k of Object.keys(MODELS)) {
+    let d; try { d = await dimsOf(k); } catch (e) { continue; }
+    const r = fitCheck(d), cur = k === modelKey;
+    const why = !r.ok ? [r.h && !r.h.ok ? `${r.h.short} cm too tall` : '', r.w && !r.w.ok ? `${r.w.short} cm too wide` : ''].filter(Boolean).join(', ')
+      : r.tight ? 'Fits, but tight' : 'Fits';
+    items.push(`<div class="fitOther"><span>${r.ok ? (r.tight ? '👌' : '✅') : '❌'}</span><span class="fo"><b>${MODELS[k].label}</b><small>${d.W} × ${d.D} × ${d.H} cm (W × D × H) · ${why}</small></span>` +
+      (cur ? '<small>Showing</small>' : r.ok ? `<button class="btn small go" type="button" data-k="${k}">Try it</button>` : '') + '</div>');
+  }
+  fitOthers.innerHTML = items.join('') || '<span class="fitWait">Couldn’t check the other machines.</span>';
+}
+fitOthers.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-k]'); if (!b) return;
+  fitOthers.innerHTML = '<span class="fitWait">Loading the ' + MODELS[b.dataset.k].label + '…</span>';
+  onModelLoaded = () => { showFootprint(false); showVerdict(); };
+  selectModel(b.dataset.k);
+});
+document.getElementById('placeHere').addEventListener('click', placeHere);
+document.getElementById('fitOthersBtn').addEventListener('click', showOthers);
+document.getElementById('fitMove').addEventListener('click', () => { fitSheet.classList.remove('open'); startPlacing(true); });
+document.getElementById('fitDone').addEventListener('click', () => {
+  fitSheet.classList.remove('open');
+  dockEl.inert = false; topBar.inert = false;
+  showDragHint();
+});
 
 // ---------- machine chooser + switcher ----------
 const chooser     = document.getElementById('chooser');
