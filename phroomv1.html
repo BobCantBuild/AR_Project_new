@@ -318,6 +318,12 @@
   .fitOther .fo b{display:block}
   .fitOther .fo small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
   .fitWait{color:var(--muted);font-size:13px}
+  .calConfirm{display:flex;flex-direction:column;gap:12px}
+  .calConfirm[hidden]{display:none}
+  .calSum{font-size:26px;font-weight:800;letter-spacing:-.01em;padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2)}
+  .calSum small{display:block;font-size:12.5px;font-weight:500;color:var(--muted);letter-spacing:0;margin-top:4px}
+  #calSheet.confirming > :not(.calConfirm):not(#calSheetTitle){display:none}
+  #calSheet.confirming #calSheetTitle{display:none}
   .calGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .calField{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
   .calLbl{font-weight:600}
@@ -695,6 +701,15 @@
       <button class="btn go" id="calApply" type="button" disabled>Apply</button>
     </div>
     <button class="linkBtn" id="calReset" type="button" hidden>Remove my measurements (go back to automatic)</button>
+    <div class="calConfirm" id="calConfirm" hidden>
+      <span class="sheetTitle">Are you sure? 🤔</span>
+      <span class="sheetSub">The machine will be checked against this space.</span>
+      <div class="calSum" id="calSum"></div>
+      <div class="sheetBtns">
+        <button class="btn dark" id="calConfirmBack" type="button">Change it</button>
+        <button class="btn go" id="calConfirmGo" type="button">Confirm</button>
+      </div>
+    </div>
   </div>
 
 <script type="module">
@@ -2808,6 +2823,7 @@ async function onMarksDone(){
   openCalSheet();
 }
 function openCalSheet(){
+  hideCalConfirm();
   calEst = estimateMarked();
   calAutoH = calEst ? Math.round(calEst.H * 100) : 0;
   calAutoW = calEst ? Math.round(calEst.W * 100) : 0;
@@ -2905,7 +2921,17 @@ calRemark.addEventListener('click', () => {
   calBar.classList.add('on');
   calUpdateStep(); renderCalib();
 });
-calApply.addEventListener('click', () => {
+function showCalConfirm(){
+  const h = +calCm.value, w = calW.value === '' ? null : +calW.value;
+  const top = document.getElementById('calNoTop').checked, side = document.getElementById('calNoSide').checked;
+  document.getElementById('calSum').innerHTML = (top ? 'Nothing above' : 'Free height ' + h + ' cm') + '<br>' + (side || w === null ? 'Open at the sides' : 'Free width ' + w + ' cm') + '<small>Measured with a tape? Then confirm. If not, tap Change it.</small>';
+  calSheet.classList.add('confirming'); document.getElementById('calConfirm').hidden = false;
+}
+function hideCalConfirm(){ calSheet.classList.remove('confirming'); document.getElementById('calConfirm').hidden = true; }
+calApply.addEventListener('click', showCalConfirm);
+document.getElementById('calConfirmBack').addEventListener('click', hideCalConfirm);
+document.getElementById('calConfirmGo').addEventListener('click', () => { hideCalConfirm(); doCalApply(); });
+function doCalApply(){
   const h = +calCm.value, w = calW.value === '' ? null : +calW.value;
   if (!calValid(h) || !cal.base || !cal.top) return;
   // how far the customer moved each number from what the AI measured: one number edited sets the scale,
@@ -2924,7 +2950,7 @@ calApply.addEventListener('click', () => {
   closeCalib();
   refitCamera();
   startPlacing();
-});
+}
 calReset.addEventListener('click', () => {
   manualRefs = []; closeCalib(); refitCamera();
   toast('Back to automatic sizing');
