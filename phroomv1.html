@@ -318,12 +318,26 @@
   .fitOther .fo b{display:block}
   .fitOther .fo small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
   .fitWait{color:var(--muted);font-size:13px}
-  .calConfirm{display:flex;flex-direction:column;gap:12px}
-  .calConfirm[hidden]{display:none}
-  .calSum{font-size:26px;font-weight:800;letter-spacing:-.01em;padding:14px 16px;border-radius:14px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2)}
-  .calSum small{display:block;font-size:12.5px;font-weight:500;color:var(--muted);letter-spacing:0;margin-top:4px}
-  #calSheet.confirming > :not(.calConfirm):not(#calSheetTitle){display:none}
-  #calSheet.confirming #calSheetTitle{display:none}
+  .cfWrap{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:22px;
+    background:rgba(8,8,12,.6);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);animation:fadeIn .2s both}
+  .cfWrap[hidden]{display:none}
+  .cfCard{width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;
+    padding:26px 20px 18px;border-radius:28px;color:#fff;background:linear-gradient(180deg,#22222a,#15151b);
+    border:1px solid rgba(255,255,255,.14);box-shadow:0 24px 60px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04) inset;
+    animation:cfPop .38s cubic-bezier(.2,1.3,.4,1) both}
+  @keyframes cfPop{from{transform:translateY(24px) scale(.9);opacity:0}to{transform:none;opacity:1}}
+  .cfIcon{width:60px;height:60px;border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:30px;
+    background:linear-gradient(135deg,#ff3d5a,#ff8a3d);box-shadow:0 10px 24px rgba(255,61,90,.4);margin-top:-48px}
+  .cfTitle{font-size:21px;font-weight:800;letter-spacing:-.02em;margin-top:6px}
+  .cfSub{font-size:13px;color:var(--muted)}
+  .cfStats{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;margin-top:6px}
+  .cfStat{display:flex;flex-direction:column;gap:4px;padding:14px 8px;border-radius:18px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12)}
+  .cfLbl{font-size:12px;color:var(--muted);font-weight:600}
+  .cfVal{font-size:26px;font-weight:800;letter-spacing:-.02em}
+  .cfVal small{font-size:13px;font-weight:600;color:var(--muted);margin-left:2px}
+  .cfNote{width:100%;font-size:12.5px;line-height:1.4;padding:9px 12px;border-radius:12px;background:rgba(255,216,77,.12);color:#ffe9a3;margin-top:2px}
+  .cfGo{width:100%;flex:none;margin-top:6px;min-height:54px;border-radius:16px;font-size:16px}
+  .cfBack{appearance:none;border:0;background:none;color:var(--muted);font-weight:700;font-size:14px;padding:8px 12px;cursor:pointer}
   .calGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .calField{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
   .calLbl{font-weight:600}
@@ -701,14 +715,21 @@
       <button class="btn go" id="calApply" type="button" disabled>Apply</button>
     </div>
     <button class="linkBtn" id="calReset" type="button" hidden>Remove my measurements (go back to automatic)</button>
-    <div class="calConfirm" id="calConfirm" hidden>
-      <span class="sheetTitle">Are you sure? 🤔</span>
-      <span class="sheetSub">The machine will be checked against this space.</span>
-      <div class="calSum" id="calSum"></div>
-      <div class="sheetBtns">
-        <button class="btn dark" id="calConfirmBack" type="button">Change it</button>
-        <button class="btn go" id="calConfirmGo" type="button">Confirm</button>
+  </div>
+
+<!-- confirm popup: are you sure about this height and width? -->
+  <div class="cfWrap" id="calConfirm" hidden role="dialog" aria-modal="true" aria-labelledby="cfTitle">
+    <div class="cfCard">
+      <div class="cfIcon" aria-hidden="true">📏</div>
+      <div class="cfTitle" id="cfTitle">Confirm the space</div>
+      <div class="cfSub">We will check the machine against this size.</div>
+      <div class="cfStats">
+        <div class="cfStat"><span class="cfLbl">Free height</span><span class="cfVal" id="cfH">-</span></div>
+        <div class="cfStat"><span class="cfLbl">Free width</span><span class="cfVal" id="cfW">-</span></div>
       </div>
+      <div class="cfNote">💡 Measured with a tape? Then this will be accurate.</div>
+      <button class="btn go cfGo" id="calConfirmGo" type="button">Confirm</button>
+      <button class="cfBack" id="calConfirmBack" type="button">Change it</button>
     </div>
   </div>
 
@@ -2924,10 +2945,11 @@ calRemark.addEventListener('click', () => {
 function showCalConfirm(){
   const h = +calCm.value, w = calW.value === '' ? null : +calW.value;
   const top = document.getElementById('calNoTop').checked, side = document.getElementById('calNoSide').checked;
-  document.getElementById('calSum').innerHTML = (top ? 'Nothing above' : 'Free height ' + h + ' cm') + '<br>' + (side || w === null ? 'Open at the sides' : 'Free width ' + w + ' cm') + '<small>Measured with a tape? Then confirm. If not, tap Change it.</small>';
-  calSheet.classList.add('confirming'); document.getElementById('calConfirm').hidden = false;
+  document.getElementById('cfH').innerHTML = top ? '<small>Nothing above</small>' : h + '<small>cm</small>';
+  document.getElementById('cfW').innerHTML = side || w === null ? '<small>Open sides</small>' : w + '<small>cm</small>';
+  document.getElementById('calConfirm').hidden = false;
 }
-function hideCalConfirm(){ calSheet.classList.remove('confirming'); document.getElementById('calConfirm').hidden = true; }
+function hideCalConfirm(){ document.getElementById('calConfirm').hidden = true; }
 calApply.addEventListener('click', showCalConfirm);
 document.getElementById('calConfirmBack').addEventListener('click', hideCalConfirm);
 document.getElementById('calConfirmGo').addEventListener('click', () => { hideCalConfirm(); doCalApply(); });
@@ -2955,7 +2977,7 @@ calReset.addEventListener('click', () => {
   manualRefs = []; closeCalib(); refitCamera();
   toast('Back to automatic sizing');
 });
-window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && cal.on) closeCalib(); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !document.getElementById('calConfirm').hidden) { hideCalConfirm(); return; } if (e.key === 'Escape' && cal.on) closeCalib(); });
 
 // ---------- place it, then: will it fit in the space that was measured? ----------
 // The marks measure the free space (floor to the underside of a sink or counter, and the gap
