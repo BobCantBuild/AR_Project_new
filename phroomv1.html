@@ -321,6 +321,7 @@
   .cfWrap{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;padding:22px;
     background:rgba(8,8,12,.6);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);animation:fadeIn .2s both}
   .cfWrap[hidden]{display:none}
+  #modeAsk .cfCard{max-height:92vh;overflow-y:auto;padding-top:34px}
   .cfCard{width:100%;max-width:340px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;
     padding:26px 20px 18px;border-radius:28px;color:#fff;background:linear-gradient(180deg,#22222a,#15151b);
     border:1px solid rgba(255,255,255,.14);box-shadow:0 24px 60px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.04) inset;
@@ -342,8 +343,8 @@
   .maOpt:active{transform:scale(.98)}
   .maOpt:hover,.maOpt:focus-visible{border-color:#fff;outline:none}
   .maOpt small{font-size:12.5px;color:var(--muted);font-weight:500;line-height:1.35}
-  #calSheet.openMode .calGrid{grid-template-columns:1fr}
-  #calSheet.openMode .calField:nth-child(2),#calSheet.openMode .calTogs{display:none}
+  #calSheet.hideH .calGrid,#calSheet.hideW .calGrid{grid-template-columns:1fr}
+  #calSheet.hideH .calField:nth-child(1),#calSheet.hideW .calField:nth-child(2),.calTogs{display:none}
   .cfStats.one{grid-template-columns:1fr}
   .cfBack{appearance:none;border:0;background:none;color:var(--muted);font-weight:700;font-size:14px;padding:8px 12px;cursor:pointer}
   .calGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -729,10 +730,12 @@
   <div class="cfWrap" id="modeAsk" hidden role="dialog" aria-modal="true" aria-labelledby="maTitle">
     <div class="cfCard">
       <div class="cfIcon" aria-hidden="true">📍</div>
-      <div class="cfTitle" id="maTitle">Where will the machine go?</div>
+      <div class="cfTitle" id="maTitle">What limits the machine?</div>
       <div class="cfSub">Pick one.</div>
-      <button class="maOpt" id="maTight" type="button"><b>🧱 A tight spot</b><small>Something is above it or next to it, like a shelf, a sink or a wall.</small></button>
-      <button class="maOpt" id="maOpen" type="button"><b>🌿 An open spot</b><small>Nothing is above it or next to it.</small></button>
+      <button class="maOpt" id="maH" type="button"><b>⬆️ The height is limited</b><small>Something is above it, like a shelf or a sink.</small></button>
+      <button class="maOpt" id="maW" type="button"><b>↔️ The width is limited</b><small>Something is at its sides, like a wall or a cabinet.</small></button>
+      <button class="maOpt" id="maBoth" type="button"><b>🧱 Both are limited</b><small>Something above it and at its sides.</small></button>
+      <button class="maOpt" id="maOpen" type="button"><b>🌿 Nothing limits it</b><small>Open space. Free in height and in width.</small></button>
       <button class="cfBack" id="maBack" type="button">Back</button>
     </div>
   </div>
@@ -1005,8 +1008,8 @@ document.getElementById('retake').addEventListener('click', resetPicker);
 /* After the photo is picked, go straight to marking the start and end points -- before anything is scanned. */
 document.getElementById('usephoto').addEventListener('click', () => { document.getElementById('modeAsk').hidden = false; });
 document.getElementById('maBack').addEventListener('click', () => { document.getElementById('modeAsk').hidden = true; });
-document.getElementById('maTight').addEventListener('click', () => { document.getElementById('modeAsk').hidden = true; setSpaceMode('tight'); startComposer('known'); });
-document.getElementById('maOpen').addEventListener('click', () => { document.getElementById('modeAsk').hidden = true; setSpaceMode('open'); startComposer('known'); });
+for (const [id, m] of [['maH', 'h'], ['maW', 'w'], ['maBoth', 'both'], ['maOpen', 'open']])
+  document.getElementById(id).addEventListener('click', () => { document.getElementById('modeAsk').hidden = true; setSpaceMode(m); startComposer('known'); });
 /* a little confetti when the picture is saved */
 function confetti(){
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -2727,25 +2730,23 @@ const cal = { on: false, base: null, top: null, wB: null, drag: null, preset: nu
 // up to its end, WIDTH runs from the same start sideways to its end. The start dot is shared, so moving it
 // moves both lines.
 const CAL_ORDER = ['base', 'top', 'wB'];
-let spaceMode = 'tight';                // 'tight': something above or beside it; 'open': nothing limits it
-const CAL_TXT_TIGHT = [
-  'Tap the floor corner of the spot.',
-  'Tap the top of the spot, like under the shelf or sink.',
-  'Tap the other side of the spot, like the wall or cabinet.',
-  'Drag a dot to fix it if needed, then tap Next.',
-];
-const CAL_TXT_OPEN = [
-  'Tap the bottom of something you know the height of, like a door.',
-  'Now tap the top of it.',
-  'Drag a dot to fix it if needed, then tap Next.',
-];
+const CAL_COL = { base: '#2ee67b', top: '#4aa3ff', wB: '#ff8fb3' };
+let spaceMode = 'both';                 // 'h': height limited, 'w': width limited, 'both', 'open': nothing limits it
+const MODE_ORDER = { h: ['base', 'top'], w: ['base', 'wB'], both: ['base', 'top', 'wB'], open: ['base', 'top'] };
+const FIX = 'Drag a dot to fix it if needed, then tap Next.';
+const CAL_TXT = {
+  h:    ['Tap the floor under the spot.', 'Tap the top of the spot, like under the shelf or sink.', FIX],
+  w:    ['Tap the floor corner of the spot.', 'Tap the other side of the spot, like the wall or cabinet.', FIX],
+  both: ['Tap the floor corner of the spot.', 'Tap the top of the spot, like under the shelf or sink.', 'Tap the other side of the spot, like the wall or cabinet.', FIX],
+  open: ['Tap the bottom of something you know the height of, like a door.', 'Now tap the top of it.', FIX],
+};
+const needH = () => spaceMode !== 'w';
+const needW = () => spaceMode === 'w' || spaceMode === 'both';
 function setSpaceMode(m){
   spaceMode = m;
   CAL_ORDER.length = 0;
-  CAL_ORDER.push(...(m === 'open' ? ['base', 'top'] : ['base', 'top', 'wB']));
+  CAL_ORDER.push(...MODE_ORDER[m]);
 }
-const CAL_COL = { base: '#2ee67b', top: '#4aa3ff', wB: '#ff8fb3' };   // points are photo fractions {fx, fy}
-
 const calScreen = (p) => imageToScreen(p.fx, p.fy);
 function calPhotoPoint(x, y){
   const im = screenToImage(x, y);
@@ -2792,7 +2793,7 @@ function showLoupe(p){
 const hideLoupe = () => { loupe.style.display = 'none'; };
 function calUpdateStep(msg){
   calNext.hidden = true;
-  const N = CAL_ORDER.length, txt = spaceMode === 'open' ? CAL_TXT_OPEN : CAL_TXT_TIGHT;
+  const N = CAL_ORDER.length, txt = CAL_TXT[spaceMode];
   const i = CAL_ORDER.findIndex((k) => !cal[k]), idx = i < 0 ? N : i;
   calBar.dataset.step = idx < 2 ? String(idx + 1) : '3';
   calStepNo.textContent = 'Step ' + (idx + 1) + ' of ' + (N + 1);
@@ -2845,8 +2846,8 @@ function closeCalib(){
    ends, meeting the same plane, give its width sideways. Metres. */
 let calEst = null, calAutoH = 0, calAutoW = 0;
 function estimateMarked(){
-  if (!cal.base || !cal.top || !cal.wB || !camera) return null;
-  const sb = calScreen(cal.base), st = calScreen(cal.top);
+  if (!cal.base || !camera || (needH() && !cal.top) || (needW() && !cal.wB)) return null;
+  const sb = calScreen(cal.base);
   const P = groundHit(sb.x, sb.y); if (!P) return null;
   camera.updateMatrixWorld();
   const cp = camera.position;
@@ -2859,10 +2860,10 @@ function estimateMarked(){
     const k = ((P.x - ray.origin.x) * n.x + (P.z - ray.origin.z) * n.z) / den; if (k <= 0) return null;
     return ray.origin.clone().addScaledVector(ray.direction, k);
   };
-  const Q = onPlane(st), A = onPlane(sb), B = onPlane(calScreen(cal.wB));
-  if (!Q || !A || !B) return null;
-  const H = Q.y, W = Math.abs((B.x - A.x) * -n.z + (B.z - A.z) * n.x);
-  return H > 0.05 && isFinite(H) && isFinite(W) ? { H, W } : null;
+  let H = 0, W = 0;
+  if (needH()) { const Q = onPlane(calScreen(cal.top)); if (!Q) return null; H = Q.y; if (!(H > 0.05) || !isFinite(H)) return null; }
+  if (needW()) { const A = onPlane(sb), B = onPlane(calScreen(cal.wB)); if (!A || !B) return null; W = Math.abs((B.x - A.x) * -n.z + (B.z - A.z) * n.x); if (!isFinite(W)) return null; }
+  return { H, W };
 }
 // Next: the first time, scan the room (the AI fit is what the height and width are measured with),
 // then show what the AI measured for the marked box, ready to edit.
@@ -2881,8 +2882,9 @@ async function onMarksDone(){
 function openCalSheet(){
   hideCalConfirm();
   const open = spaceMode === 'open';
-  calSheet.classList.toggle('openMode', open);
-  document.getElementById('calSheetTitle').textContent = open ? 'How tall is it? 📏' : 'Check the spot 📏';
+  calSheet.classList.toggle('hideH', !needH());
+  calSheet.classList.toggle('hideW', !needW());
+  document.getElementById('calSheetTitle').textContent = open ? 'How tall is it? 📏' : spaceMode === 'h' ? 'Check the height 📏' : spaceMode === 'w' ? 'Check the width 📏' : 'Check the spot 📏';
   calSheetSub.textContent = open ? 'Type its real height. Use a tape if you can.' : 'These sizes are an AI guess. Type the real size if you know it.';
   document.querySelector('label[for="calCm"] .calLbl').textContent = open ? 'Height' : 'Height of the spot';
   document.querySelector('label[for="calW"] .calLbl').textContent = 'Width of the spot';
@@ -2898,14 +2900,14 @@ function openCalSheet(){
   calEst = estimateMarked();
   calAutoH = calEst ? Math.round(calEst.H * 100) : 0;
   calAutoW = calEst ? Math.round(calEst.W * 100) : 0;
-  calCm.value = calAutoH || ''; calW.value = calAutoW >= 10 ? calAutoW : '';
-  calCm.parentNode.className = 'calIn' + (calAutoH ? ' auto' : '');
-  calW.parentNode.className = 'calIn' + (calAutoW >= 10 ? ' auto' : '');
+  calCm.value = needH() ? (calAutoH || '') : ''; calW.value = needW() && calAutoW >= 10 ? calAutoW : '';
+  calCm.parentNode.className = 'calIn' + (needH() && calAutoH ? ' auto' : '');
+  calW.parentNode.className = 'calIn' + (needW() && calAutoW >= 10 ? ' auto' : '');
   calReset.hidden = !manualRefs.length;
   calSheet.classList.add('open');
   calValidate();
   if (!calEst) calHint.textContent = 'The AI could not guess this one. Type the size, or tap Re-mark.';
-  else if (calAutoW < 10) calHint.textContent = 'The width line is too short. Tap Re-mark, or just change the height.';
+  else if (needW() && calAutoW < 10) calHint.textContent = 'The width line is too short. Tap Re-mark, or type the width.';
 }
 const calValid = (v) => v >= 20 && v <= 400;
 const calValidW = (v) => v >= 10 && v <= 400;
@@ -2916,11 +2918,11 @@ function calValidate(){
   calW.parentNode.classList.toggle('edited', !!edW);
   calCm.parentNode.classList.toggle('auto', !edH && !!calAutoH);
   calW.parentNode.classList.toggle('auto', !edW && calAutoW >= 10);
-  const okH = calValid(h), okW = w === null || calValidW(w);
+  const okH = !needH() || calValid(h), okW = !needW() || (w !== null && calValidW(w));
   calApply.disabled = !(okH && okW);
   calHint.classList.toggle('ok', okH && okW);
-  calHint.textContent = calCm.value !== '' && !okH ? 'Heights are in centimetres (20–400).'
-    : (w !== null && !okW) ? 'Widths are in centimetres (10–400).'
+  calHint.textContent = needH() && calCm.value !== '' && !okH ? 'Heights are in centimetres (20–400).'
+    : (needW() && w !== null && !okW) ? 'Widths are in centimetres (10–400).'
     : (edH || edW) ? 'Edited. Apply will resize the machine to match.'
     : calEst ? 'AI guess. Change it if you know the real size.' : calHint.textContent;
 }
@@ -2971,7 +2973,7 @@ const calRelease = () => {
   // the width line has to run sideways, not up and down
   if (cal.base && cal.wB && Math.abs(cal.base.fx - cal.wB.fx) < 0.03) {
     cal.wB = null; renderCalib();
-    calUpdateStep('Tap the other side, to the left or right of the corner.');
+    calUpdateStep('The width line has to run sideways. Tap the other side again.');
     return;
   }
   calUpdateStep();
@@ -2994,15 +2996,14 @@ calRemark.addEventListener('click', () => {
 });
 function showCalConfirm(){
   const open = spaceMode === 'open';
-  document.getElementById('cfTitle').textContent = open ? 'Confirm the height' : 'Confirm the spot';
+  document.getElementById('cfTitle').textContent = open || spaceMode === 'h' ? 'Confirm the height' : spaceMode === 'w' ? 'Confirm the width' : 'Confirm the spot';
   document.querySelector('#calConfirm .cfSub').textContent = open ? 'Is this the real height?' : 'We will check the machine against this size.';
   document.querySelector('#cfH').parentNode.querySelector('.cfLbl').textContent = open ? 'Height' : 'Height of the spot';
-  document.querySelector('#cfW').parentNode.hidden = open;
-  document.querySelector('#calConfirm .cfStats').classList.toggle('one', open);
-  const h = +calCm.value, w = calW.value === '' ? null : +calW.value;
-  const top = document.getElementById('calNoTop').checked, side = document.getElementById('calNoSide').checked;
-  document.getElementById('cfH').innerHTML = top ? '<small>Nothing above</small>' : h + '<small>cm</small>';
-  document.getElementById('cfW').innerHTML = side || w === null ? '<small>Nothing at the sides</small>' : w + '<small>cm</small>';
+  document.querySelector('#cfH').parentNode.hidden = !needH();
+  document.querySelector('#cfW').parentNode.hidden = !needW();
+  document.querySelector('#calConfirm .cfStats').classList.toggle('one', !(needH() && needW()));
+  document.getElementById('cfH').innerHTML = (+calCm.value) + '<small>cm</small>';
+  document.getElementById('cfW').innerHTML = (+calW.value) + '<small>cm</small>';
   document.getElementById('calConfirm').hidden = false;
 }
 function hideCalConfirm(){ document.getElementById('calConfirm').hidden = true; }
@@ -3021,18 +3022,18 @@ function doCalApply(){
     return;
   }
   const h = +calCm.value, w = calW.value === '' ? null : +calW.value;
-  if (!calValid(h) || !cal.base || !cal.top) return;
+  if (!cal.base || (needH() && (!calValid(h) || !cal.top)) || (needW() && (w === null || !calValidW(w)))) return;
   // how far the customer moved each number from what the AI measured: one number edited sets the scale,
   // both edited (and disagreeing) settle on the middle
-  const rh = calAutoH ? h / calAutoH : 1, rw = calAutoW >= 10 && w !== null ? w / calAutoW : 1;
+  const rh = needH() && calAutoH ? h / calAutoH : 1, rw = needW() && calAutoW >= 10 && w !== null ? w / calAutoW : 1;
   const edH = Math.abs(rh - 1) > 0.005, edW = Math.abs(rw - 1) > 0.005;
-  space = { H: document.getElementById('calNoTop').checked ? null : h, W: document.getElementById('calNoSide').checked || w === null ? null : w,
-    est: !edH && !edW };   // est: the numbers are still the AI's own estimate, nobody typed them in
+  space = { H: needH() ? h : null, W: needW() ? w : null, est: !edH && !edW };   // est: still the AI's own guess
   if (!edH && !edW) { closeCalib(); startPlacing(); return; }
+  if (!needH()) { closeCalib(); startPlacing(); return; }     // width-only: the typed width feeds the fit check
   let H;
   if (edH && edW) H = (calEst ? calEst.H : h / 100) * Math.sqrt(rh * rw);
   else if (edH) H = h / 100;
-  else H = calEst.H * rw;
+  else H = (calEst ? calEst.H : h / 100) * rw;
   const mark = { top: cal.top.fy, base: cal.base.fy, H, name: null, sig: 0.02 };
   manualRefs.push(mark);
   closeCalib();
