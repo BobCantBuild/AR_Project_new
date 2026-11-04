@@ -340,6 +340,12 @@
   .cfGo{width:100%;flex:none;margin-top:6px;min-height:54px;border-radius:16px;font-size:16px}
   .maOpt{appearance:none;width:100%;text-align:left;display:flex;flex-direction:column;gap:3px;padding:14px 16px;border-radius:18px;cursor:pointer;color:#fff;
     background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);font-size:16px;transition:transform .12s,border-color .15s}
+  .maOpt[aria-pressed]{position:relative;padding-left:48px}
+  .maTick{position:absolute;left:14px;top:16px;width:22px;height:22px;border-radius:7px;border:2px solid rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;transition:background .15s,border-color .15s}
+  .maOpt[aria-pressed="true"]{border-color:#ffd84d;background:rgba(255,216,77,.12)}
+  .maOpt[aria-pressed="true"] .maTick{background:#e11d2a;border-color:#e11d2a}
+  .maOpt[aria-pressed="true"] .maTick::after{content:"✓"}
+  .maOr{font-size:12px;color:var(--muted)}
   .maOpt:active{transform:scale(.98)}
   .maOpt:hover,.maOpt:focus-visible{border-color:#fff;outline:none}
   .maOpt small{font-size:12.5px;color:var(--muted);font-weight:500;line-height:1.35}
@@ -731,10 +737,11 @@
     <div class="cfCard">
       <div class="cfIcon" aria-hidden="true">📍</div>
       <div class="cfTitle" id="maTitle">What limits the machine?</div>
-      <div class="cfSub">Pick one.</div>
-      <button class="maOpt" id="maH" type="button"><b>⬆️ The height is limited</b><small>Something is above it, like a shelf or a sink.</small></button>
-      <button class="maOpt" id="maW" type="button"><b>↔️ The width is limited</b><small>Something is at its sides, like a wall or a cabinet.</small></button>
-      <button class="maOpt" id="maBoth" type="button"><b>🧱 Both are limited</b><small>Something above it and at its sides.</small></button>
+      <div class="cfSub">Tick one or both.</div>
+      <button class="maOpt" id="maH" type="button" aria-pressed="false"><span class="maTick"></span><b>⬆️ The height is limited</b><small>Something is above it, like a shelf or a sink.</small></button>
+      <button class="maOpt" id="maW" type="button" aria-pressed="false"><span class="maTick"></span><b>↔️ The width is limited</b><small>Something is at its sides, like a wall or a cabinet.</small></button>
+      <button class="btn go cfGo" id="maGo" type="button" disabled>Continue</button>
+      <div class="maOr">or</div>
       <button class="maOpt" id="maOpen" type="button"><b>🌿 Nothing limits it</b><small>Open space. Free in height and in width.</small></button>
       <button class="cfBack" id="maBack" type="button">Back</button>
     </div>
@@ -1006,10 +1013,23 @@ fileInput.addEventListener('change', (e) => takePhotoFile(e.target.files && e.ta
 fileCam.addEventListener('change', (e) => takePhotoFile(e.target.files && e.target.files[0]));
 document.getElementById('retake').addEventListener('click', resetPicker);
 /* After the photo is picked, go straight to marking the start and end points -- before anything is scanned. */
-document.getElementById('usephoto').addEventListener('click', () => { document.getElementById('modeAsk').hidden = false; });
+document.getElementById('usephoto').addEventListener('click', () => {
+  for (const id of ['maH', 'maW']) document.getElementById(id).setAttribute('aria-pressed', 'false');
+  document.getElementById('maGo').disabled = true;
+  document.getElementById('modeAsk').hidden = false;
+});
 document.getElementById('maBack').addEventListener('click', () => { document.getElementById('modeAsk').hidden = true; });
-for (const [id, m] of [['maH', 'h'], ['maW', 'w'], ['maBoth', 'both'], ['maOpen', 'open']])
-  document.getElementById(id).addEventListener('click', () => { document.getElementById('modeAsk').hidden = true; setSpaceMode(m); startComposer('known'); });
+const maH = document.getElementById('maH'), maW = document.getElementById('maW'), maGo = document.getElementById('maGo');
+for (const b of [maH, maW]) b.addEventListener('click', () => {
+  b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
+  maGo.disabled = maH.getAttribute('aria-pressed') !== 'true' && maW.getAttribute('aria-pressed') !== 'true';
+});
+const startMode = (m) => { document.getElementById('modeAsk').hidden = true; setSpaceMode(m); startComposer('known'); };
+maGo.addEventListener('click', () => {
+  const h = maH.getAttribute('aria-pressed') === 'true', w = maW.getAttribute('aria-pressed') === 'true';
+  if (h || w) startMode(h && w ? 'both' : h ? 'h' : 'w');
+});
+document.getElementById('maOpen').addEventListener('click', () => startMode('open'));
 /* a little confetti when the picture is saved */
 function confetti(){
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
