@@ -766,9 +766,9 @@
       <button type="button" id="calUnitCm" class="on">cm</button><button type="button" id="calUnitFt">ft</button>
     </div>
     <div class="calGrid">
-      <label class="calField" for="calCm"><span class="calLbl">Height</span>
+      <label class="calField" for="calCm"><span class="calLbl">Height · vertical</span>
         <span class="calIn"><input id="calCm" type="number" inputmode="decimal" step="any" /><em>cm</em></span></label>
-      <label class="calField" for="calW"><span class="calLbl">Width</span>
+      <label class="calField" for="calW"><span class="calLbl">Width · horizontal</span>
         <span class="calIn"><input id="calW" type="number" inputmode="decimal" step="any" /><em>cm</em></span></label>
     </div>
     <div class="calTogs">
@@ -800,9 +800,9 @@
       <div class="cfIcon" aria-hidden="true">📍</div>
       <div class="cfTitle" id="maTitle">What is around the spot?</div>
       <div class="cfSub">Look at where the machine will stand.</div>
-      <button class="maOpt" id="maBoth" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/><rect x="6" y="5" width="44" height="4.5" rx="1" fill="#ffc400"/><rect x="3" y="5" width="8" height="29" fill="#ff6f9f"/><rect x="45" y="5" width="8" height="29" fill="#ff6f9f"/></svg><span><b>Above and beside it</b><small>A shelf or sink above, and a wall or cabinet at the sides.</small></span></button>
-      <button class="maOpt" id="maH" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/><rect x="6" y="5" width="44" height="4.5" rx="1" fill="#ffc400"/></svg><span><b>Only above it</b><small>A shelf or sink above. Open at the sides.</small></span></button>
-      <button class="maOpt" id="maW" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/><rect x="3" y="5" width="8" height="29" fill="#ff6f9f"/><rect x="45" y="5" width="8" height="29" fill="#ff6f9f"/></svg><span><b>Only beside it</b><small>A wall or cabinet at the sides. Nothing above.</small></span></button>
+      <button class="maOpt" id="maBoth" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/><rect x="6" y="5" width="44" height="4.5" rx="1" fill="#ffc400"/><rect x="3" y="5" width="8" height="29" fill="#ff6f9f"/><rect x="45" y="5" width="8" height="29" fill="#ff6f9f"/></svg><span><b>Above and beside it</b><small>Something over it and next to it.</small></span></button>
+      <button class="maOpt" id="maH" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/><rect x="6" y="5" width="44" height="4.5" rx="1" fill="#ffc400"/></svg><span><b>Only above it</b><small>Something over it. The sides are open.</small></span></button>
+      <button class="maOpt" id="maW" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/><rect x="3" y="5" width="8" height="29" fill="#ff6f9f"/><rect x="45" y="5" width="8" height="29" fill="#ff6f9f"/></svg><span><b>Only beside it</b><small>Something next to it. Nothing over it.</small></span></button>
       <button class="maOpt" id="maOpen" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/></svg><span><b>Nothing around it</b><small>Open space.</small></span></button>
       <button class="cfBack" id="maBack" type="button">Back</button>
     </div>
@@ -2813,10 +2813,10 @@ let spaceMode = 'both';                 // 'h': height limited, 'w': width limit
 const MODE_ORDER = { h: ['base', 'top'], w: ['base', 'wB'], both: ['base', 'top', 'wB'], open: ['base', 'top'] };
 const FIX = 'All set? Tap Next. You can drag a dot to move it.';
 const CAL_TXT = {
-  both: ['Tap the bottom corner of the spot, on the floor. (green dot)', 'Now tap the top of the spot, just under the shelf or sink. (blue dot)', 'Now tap the side of the spot, on the wall or cabinet. (pink dot)', FIX],
-  h:    ['Tap the floor, right under the shelf or sink. (green dot)', 'Now tap the underside of the shelf or sink. (blue dot)', FIX],
-  w:    ['Tap the floor, at one side of the spot. (green dot)', 'Now tap the floor at the other side, on the wall or cabinet. (pink dot)', FIX],
-  open: ['Tap the bottom of something you know the height of, like a door. (green dot)', 'Now tap the top of it. (blue dot)', FIX],
+  both: ['Tap the starting point on the floor. (green dot)', 'Now tap straight up (vertical) to the top of the space. (blue dot)', 'Now tap sideways (horizontal) to where the space ends, level with the green dot. (pink dot)', FIX],
+  h:    ['Tap the starting point on the floor. (green dot)', 'Now tap straight up (vertical) to the highest point the machine can reach. (blue dot)', FIX],
+  w:    ['Tap the starting point on the floor. (green dot)', 'Now tap sideways (horizontal) to where the space ends, level with the green dot. (pink dot)', FIX],
+  open: ['Tap the bottom of something you know the height of. (green dot)', 'Now tap straight up (vertical) to the top of it. (blue dot)', FIX],
 };
 const needH = () => spaceMode !== 'w';
 const needW = () => spaceMode === 'w' || spaceMode === 'both';
@@ -2970,11 +2970,11 @@ function openCalSheet(keep){
   calSheet.classList.toggle('hideW', !needW());
   document.getElementById('calSheetTitle').textContent = open ? 'How tall is it?' : spaceMode === 'h' ? 'Check the height' : spaceMode === 'w' ? 'Check the width' : 'Check the spot';
   calSheetSub.textContent = (open ? 'Measure the height of the thing you marked.'
-    : spaceMode === 'h' ? 'Measure from the floor up to what is above the spot (blue line).'
-    : spaceMode === 'w' ? 'Measure the gap between the two sides (pink line).'
-    : 'Measure from the floor up to what is above (blue), and the gap between the sides (pink).') + ' We use it to check the machine fits.';
-  document.querySelector('label[for="calCm"] .calLbl').textContent = 'Height';
-  document.querySelector('label[for="calW"] .calLbl').textContent = 'Width';
+    : spaceMode === 'h' ? 'Measure straight up (vertical), from the floor to the top of the space (blue line).'
+    : spaceMode === 'w' ? 'Measure straight across (horizontal), side to side (pink line).'
+    : 'Measure straight up (blue) and straight across (pink).') + ' We use it to check the machine fits.';
+  document.querySelector('label[for="calCm"] .calLbl').textContent = 'Height · vertical';
+  document.querySelector('label[for="calW"] .calLbl').textContent = 'Width · horizontal';
   if (open) {
     calEst = null; calAutoH = 0; calAutoW = 0;
     calCm.value = ''; calW.value = '';
@@ -3065,13 +3065,13 @@ const calRelease = () => {
   // the top has to be above the bottom -- anything else can't be a height
   if (cal.base && cal.top && cal.top.fy > cal.base.fy - 0.02) {
     cal.top = null; renderCalib();
-    calUpdateStep('The top should be higher than the bottom. Tap the top again.');
+    calUpdateStep('Tap higher up, straight above the green dot.');
     return;
   }
   // the width line has to run sideways, not up and down
   if (cal.base && cal.wB && Math.abs(cal.base.fx - cal.wB.fx) < 0.03) {
     cal.wB = null; renderCalib();
-    calUpdateStep('Tap a point to the left or right of the green dot.');
+    calUpdateStep('Tap sideways, to the left or right of the green dot.');
     return;
   }
   calUpdateStep();
@@ -3448,10 +3448,10 @@ function setJourney(n){
   document.getElementById('jLbl').textContent = n + ' of 6 · ' + JSTEPS[n];
 }
 const MARK_LINES = {
-  both: ['Tap the bottom corner of the spot, on the floor (green).', 'Tap the top of the spot, just under the shelf or sink (blue).', 'Tap the side of the spot, on the wall or cabinet (pink).'],
-  h:    ['Tap the floor, right under the shelf or sink (green).', 'Tap the underside of the shelf or sink (blue).'],
-  w:    ['Tap the floor, at one side of the spot (green).', 'Tap the floor at the other side, on the wall or cabinet (pink).'],
-  open: ['Tap the bottom of something you know the height of, like a door (green).', 'Tap the top of it (blue).'],
+  both: ['Tap the starting point on the floor (green).', 'Tap straight up (vertical) to the top of the space (blue).', 'Tap sideways (horizontal) to where the space ends, level with the green dot (pink).'],
+  h:    ['Tap the starting point on the floor (green).', 'Tap straight up (vertical) to the highest point the machine can reach (blue).'],
+  w:    ['Tap the starting point on the floor (green).', 'Tap sideways (horizontal) to where the space ends, level with the green dot (pink).'],
+  open: ['Tap the bottom of something you know the height of (green).', 'Tap straight up (vertical) to the top of it (blue).'],
 };
 function showHowTo(){
   const m = spaceMode, pts = { g: [30, 112], b: [30, 36], p: [112, 112] };
@@ -3474,7 +3474,7 @@ function showHowTo(){
 }
 document.getElementById('htGo').addEventListener('click', () => { document.getElementById('howTo').hidden = true; try { localStorage.setItem('ifbSeenHowTo', '1'); } catch (e) {} });
 const HELP = {
-  4: { title: 'How to measure', lines: ['Blue (Height): from the floor up to the shelf or sink.', 'Pink (Width): from one side of the spot to the other.', 'Use a tape if you can. Type cm or feet.', 'We use it to check that the machine fits.'], tips: '' },
+  4: { title: 'How to measure', lines: ['Blue (Height): measure straight up (vertical), from the floor to the top of the space.', 'Pink (Width): measure straight across (horizontal), side to side.', 'Use a tape if you can. Type cm or feet.', 'We use it to check that the machine fits.'], tips: '' },
   5: { title: 'Placing the machine', lines: ['Touch and drag anywhere to move the green box.', 'Use two fingers to turn it. The white edge is the door side.', 'Green = clear floor. Orange = check the spot.', 'Tap Place here when it looks right. Undo takes you back to your numbers.'], tips: '' },
 };
 function showHelp(){
