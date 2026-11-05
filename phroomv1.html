@@ -767,8 +767,8 @@
       <div class="cfTitle" id="cfTitle">Confirm the space</div>
       <div class="cfSub">We will check the machine against this size.</div>
       <div class="cfStats">
-        <div class="cfStat"><span class="cfLbl">Free height</span><span class="cfVal" id="cfH">-</span></div>
-        <div class="cfStat"><span class="cfLbl">Free width</span><span class="cfVal" id="cfW">-</span></div>
+        <div class="cfStat"><span class="cfLbl">Height</span><span class="cfVal" id="cfH">-</span></div>
+        <div class="cfStat"><span class="cfLbl">Width</span><span class="cfVal" id="cfW">-</span></div>
       </div>
       <div class="cfNote">💡 Measured with a tape? Then this will be accurate.</div>
       <button class="btn go cfGo" id="calConfirmGo" type="button">Confirm</button>
@@ -2941,7 +2941,7 @@ const calValidW = (v) => v >= 10 && v <= 400;
 const FT_CM = 30.48;
 let calUnit = 'cm';
 try { if (localStorage.getItem('ifbUnit') === 'ft') calUnit = 'ft'; } catch (e) {}
-const toCm = (v) => calUnit === 'ft' ? v * FT_CM : v;
+const toCm = (v) => +(calUnit === 'ft' ? v * FT_CM : v).toFixed(1);
 const fromCm = (cm) => calUnit === 'ft' ? +(cm / FT_CM).toFixed(2) : Math.round(cm);
 const calHcm = () => calCm.value === '' ? null : toCm(+calCm.value);
 const calWcm = () => calW.value === '' ? null : toCm(+calW.value);
