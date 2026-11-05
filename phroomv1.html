@@ -347,7 +347,7 @@
   .cfVal small{font-size:13px;font-weight:600;color:var(--muted);margin-left:2px}
   .cfNote{width:100%;font-size:12.5px;line-height:1.4;padding:9px 12px;border-radius:12px;background:rgba(255,216,77,.12);color:#ffe9a3;margin-top:2px}
   .cfGo{width:100%;flex:none;margin-top:6px;min-height:54px;border-radius:16px;font-size:16px}
-  .maArt{flex:none;width:56px;height:40px;border-radius:8px;background:rgba(255,255,255,.06)}
+  .maArt{flex:none;width:64px;height:46px;border-radius:10px;background:#ece9e4}
   .maOpt{flex-direction:row!important;align-items:center;gap:12px!important}
   .maOpt > span{display:flex;flex-direction:column;gap:3px}
   .maOpt{appearance:none;width:100%;text-align:left;display:flex;flex-direction:column;gap:3px;padding:14px 16px;border-radius:18px;cursor:pointer;color:#fff;
@@ -359,7 +359,7 @@
   #calSheet.hideH .calField:nth-child(1),#calSheet.hideW .calField:nth-child(2),.calTogs{display:none}
   .cfStats.one{grid-template-columns:1fr}
   .htArt{width:100%}
-  .htArt svg{width:100%;height:auto;border-radius:16px;background:rgba(255,255,255,.06)}
+  .htArt svg{width:100%;height:auto;border-radius:16px;background:#ece9e4}
   .htList{margin:0;padding:0 0 0 20px;width:100%;text-align:left;font-size:13.5px;line-height:1.5;display:flex;flex-direction:column;gap:4px}
   .htTips{width:100%;text-align:left;font-size:12.5px;color:var(--muted);line-height:1.45;display:flex;flex-direction:column;gap:3px}
   .htDot{animation:htPop 3.6s infinite both;transform-box:fill-box;transform-origin:center}
@@ -379,7 +379,9 @@
   body:has(#upload[style*="flex"]) .jSegs i.on{background:#e11d2a}
   body:has(#upload[style*="flex"]) .jLbl{color:#17181c;text-shadow:none}
   #helpBtn{position:fixed;z-index:26;top:calc(env(safe-area-inset-top,0px) + 10px);right:64px;font-weight:800;font-size:17px}
-  #helpBtn[hidden]{display:none}
+  #helpBtn[hidden],#homeBtn[hidden]{display:none}
+  #homeBtn{position:fixed;z-index:26;top:calc(env(safe-area-inset-top,0px) + 10px);right:114px}
+  @media (max-width:430px){ .top .brand{display:none} }
   .htArt:empty,.htTips:empty{display:none}
   .calGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .calField{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
@@ -559,6 +561,7 @@
     </button>
   </div>
 
+  <button class="round" id="homeBtn" type="button" aria-label="Back to Snap the spot" title="Start again" hidden><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7M6 10v9h12v-9"/></svg></button>
   <button class="round" id="helpBtn" type="button" aria-label="Help for this step" hidden>?</button>
   <div id="journey" hidden aria-hidden="true"><span class="jSegs"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="jLbl" id="jLbl"></span></div>
   <!-- ===== 1. Choose the machine ===== -->
@@ -797,10 +800,10 @@
       <div class="cfIcon" aria-hidden="true">📍</div>
       <div class="cfTitle" id="maTitle">What is around the spot?</div>
       <div class="cfSub">Look at where the machine will stand.</div>
-      <button class="maOpt" id="maBoth" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="34" x2="54" y2="34" stroke="#9aa0ab" stroke-width="2"/><rect x="19" y="16" width="18" height="18" rx="2" fill="rgba(255,255,255,.16)" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 2"/><rect x="6" y="9" width="44" height="4" rx="1" fill="#ffd84d"/><rect x="3" y="9" width="8" height="25" fill="#ff8fb3"/><rect x="45" y="9" width="8" height="25" fill="#ff8fb3"/></svg><span><b>Above and beside it</b><small>A shelf or sink above, and a wall or cabinet at the sides.</small></span></button>
-      <button class="maOpt" id="maH" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="34" x2="54" y2="34" stroke="#9aa0ab" stroke-width="2"/><rect x="19" y="16" width="18" height="18" rx="2" fill="rgba(255,255,255,.16)" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 2"/><rect x="6" y="9" width="44" height="4" rx="1" fill="#ffd84d"/></svg><span><b>Only above it</b><small>A shelf or sink above. Open at the sides.</small></span></button>
-      <button class="maOpt" id="maW" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="34" x2="54" y2="34" stroke="#9aa0ab" stroke-width="2"/><rect x="19" y="16" width="18" height="18" rx="2" fill="rgba(255,255,255,.16)" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 2"/><rect x="3" y="9" width="8" height="25" fill="#ff8fb3"/><rect x="45" y="9" width="8" height="25" fill="#ff8fb3"/></svg><span><b>Only beside it</b><small>A wall or cabinet at the sides. Nothing above.</small></span></button>
-      <button class="maOpt" id="maOpen" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="34" x2="54" y2="34" stroke="#9aa0ab" stroke-width="2"/><rect x="19" y="16" width="18" height="18" rx="2" fill="rgba(255,255,255,.16)" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 2"/></svg><span><b>Nothing around it</b><small>Open space.</small></span></button>
+      <button class="maOpt" id="maBoth" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/><rect x="6" y="5" width="44" height="4.5" rx="1" fill="#ffc400"/><rect x="3" y="5" width="8" height="29" fill="#ff6f9f"/><rect x="45" y="5" width="8" height="29" fill="#ff6f9f"/></svg><span><b>Above and beside it</b><small>A shelf or sink above, and a wall or cabinet at the sides.</small></span></button>
+      <button class="maOpt" id="maH" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/><rect x="6" y="5" width="44" height="4.5" rx="1" fill="#ffc400"/></svg><span><b>Only above it</b><small>A shelf or sink above. Open at the sides.</small></span></button>
+      <button class="maOpt" id="maW" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/><rect x="3" y="5" width="8" height="29" fill="#ff6f9f"/><rect x="45" y="5" width="8" height="29" fill="#ff6f9f"/></svg><span><b>Only beside it</b><small>A wall or cabinet at the sides. Nothing above.</small></span></button>
+      <button class="maOpt" id="maOpen" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="35" x2="54" y2="35" stroke="#6b6f78" stroke-width="2"/><image class="maMachine" href="assets/thumb-front-loader.png" x="17.5" y="10.5" width="21" height="24.5" preserveAspectRatio="xMidYMax meet"/></svg><span><b>Nothing around it</b><small>Open space.</small></span></button>
       <button class="cfBack" id="maBack" type="button">Back</button>
     </div>
   </div>
@@ -1073,7 +1076,9 @@ fileCam.addEventListener('change', (e) => takePhotoFile(e.target.files && e.targ
 document.getElementById('retake').addEventListener('click', resetPicker);
 /* After the photo is picked, go straight to marking the start and end points -- before anything is scanned. */
 document.getElementById('usephoto').addEventListener('click', () => {
-  setJourney(2); document.getElementById('modeAsk').hidden = false; });
+  setJourney(2);
+  for (const im of document.querySelectorAll('.maMachine')) im.setAttribute('href', MODELS[modelKey].thumb);
+  document.getElementById('modeAsk').hidden = false; });
 document.getElementById('maBack').addEventListener('click', () => { document.getElementById('modeAsk').hidden = true; });
 for (const [id, m] of [['maH', 'h'], ['maW', 'w'], ['maBoth', 'both'], ['maOpen', 'open']])
   document.getElementById(id).addEventListener('click', () => { document.getElementById('modeAsk').hidden = true; setSpaceMode(m); startComposer('known'); });
@@ -3435,7 +3440,8 @@ const journeyEl = document.getElementById('journey');
 let curJourney = 0;
 function setJourney(n){
   curJourney = n || 0;
-  document.getElementById('helpBtn').hidden = !(n >= 3 && n <= 5);          // help only on the steps that need it: Mark, Size, Place
+  document.getElementById('helpBtn').hidden = !(n >= 3 && n <= 5);
+  document.getElementById('homeBtn').hidden = !(n >= 2);                    // Home: back to Snap the spot from any later step          // help only on the steps that need it: Mark, Size, Place
   if (!n) { journeyEl.hidden = true; return; }
   journeyEl.hidden = false;
   [...journeyEl.querySelectorAll('.jSegs i')].forEach((e, i) => e.classList.toggle('on', i < n));
@@ -3454,7 +3460,7 @@ function showHowTo(){
   if (m === 'both' || m === 'h') svg += '<rect x="14" y="26" width="112" height="10" rx="2" fill="#ffd84d"/>';
   if (m === 'both' || m === 'w') svg += '<rect x="6" y="26" width="24" height="90" fill="#ff8fb3"/><rect x="110" y="26" width="24" height="90" fill="#ff8fb3"/>';
   if (m === 'open') svg += '<rect x="40" y="30" width="60" height="86" rx="3" fill="rgba(255,255,255,.14)" stroke="#fff" stroke-width="2"/>';
-  svg += '<rect x="48" y="62" width="44" height="54" rx="3" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="1.6" stroke-dasharray="4 3"/>';
+  svg += '<image href="' + MODELS[modelKey].thumb + '" x="46" y="58" width="48" height="58" preserveAspectRatio="xMidYMax meet"/>';
   let k = 1;
   svg += dot('#2ee67b', m === 'open' ? 40 : 30, 116, 0, k++);
   if (m !== 'w') svg += dot('#4aa3ff', m === 'open' ? 40 : 30, m === 'open' ? 30 : 36, 1, k++);
@@ -3481,6 +3487,19 @@ function showHelp(){
   document.getElementById('howTo').hidden = false;
 }
 document.getElementById('helpBtn').addEventListener('click', showHelp);
+// Home: drop whatever is open and go back to the Snap the spot screen
+document.getElementById('homeBtn').addEventListener('click', () => {
+  for (const id of ['modeAsk', 'howTo', 'calConfirm']) document.getElementById(id).hidden = true;
+  fitSheet.classList.remove('open', 'bad'); calSheet.classList.remove('open');
+  placing = false; clearInterval(placeTimer); cancelAnimationFrame(fpRaf); placeBar.classList.remove('on');
+  fpLabel.hidden = true; handHint.hidden = true;
+  scanDeferred = false; holdMachine = false;
+  if (cal.on) closeCalib();
+  showFootprint(false);
+  dockEl.inert = false; topBar.inert = false;
+  if (machine) { machine.visible = true; needsRender = true; }
+  resetPicker(); showUpload();
+});
 let seenHowTo = false; try { seenHowTo = localStorage.getItem('ifbSeenHowTo') === '1'; } catch (e) {}
 // the placing box's label and the first-time hand
 const fpLabel = document.getElementById('fpLabel'), handHint = document.getElementById('handHint');
