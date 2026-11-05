@@ -277,6 +277,13 @@
   .iconBtn:disabled{opacity:.35}
   .iconBtn{appearance:none;width:34px;height:34px;border-radius:10px;cursor:pointer;color:#fff;font-size:15px;
     background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25)}
+  /* sheets never take over the screen: capped in height; on wide screens they become a side panel so the photo stays clear */
+  .calSheet,.sheet{max-height:52vh;overflow-y:auto}
+  .calSheet{gap:9px!important;padding-top:14px!important}
+  @media (min-width:700px) and (min-aspect-ratio:5/4){
+    .calSheet{left:auto!important;right:14px!important;bottom:14px!important;width:min(440px,calc(100% - 28px));border-radius:24px!important;max-height:calc(100vh - 28px)}
+    #fitSheet .sheet{left:auto;right:14px;bottom:14px;width:min(440px,calc(100% - 28px));border-radius:24px;max-height:calc(100vh - 28px)}
+  }
   .calSheet{position:fixed;left:0;right:0;bottom:0;z-index:35;display:none;flex-direction:column;gap:12px;
     max-height:80vh;overflow-y:auto;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 16px);
     background:#141414;border-top:1px solid var(--line);border-radius:20px 20px 0 0;
@@ -1205,7 +1212,26 @@ shutter.addEventListener('click', async () => {
   if (blob) takePhotoFile(new File([blob], 'my-room.jpg', { type: 'image/jpeg' }), pitch);
 });
 
+/* keep the marks / the machine visible above a bottom sheet: slide the photo up just enough */
+function unliftPhoto(){ stageEl.style.transform = ''; }
+function liftPhoto(sheetEl, ys){
+  unliftPhoto();
+  requestAnimationFrame(() => {
+    const r = sheetEl.getBoundingClientRect();     // (the sheet slides in, so use its final height, not where it is mid-slide)
+    if (!ys.length || r.width < innerWidth * 0.8) return;          // a side panel on wide screens: nothing to move
+    const limit = innerHeight - sheetEl.offsetHeight - 26, minTop = 96;
+    let shift = Math.max(0, Math.max(...ys) - limit);
+    shift = Math.min(shift, Math.max(0, Math.min(...ys) - minTop));   // never push the top point out of view
+    stageEl.style.transition = 'transform .25s ease';
+    stageEl.style.transform = shift ? 'translateY(' + (-shift) + 'px)' : '';
+  });
+}
+function liftForSheet(){
+  const top = stageEl.getBoundingClientRect().top;
+  liftPhoto(calSheet, CAL_ORDER.map((k) => cal[k]).filter(Boolean).map((p) => top + calScreen(p).y));
+}
 function showUpload(){
+  unliftPhoto();
   setJourney(1);
   stageEl.style.display = 'none';
   dockEl.style.display = 'none';
@@ -2899,6 +2925,7 @@ function placeCalBar(){
 // and Change photo or a model switch would pull the photo out from under the marks.
 const topBar = document.querySelector('.top');
 function openCalib(){
+  unliftPhoto();
   if (!photoBitmap || !machine || calBtn.disabled) return;
   Object.assign(cal, { on: true, base: null, top: null, wB: null, drag: null, preset: null });
   setJourney(3);
@@ -2911,6 +2938,7 @@ function openCalib(){
   calUpdateStep(); renderCalib();
 }
 function closeCalib(){
+  unliftPhoto();
   holdMachine = false;
   Object.assign(cal, { on: false, drag: null });
   calibEl.classList.remove('on'); calBar.classList.remove('on'); calSheet.classList.remove('open');
@@ -2980,7 +3008,7 @@ function openCalSheet(keep){
     calCm.value = ''; calW.value = '';
     calCm.parentNode.className = 'calIn'; calW.parentNode.className = 'calIn';
     calReset.hidden = !manualRefs.length;
-    calSheet.classList.add('open');
+    calSheet.classList.add('open'); liftForSheet();
     calValidate(); calHint.textContent = '';
     return;
   }
@@ -2988,7 +3016,7 @@ function openCalSheet(keep){
   calCm.value = ''; calW.value = '';
   calCm.parentNode.className = 'calIn'; calW.parentNode.className = 'calIn';
   calReset.hidden = !manualRefs.length;
-  calSheet.classList.add('open');
+  calSheet.classList.add('open'); liftForSheet();
   if (keep && lastTyped) { setUnit(lastTyped.unit, false); calCm.value = lastTyped.h; calW.value = lastTyped.w; }
   calValidate(); calHint.textContent = '';
   if (!keep) setTimeout(() => { try { (needH() ? calCm : calW).focus(); } catch (e) {} }, 350);
@@ -3219,6 +3247,7 @@ function tintFootprint(){
   needsRender = true;
 }
 function startPlacing(keep = false){
+  unliftPhoto();
   if (!machine) return;
   placing = true;
   setJourney(5); startPlacingExtras();
@@ -3325,6 +3354,11 @@ function showVerdict(){
   fitOthers.replaceChildren();
   if (machine) { machine.visible = !bad; needsRender = true; }       // won't fit: don't show the machine at all
   fitSheet.classList.add('open');
+  if (!bad && machine) {                              // keep the machine in view above the sheet
+    const topY = stageEl.getBoundingClientRect().top, d2 = curDims();
+    const base = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z)), tp = worldToScreen(new THREE.Vector3(machine.position.x, d2.H / 100, machine.position.z));
+    liftPhoto(fitSheet.querySelector('.sheet'), [topY + base.y, topY + tp.y]);
+  } else unliftPhoto();
 }
 async function showOthers(){
   fitOthers.innerHTML = '<span class="fitWait">Checking the other machines…</span>';
@@ -3373,7 +3407,7 @@ document.getElementById('fitNewPic').addEventListener('click', () => {
 });
 document.getElementById('fitMove').addEventListener('click', () => { fitSheet.classList.remove('open'); startPlacing(true); });
 document.getElementById('fitDone').addEventListener('click', () => {
-  fitSheet.classList.remove('open');
+  fitSheet.classList.remove('open'); unliftPhoto();
   dockEl.inert = false; topBar.inert = false;
   showDragHint();
   toast('Happy with it? Tap Save it to keep your picture.', '', null, 6000);
