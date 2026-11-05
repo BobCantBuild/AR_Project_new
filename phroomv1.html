@@ -323,7 +323,10 @@
   #fitSheet.bad #fitGood,#fitSheet.bad #fitDepth,#fitSheet.bad #fitSave{display:none}
   #fitSheet.bad{background:rgba(0,0,0,.45);pointer-events:auto}
   #fitBad{flex-direction:column}
-  #fitSheet .sheet{pointer-events:auto;max-height:62vh}
+  #fitSheet .sheet{pointer-events:auto;max-height:62vh;animation:none!important;transition:transform .32s cubic-bezier(.2,.9,.3,1);will-change:transform}
+  #fitHead{display:flex;flex-direction:column;gap:2px;touch-action:none;cursor:grab;padding:2px 0 4px}
+  .fitHint{display:none;font-size:12px;color:var(--muted)}
+  #fitSheet.peek .fitHint{display:block}
   .fitTitle{font-weight:800;font-size:20px;letter-spacing:-.01em}
   .fitRows{display:flex;flex-direction:column;gap:8px}
   .fitRow{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.4}
@@ -755,7 +758,7 @@
   <!-- After placing: will it fit in that space, and which other machines would -->
   <div class="sheetWrap" id="fitSheet">
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fitTitle">
-      <span class="fitTitle" id="fitTitle"></span>
+      <div id="fitHead"><span class="fitTitle" id="fitTitle"></span><span class="fitHint" id="fitHint">Swipe up for details ⌃</span></div>
       <div class="fitRows" id="fitRows"></div>
       <div class="fitOthers" id="fitOthers"></div>
       <button class="btn dark" id="fitOthersBtn" type="button">💡 What else fits here?</button>
@@ -1221,13 +1224,13 @@ shutter.addEventListener('click', async () => {
 
 /* keep the marks / the machine visible above a bottom sheet: slide the photo up just enough */
 function unliftPhoto(){ stageEl.style.transform = ''; stageEl.classList.remove('fitted'); }
-function fitPhoto(sheetEl){
+function fitPhoto(sheetEl, visibleH){
   unliftPhoto();
   requestAnimationFrame(() => {
     const r = sheetEl.getBoundingClientRect();
     if (r.width < innerWidth * 0.8) return;                       // a side panel on wide screens: the photo is already clear
     const topPad = 84, gap = 14;                                  // below the top bar and the step strip
-    const availH = innerHeight - sheetEl.offsetHeight - topPad - gap;   // (the sheet slides in: use its final height)
+    const availH = innerHeight - (visibleH || sheetEl.offsetHeight) - topPad - gap;   // (the sheet slides in: use its final height)
     let k = availH / Math.max(1, stageEl.offsetHeight);
     if (k >= 0.98) return;
     k = Math.max(0.45, k);
@@ -3362,10 +3365,29 @@ function showVerdict(){
   fitOthers.replaceChildren();
   if (machine) { machine.visible = !bad; needsRender = true; }       // won't fit: don't show the machine at all
   fitSheet.classList.add('open');
-  if (!bad && machine) {                              // keep the machine in view above the sheet
-    fitPhoto(fitSheet.querySelector('.sheet'));
-  } else unliftPhoto();
+  requestAnimationFrame(() => setFitState(bad));      // fits: the sheet peeks (big photo); won't fit: opens fully
 }
+/* the result sheet: peeks with just the verdict, drag or tap it to open the details */
+const FIT_PEEK = 84;
+let fitExpanded = false;
+function setFitState(expanded){
+  const sh = fitSheet.querySelector('.sheet');
+  fitExpanded = expanded;
+  const off = Math.max(0, sh.offsetHeight - FIT_PEEK);
+  sh.style.transform = expanded ? 'translateY(0)' : 'translateY(' + off + 'px)';
+  fitSheet.classList.toggle('peek', !expanded);
+  if (!fitSheet.classList.contains('bad') && machine) fitPhoto(sh, expanded ? sh.offsetHeight : FIT_PEEK);   // big photo while peeking
+  else unliftPhoto();
+}
+(() => {
+  const head = document.getElementById('fitHead'), sh = fitSheet.querySelector('.sheet');
+  let y0 = 0, base = 0, moved = 0, drag = false;
+  head.addEventListener('pointerdown', (e) => { drag = true; y0 = e.clientY; moved = 0; const off = Math.max(0, sh.offsetHeight - FIT_PEEK); base = fitExpanded ? 0 : off; sh.style.transition = 'none'; try { head.setPointerCapture(e.pointerId); } catch (x) {} });
+  head.addEventListener('pointermove', (e) => { if (!drag) return; const dy = e.clientY - y0; moved = Math.max(moved, Math.abs(dy)); const off = Math.max(0, sh.offsetHeight - FIT_PEEK); sh.style.transform = 'translateY(' + Math.min(off, Math.max(0, base + dy)) + 'px)'; });
+  const end = (e) => { if (!drag) return; drag = false; sh.style.transition = ''; const dy = e.clientY - y0;
+    if (moved < 8) setFitState(!fitExpanded); else setFitState(fitExpanded ? dy < 40 : dy < -40); };
+  head.addEventListener('pointerup', end); head.addEventListener('pointercancel', end);
+})();
 async function showOthers(){
   fitOthers.innerHTML = '<span class="fitWait">Checking the other machines…</span>';
   const items = [];
@@ -3399,7 +3421,7 @@ document.getElementById('placeUndo').addEventListener('click', () => {
 });
 document.getElementById('fitOthersBtn').addEventListener('click', showOthers);
 document.getElementById('fitRetry').addEventListener('click', () => {
-  fitSheet.classList.remove('open', 'bad');
+  fitSheet.classList.remove('open', 'bad'); fitSheet.querySelector('.sheet').style.transform = '';
   placing = false; clearInterval(placeTimer);
   dockEl.inert = false; topBar.inert = false; calBtn.disabled = false;
   openCalib();                                        // measure again from the start
