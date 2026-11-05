@@ -356,6 +356,8 @@
   .calLbl{font-weight:600}
   .calIn{display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:14px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08)}
   .calIn:focus-within{border-color:#fff}
+  .calIn input[type=number]{-moz-appearance:textfield;appearance:textfield}
+  .calIn input::-webkit-outer-spin-button,.calIn input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
   .calIn input{flex:1;min-width:0;width:100%;padding:12px 0;border:0;background:none;color:#fff;font-size:22px;font-weight:700;outline:none}
   .calIn em{font-style:normal;color:var(--muted);font-size:13px}
   .calIn.auto{border-color:rgba(138,230,191,.7)}
@@ -717,10 +719,10 @@
     <span class="sheetTitle" id="calSheetTitle">Check the space 📏</span>
     <span class="sheetSub" id="calSheetSub"></span>
     <div class="calGrid">
-      <label class="calField" for="calCm"><span class="calLbl">Height of the spot</span>
-        <span class="calIn"><input id="calCm" type="number" inputmode="decimal" min="20" max="400" step="1" placeholder="cm" /><em>cm</em></span></label>
-      <label class="calField" for="calW"><span class="calLbl">Width of the spot</span>
-        <span class="calIn"><input id="calW" type="number" inputmode="decimal" min="10" max="400" step="1" placeholder="cm" /><em>cm</em></span></label>
+      <label class="calField" for="calCm"><span class="calLbl">Height</span>
+        <span class="calIn"><input id="calCm" type="number" inputmode="decimal" min="20" max="400" step="1" /><em>cm</em></span></label>
+      <label class="calField" for="calW"><span class="calLbl">Width</span>
+        <span class="calIn"><input id="calW" type="number" inputmode="decimal" min="10" max="400" step="1" /><em>cm</em></span></label>
     </div>
     <div class="calTogs">
       <label class="calTog"><input type="checkbox" id="calNoTop" /> Nothing above</label>
@@ -2892,10 +2894,10 @@ function openCalSheet(){
   const open = spaceMode === 'open';
   calSheet.classList.toggle('hideH', !needH());
   calSheet.classList.toggle('hideW', !needW());
-  document.getElementById('calSheetTitle').textContent = open ? 'How tall is it? 📏' : spaceMode === 'h' ? 'Check the height 📏' : spaceMode === 'w' ? 'Check the width 📏' : 'Check the spot 📏';
-  calSheetSub.textContent = open ? 'Type its real height. Use a tape if you can.' : 'Type the real size of the spot. Use a tape if you can.';
-  document.querySelector('label[for="calCm"] .calLbl').textContent = open ? 'Height' : 'Height of the spot';
-  document.querySelector('label[for="calW"] .calLbl').textContent = 'Width of the spot';
+  document.getElementById('calSheetTitle').textContent = open ? 'How tall is it?' : spaceMode === 'h' ? 'Check the height' : spaceMode === 'w' ? 'Check the width' : 'Check the spot';
+  calSheetSub.textContent = 'Use a tape for the best result.';
+  document.querySelector('label[for="calCm"] .calLbl').textContent = 'Height';
+  document.querySelector('label[for="calW"] .calLbl').textContent = 'Width';
   if (open) {
     calEst = null; calAutoH = 0; calAutoW = 0;
     calCm.value = ''; calW.value = '';
@@ -2910,7 +2912,7 @@ function openCalSheet(){
   calCm.parentNode.className = 'calIn'; calW.parentNode.className = 'calIn';
   calReset.hidden = !manualRefs.length;
   calSheet.classList.add('open');
-  calValidate(); calHint.textContent = 'Type the size in centimetres.';
+  calValidate(); calHint.textContent = '';
   setTimeout(() => { try { (needH() ? calCm : calW).focus(); } catch (e) {} }, 350);
 }
 const calValid = (v) => v >= 20 && v <= 400;
@@ -2919,10 +2921,10 @@ function calValidate(){
   const h = calCm.value === '' ? null : +calCm.value, w = calW.value === '' ? null : +calW.value;
   const okH = !needH() || (h !== null && calValid(h)), okW = !needW() || (w !== null && calValidW(w));
   calApply.disabled = !(okH && okW);
-  calHint.classList.toggle('ok', true);
+  calHint.classList.toggle('ok', okH && okW);
   calHint.textContent = needH() && h !== null && !okH ? 'Heights are in centimetres (20–400).'
     : (needW() && w !== null && !okW) ? 'Widths are in centimetres (10–400).'
-    : 'Type the size in centimetres.';
+    : '';
 }
 // Refit the camera with everything known about this photo (the AI's view plus the customer's marks),
 // keeping the machine at the same spot in the picture.
@@ -2996,7 +2998,7 @@ function showCalConfirm(){
   const open = spaceMode === 'open';
   document.getElementById('cfTitle').textContent = open || spaceMode === 'h' ? 'Confirm the height' : spaceMode === 'w' ? 'Confirm the width' : 'Confirm the spot';
   document.querySelector('#calConfirm .cfSub').textContent = open ? 'Is this the real height?' : 'We will check the machine against this size.';
-  document.querySelector('#cfH').parentNode.querySelector('.cfLbl').textContent = open ? 'Height' : 'Height of the spot';
+  document.querySelector('#cfH').parentNode.querySelector('.cfLbl').textContent = 'Height';
   document.querySelector('#cfH').parentNode.hidden = !needH();
   document.querySelector('#cfW').parentNode.hidden = !needW();
   document.querySelector('#calConfirm .cfStats').classList.toggle('one', !(needH() && needW()));
