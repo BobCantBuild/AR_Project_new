@@ -3072,6 +3072,16 @@ function refitCamera(){
   cam = { hc: calib.hc, pitchDeg: calib.pitchDeg, f35: calib.f35 };
   sAng.value = Math.round(cam.pitchDeg); vAng.textContent = sAng.value + '°';
   updateCamera();
+  // The typed height is the real size of the marked line. Scaling the whole scene by k and the camera height
+  // by k leaves the picture unchanged but makes that line k times taller -- so set the camera height until the
+  // marked line measures exactly what was typed. A taller space then makes the machine look smaller, as it should.
+  if (lastMark && manualRefs.includes(lastMark) && cal.base && cal.top) {
+    const est = estimateMarked();
+    if (est && est.H > 0.05) {
+      const k = Math.min(5, Math.max(0.2, lastMark.H / est.H));
+      if (isFinite(k) && Math.abs(k - 1) > 0.01) { cam.hc *= k; updateCamera(); }
+    }
+  }
   placeAtImageCoord(at.fx, at.fy);
   settlePlacement();
   calBtn.classList.toggle('glow', !calib.refs.length);
@@ -3160,6 +3170,7 @@ function doCalApply(){
     space = { H: null, W: null, est: false };
     lastTyped = { h: calCm.value, w: calW.value, unit: calUnit };
     lastMark = { top: cal.top.fy, base: cal.base.fy, H: hh / 100, name: null, sig: 0.02 };
+    manualRefs = [];                                  // a new measurement replaces the old one (they would fight each other)
     manualRefs.push(lastMark);
     closeCalib();
     refitCamera();
@@ -3173,12 +3184,14 @@ function doCalApply(){
   lastMark = null;
   if (needH()) {                                      // the typed height is the real-size reference
     lastMark = { top: cal.top.fy, base: cal.base.fy, H: h / 100, name: null, sig: 0.02 };
+    manualRefs = [];                                  // a new measurement replaces the old one (they would fight each other)
     manualRefs.push(lastMark);
     closeCalib();
     refitCamera();
     startPlacing();
     return;
   }
+  manualRefs = [];
   closeCalib(); startPlacing();                       // width-only: the typed width feeds the fit check
 }
 calReset.addEventListener('click', () => {
