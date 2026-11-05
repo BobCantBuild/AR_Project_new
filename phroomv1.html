@@ -309,6 +309,7 @@
   #fitSheet:not(.bad) #fitBad{display:none}
   #fitSheet.bad #fitGood,#fitSheet.bad #fitDepth{display:none}
   #fitSheet.bad{background:rgba(0,0,0,.45);pointer-events:auto}
+  #fitBad{flex-direction:column}
   #fitSheet .sheet{pointer-events:auto;max-height:62vh}
   .fitTitle{font-weight:800;font-size:20px;letter-spacing:-.01em}
   .fitRows{display:flex;flex-direction:column;gap:8px}
@@ -705,7 +706,8 @@
         <button class="btn go" id="fitDone" type="button">Done</button>
       </div>
       <div class="sheetBtns" id="fitBad">
-        <button class="btn go" id="fitRetry" type="button">🔁 Retry the measurement</button>
+        <button class="btn go" id="fitRetry" type="button">🔁 Retry with this picture</button>
+        <button class="btn dark" id="fitNewPic" type="button">🖼️ Retry with a different picture</button>
       </div>
     </div>
   </div>
@@ -3236,6 +3238,13 @@ document.getElementById('fitRetry').addEventListener('click', () => {
   placing = false; clearInterval(placeTimer);
   dockEl.inert = false; topBar.inert = false; calBtn.disabled = false;
   openCalib();                                        // measure again from the start
+});
+document.getElementById('fitNewPic').addEventListener('click', () => {
+  fitSheet.classList.remove('open', 'bad');
+  placing = false; clearInterval(placeTimer); placeBar.classList.remove('on');
+  dockEl.inert = false; topBar.inert = false;
+  if (machine) { machine.visible = true; needsRender = true; }
+  resetPicker(); showUpload();                      // back to choosing a photo
 });
 document.getElementById('fitMove').addEventListener('click', () => { fitSheet.classList.remove('open'); startPlacing(true); });
 document.getElementById('fitDone').addEventListener('click', () => {
