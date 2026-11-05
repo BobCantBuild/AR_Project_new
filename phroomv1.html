@@ -306,6 +306,9 @@
   .placeBar .pt small{display:block;color:var(--muted);font-weight:500;font-size:12px;margin-top:2px}
   /* the fit verdict: the photo and the machine stay visible above it */
   #fitSheet{background:transparent;pointer-events:none}
+  #fitSheet:not(.bad) #fitBad{display:none}
+  #fitSheet.bad #fitGood,#fitSheet.bad #fitDepth{display:none}
+  #fitSheet.bad{background:rgba(0,0,0,.45);pointer-events:auto}
   #fitSheet .sheet{pointer-events:auto;max-height:62vh}
   .fitTitle{font-weight:800;font-size:20px;letter-spacing:-.01em}
   .fitRows{display:flex;flex-direction:column;gap:8px}
@@ -697,9 +700,12 @@
       <div class="fitRows" id="fitRows"></div>
       <div class="fitOthers" id="fitOthers"></div>
       <button class="btn dark" id="fitOthersBtn" type="button">💡 What else fits here?</button>
-      <div class="sheetBtns">
+      <div class="sheetBtns" id="fitGood">
         <button class="btn dark" id="fitMove" type="button">Move it</button>
         <button class="btn go" id="fitDone" type="button">Done</button>
+      </div>
+      <div class="sheetBtns" id="fitBad">
+        <button class="btn go" id="fitRetry" type="button">🔁 Retry the measurement</button>
       </div>
     </div>
   </div>
@@ -2885,7 +2891,7 @@ function openCalSheet(){
   calSheet.classList.toggle('hideH', !needH());
   calSheet.classList.toggle('hideW', !needW());
   document.getElementById('calSheetTitle').textContent = open ? 'How tall is it? 📏' : spaceMode === 'h' ? 'Check the height 📏' : spaceMode === 'w' ? 'Check the width 📏' : 'Check the spot 📏';
-  calSheetSub.textContent = open ? 'Type its real height. Use a tape if you can.' : 'These sizes are an AI guess. Type the real size if you know it.';
+  calSheetSub.textContent = open ? 'Type its real height. Use a tape if you can.' : 'Type the real size of the spot. Use a tape if you can.';
   document.querySelector('label[for="calCm"] .calLbl').textContent = open ? 'Height' : 'Height of the spot';
   document.querySelector('label[for="calW"] .calLbl').textContent = 'Width of the spot';
   if (open) {
@@ -2897,34 +2903,24 @@ function openCalSheet(){
     calValidate(); calHint.textContent = '';
     return;
   }
-  calEst = estimateMarked();
-  calAutoH = calEst ? Math.round(calEst.H * 100) : 0;
-  calAutoW = calEst ? Math.round(calEst.W * 100) : 0;
-  calCm.value = needH() ? (calAutoH || '') : ''; calW.value = needW() && calAutoW >= 10 ? calAutoW : '';
-  calCm.parentNode.className = 'calIn' + (needH() && calAutoH ? ' auto' : '');
-  calW.parentNode.className = 'calIn' + (needW() && calAutoW >= 10 ? ' auto' : '');
+  calEst = null; calAutoH = 0; calAutoW = 0;              // the AI no longer fills the numbers in: the customer types them
+  calCm.value = ''; calW.value = '';
+  calCm.parentNode.className = 'calIn'; calW.parentNode.className = 'calIn';
   calReset.hidden = !manualRefs.length;
   calSheet.classList.add('open');
-  calValidate();
-  if (!calEst) calHint.textContent = 'The AI could not guess this one. Type the size, or tap Re-mark.';
-  else if (needW() && calAutoW < 10) calHint.textContent = 'The width line is too short. Tap Re-mark, or type the width.';
+  calValidate(); calHint.textContent = 'Type the size in centimetres.';
+  setTimeout(() => { try { (needH() ? calCm : calW).focus(); } catch (e) {} }, 350);
 }
 const calValid = (v) => v >= 20 && v <= 400;
 const calValidW = (v) => v >= 10 && v <= 400;
 function calValidate(){
-  const h = +calCm.value, w = calW.value === '' ? null : +calW.value;
-  const edH = calAutoH && Math.abs(h - calAutoH) >= 1, edW = calAutoW >= 10 && w !== null && Math.abs(w - calAutoW) >= 1;
-  calCm.parentNode.classList.toggle('edited', !!edH);
-  calW.parentNode.classList.toggle('edited', !!edW);
-  calCm.parentNode.classList.toggle('auto', !edH && !!calAutoH);
-  calW.parentNode.classList.toggle('auto', !edW && calAutoW >= 10);
-  const okH = !needH() || calValid(h), okW = !needW() || (w !== null && calValidW(w));
+  const h = calCm.value === '' ? null : +calCm.value, w = calW.value === '' ? null : +calW.value;
+  const okH = !needH() || (h !== null && calValid(h)), okW = !needW() || (w !== null && calValidW(w));
   calApply.disabled = !(okH && okW);
-  calHint.classList.toggle('ok', okH && okW);
-  calHint.textContent = needH() && calCm.value !== '' && !okH ? 'Heights are in centimetres (20–400).'
+  calHint.classList.toggle('ok', true);
+  calHint.textContent = needH() && h !== null && !okH ? 'Heights are in centimetres (20–400).'
     : (needW() && w !== null && !okW) ? 'Widths are in centimetres (10–400).'
-    : (edH || edW) ? 'Edited. Apply will resize the machine to match.'
-    : calEst ? 'AI guess. Change it if you know the real size.' : calHint.textContent;
+    : 'Type the size in centimetres.';
 }
 // Refit the camera with everything known about this photo (the AI's view plus the customer's marks),
 // keeping the machine at the same spot in the picture.
@@ -3023,22 +3019,15 @@ function doCalApply(){
   }
   const h = +calCm.value, w = calW.value === '' ? null : +calW.value;
   if (!cal.base || (needH() && (!calValid(h) || !cal.top)) || (needW() && (w === null || !calValidW(w)))) return;
-  // how far the customer moved each number from what the AI measured: one number edited sets the scale,
-  // both edited (and disagreeing) settle on the middle
-  const rh = needH() && calAutoH ? h / calAutoH : 1, rw = needW() && calAutoW >= 10 && w !== null ? w / calAutoW : 1;
-  const edH = Math.abs(rh - 1) > 0.005, edW = Math.abs(rw - 1) > 0.005;
-  space = { H: needH() ? h : null, W: needW() ? w : null, est: !edH && !edW };   // est: still the AI's own guess
-  if (!edH && !edW) { closeCalib(); startPlacing(); return; }
-  if (!needH()) { closeCalib(); startPlacing(); return; }     // width-only: the typed width feeds the fit check
-  let H;
-  if (edH && edW) H = (calEst ? calEst.H : h / 100) * Math.sqrt(rh * rw);
-  else if (edH) H = h / 100;
-  else H = (calEst ? calEst.H : h / 100) * rw;
-  const mark = { top: cal.top.fy, base: cal.base.fy, H, name: null, sig: 0.02 };
-  manualRefs.push(mark);
-  closeCalib();
-  refitCamera();
-  startPlacing();
+  space = { H: needH() ? h : null, W: needW() ? w : null, est: false };
+  if (needH()) {                                      // the typed height is the real-size reference
+    manualRefs.push({ top: cal.top.fy, base: cal.base.fy, H: h / 100, name: null, sig: 0.02 });
+    closeCalib();
+    refitCamera();
+    startPlacing();
+    return;
+  }
+  closeCalib(); startPlacing();                       // width-only: the typed width feeds the fit check
 }
 calReset.addEventListener('click', () => {
   manualRefs = []; closeCalib(); refitCamera();
@@ -3213,8 +3202,12 @@ function showVerdict(){
   fitTitle.textContent = space && space.est && (space.H || space.W)
     ? (!r.ok ? '❌ Looks too small' : r.tight ? '👌 Looks like a tight fit' : '✅ Looks like it fits')
     : !r.ok ? '❌ Won’t fit here' : r.tight ? '👌 Tight fit' : (!spotOk || over) ? '⚠️ Fits the space, but check' : '✅ It fits!';
-  fitRows.innerHTML = rows.map(([i, t]) => `<div class="fitRow"><span class="fi">${i}</span><span>${t}</span></div>`).join('');
+  const bad = !r.ok;
+  fitSheet.classList.toggle('bad', bad);
+  const shown = bad ? rows.filter((x) => x[0] === '❌') : rows;       // won't fit: only the reasons, nothing else
+  fitRows.innerHTML = shown.map(([i, t]) => `<div class="fitRow"><span class="fi">${i}</span><span>${t}</span></div>`).join('');
   fitOthers.replaceChildren();
+  if (machine) { machine.visible = !bad; needsRender = true; }       // won't fit: don't show the machine at all
   fitSheet.classList.add('open');
 }
 async function showOthers(){
@@ -3238,6 +3231,12 @@ fitOthers.addEventListener('click', (e) => {
 });
 document.getElementById('placeHere').addEventListener('click', placeHere);
 document.getElementById('fitOthersBtn').addEventListener('click', showOthers);
+document.getElementById('fitRetry').addEventListener('click', () => {
+  fitSheet.classList.remove('open', 'bad');
+  placing = false; clearInterval(placeTimer);
+  dockEl.inert = false; topBar.inert = false; calBtn.disabled = false;
+  openCalib();                                        // measure again from the start
+});
 document.getElementById('fitMove').addEventListener('click', () => { fitSheet.classList.remove('open'); startPlacing(true); });
 document.getElementById('fitDone').addEventListener('click', () => {
   fitSheet.classList.remove('open');
