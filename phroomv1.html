@@ -323,6 +323,9 @@
   #fitSheet.bad #fitGood,#fitSheet.bad #fitDepth,#fitSheet.bad #fitSave{display:none}
   #fitSheet.bad{background:rgba(0,0,0,.45);pointer-events:auto}
   #fitBad{flex-direction:column}
+  .fitRow2{display:flex;gap:10px;width:100%}
+  .fitRow2 #fitNewPic{flex:1;min-width:0;white-space:normal;line-height:1.2}
+  .fitRow2 .fitHomeBtn{flex:none;padding:0 18px}
   #fitSheet .sheet{pointer-events:auto;max-height:62vh;animation:none!important;transition:transform .32s cubic-bezier(.2,.9,.3,1);will-change:transform}
   #fitHead{display:flex;flex-direction:column;gap:2px;touch-action:none;cursor:grab;padding:2px 0 4px}
   .fitHint{display:none;font-size:12px;color:var(--muted)}
@@ -770,7 +773,10 @@
       <div class="sheetBtns" id="fitBad">
         <p class="fitHelp">Try other numbers on this photo, or start again with a new photo.</p>
         <button class="btn go" id="fitRetry" type="button">🔁 Retry with different measurement</button>
-        <button class="btn dark" id="fitNewPic" type="button">🖼️ Retry with a different picture</button>
+        <div class="fitRow2">
+          <button class="btn dark" id="fitNewPic" type="button">🖼️ Retry with a different picture</button>
+          <button class="btn dark fitHomeBtn" id="fitHome2" type="button" aria-label="Home">🏠 Home</button>
+        </div>
       </div>
     </div>
   </div>
@@ -3449,6 +3455,7 @@ document.getElementById('fitNewPic').addEventListener('click', () => {
 // the end of the journey: What else fits here? / Retry / Home
 document.getElementById('fitRetry2').addEventListener('click', () => document.getElementById('fitRetry').click());   // measure again on the same photo
 document.getElementById('fitHome').addEventListener('click', () => document.getElementById('homeBtn').click());
+document.getElementById('fitHome2').addEventListener('click', () => document.getElementById('homeBtn').click());
 document.getElementById('fitSave').addEventListener('click', () => document.getElementById('save').click());
 
 // ---------- machine chooser + switcher ----------
