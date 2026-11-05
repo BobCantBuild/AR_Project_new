@@ -403,6 +403,14 @@
   @media (max-width:430px){ .top .brand{display:none} }
   .htArt:empty,.htTips:empty{display:none}
   #chooserList[hidden]{display:none}
+  #pickOverlay{position:fixed;inset:0;z-index:80;display:none;flex-direction:column;align-items:center;gap:6px;overflow-y:auto;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 18px calc(env(safe-area-inset-bottom,0px) + 18px);
+    background:radial-gradient(120% 60% at 50% 0%,#fff 0%,#fff4e8 62%);color:#17181c}
+  #pickOverlay.open{display:flex;animation:fadeIn .2s both}
+  .poHead{width:100%;max-width:380px;display:flex;align-items:center;justify-content:space-between}
+  .poTitle{font-size:20px;font-weight:800;letter-spacing:-.02em}
+  .poClose{background:#17181c;color:#fff;font-size:18px;font-weight:800}
+  .poHost{width:100%;display:flex;justify-content:center}
   #chooser{gap:10px!important}
   #chooser .how{display:none}
   #chooser h1{font-size:30px}
@@ -843,7 +851,13 @@
     <button class="linkBtn" id="calReset" type="button" hidden>Remove my measurements (go back to automatic)</button>
   </div>
 
-<!-- how to mark: a small picture, shown the first time and from the ? button -->
+<!-- change the machine at any step: the same 3D showcase, with an X to leave -->
+  <div id="pickOverlay" role="dialog" aria-modal="true" aria-labelledby="poTitle">
+    <div class="poHead"><span class="poTitle" id="poTitle">Change machine</span><button class="round poClose" id="poClose" type="button" aria-label="Close">✕</button></div>
+    <div class="poHost" id="poHost"></div>
+  </div>
+
+  <!-- how to mark: a small picture, shown the first time and from the ? button -->
   <div class="cfWrap" id="howTo" hidden role="dialog" aria-modal="true" aria-labelledby="htTitle">
     <div class="cfCard">
       <div class="cfTitle" id="htTitle">How to mark</div>
@@ -3681,7 +3695,7 @@ function pickSize(){
 }
 function pickLoop(t){
   pickRaf = requestAnimationFrame(pickLoop);
-  if (!pickR || chooser.style.display === 'none') return;
+  if (!pickR || (chooser.style.display === 'none' && !pickOverlayOpen)) return;
   if (pickModel && !matchMedia('(prefers-reduced-motion: reduce)').matches) pickModel.rotation.y += 0.011;   // a slow turntable
   pickR.render(pickScene, pickCam);
 }
@@ -3707,14 +3721,39 @@ function startPicker(){
 function stopPicker(){ cancelAnimationFrame(pickRaf); pickRaf = 0; }
 document.getElementById('pickPrev').addEventListener('click', () => pickMove(-1));
 document.getElementById('pickNext').addEventListener('click', () => pickMove(1));
-document.getElementById('pickGo').addEventListener('click', () => startWith(PICK_ORDER[pickIdx]));
+let pickOverlayOpen = false;
+const pickOverlay = document.getElementById('pickOverlay'), pickHome = document.getElementById('pick').parentNode;
+function openPickOverlay(){
+  pickOverlayOpen = true;
+  pickIdx = Math.max(0, PICK_ORDER.indexOf(modelKey));
+  document.getElementById('poHost').appendChild(document.getElementById('pick'));     // the same showcase, moved in here
+  document.getElementById('pickGo').textContent = 'Use this machine';
+  pickOverlay.classList.add('open');
+  startPicker(); pickSize();
+}
+function closePickOverlay(){
+  pickOverlayOpen = false;
+  pickOverlay.classList.remove('open');
+  document.getElementById('pickGo').textContent = 'Select this machine';
+  pickHome.insertBefore(document.getElementById('pick'), pickHome.querySelector('.how'));
+  if (chooser.style.display === 'none') stopPicker();
+}
+document.getElementById('poClose').addEventListener('click', closePickOverlay);
+document.getElementById('pickGo').addEventListener('click', () => {
+  const k = PICK_ORDER[pickIdx];
+  if (!pickOverlayOpen) { startWith(k); return; }
+  closePickOverlay();
+  if (k === modelKey) return;
+  if (fitSheet.classList.contains('open')) onModelLoaded = () => { showFootprint(false); showVerdict(); };   // on the result screen: re-check with the new machine
+  selectModel(k);
+});
 (() => {                                                    // swipe left / right on the stage
   let x0 = 0, y0 = 0, down = false;
   pickEls.stage.addEventListener('pointerdown', (e) => { down = true; x0 = e.clientX; y0 = e.clientY; });
   pickEls.stage.addEventListener('pointerup', (e) => { if (!down) return; down = false; const dx = e.clientX - x0, dy = e.clientY - y0; if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) pickMove(dx < 0 ? 1 : -1); });
   pickEls.stage.addEventListener('pointercancel', () => { down = false; });
 })();
-window.addEventListener('keydown', (e) => { if (chooser.style.display === 'none') return; if (e.key === 'ArrowRight') pickMove(1); else if (e.key === 'ArrowLeft') pickMove(-1); });
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && pickOverlayOpen) { closePickOverlay(); return; } if (chooser.style.display === 'none' && !pickOverlayOpen) return; if (e.key === 'ArrowRight') pickMove(1); else if (e.key === 'ArrowLeft') pickMove(-1); });
 window.addEventListener('resize', pickSize);
 new ResizeObserver(pickSize).observe(pickEls.stage);
 function startWith(k){
@@ -3725,7 +3764,7 @@ function startWith(k){
   showUpload();
 }
 
-machineChip.addEventListener('click', () => setMenu(!menu.classList.contains('open')));
+machineChip.addEventListener('click', openPickOverlay);
 menu.addEventListener('click', (e) => { if (e.target === menu) setMenu(false); });
 renderLists();
 startPicker();
