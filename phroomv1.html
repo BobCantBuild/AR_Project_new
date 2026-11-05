@@ -434,7 +434,7 @@
   .how div:nth-child(1) .hi{background:var(--pink)}.how div:nth-child(2) .hi{background:var(--lav)}.how div:nth-child(3) .hi{background:var(--mint)}
   .how div{font-weight:600;color:var(--k)}
   .tip{border:2px solid var(--k);font-weight:700;box-shadow:2px 2px 0 var(--k)}
-  .tip:nth-child(1){background:var(--pop)}.tip:nth-child(2){background:var(--pink)}.tip:nth-child(3){background:var(--lav)}
+  .tip:nth-child(1){background:var(--pop)}.tip:nth-child(2){background:var(--pink)}.tip:nth-child(3){background:var(--lav)}.tip:nth-child(4){background:var(--mint)}
   .tip .i{color:var(--k)}
   #upload .bar{background:transparent;border-top:0}
   #upload .btn{border:2px solid var(--k);border-radius:18px;box-shadow:3px 3px 0 var(--k);font-weight:800}
@@ -500,7 +500,7 @@
   #chooser::after,#upload::after{right:-80px;bottom:8%;background:#8f7bff;animation:drift2 11s ease-in-out infinite}
   .upArt{animation:floaty 3.4s ease-in-out infinite}
   .tip{animation:tipIn .5s both}
-  .tip:nth-child(1){animation-delay:.1s}.tip:nth-child(2){animation-delay:.2s}.tip:nth-child(3){animation-delay:.3s}
+  .tip:nth-child(1){animation-delay:.1s}.tip:nth-child(2){animation-delay:.2s}.tip:nth-child(3){animation-delay:.3s}.tip:nth-child(4){animation-delay:.4s}
   #upload .btn.go{background:linear-gradient(120deg,#ff3d5a,#ff8a3d,#ff3d8f);background-size:200% 100%;animation:shimmer 4s linear infinite,nudge 3s ease-in-out infinite}
   /* composer bar: a colour per action */
   #dock .btn.go{background:linear-gradient(120deg,#ff3d5a,#ff8a3d,#ff3d8f);background-size:200% 100%;animation:shimmer 4s linear infinite}
@@ -598,11 +598,12 @@
           <ellipse cx="75" cy="97" rx="17" ry="3" stroke="#9aa0ab" stroke-width="1.8"/>
         </svg>
         <h1>Snap the spot <span class="wave">📸</span></h1>
-        <p class="lead" id="introP">Show us the floor where it'll live. We drop it in at its real size.</p>
+        <p class="lead" id="introP">Take a photo of the spot where the machine will go. You'll place it yourself in the next steps.</p>
         <div class="tips">
           <span class="tip"><span class="te">👣</span>Step back 2–3 m</span>
-          <span class="tip"><span class="te">🏠</span>Get the floor in frame</span>
-          <span class="tip"><span class="te">🚪</span>A door or counter helps</span>
+          <span class="tip"><span class="te">🏠</span>Show the floor and the spot</span>
+          <span class="tip"><span class="te">📏</span>Have a tape measure handy</span>
+          <span class="tip"><span class="te">💡</span>Good light, phone held straight</span>
         </div>
       </div>
       <p class="reading" id="reading" role="status"><span class="busyEmoji" aria-hidden="true">🖼️</span>Reading your pic…</p>
