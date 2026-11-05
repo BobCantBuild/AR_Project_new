@@ -173,7 +173,7 @@
   #bg,#gl{position:absolute;inset:0;width:100%;height:100%;display:block}
   #gl{touch-action:none}
   #dock{display:none}
-  #dock[inert]{opacity:.35}
+  #dock[inert]{opacity:0;pointer-events:none}
   .spin{flex:none;width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   .hint{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:7;display:none;max-width:calc(100% - 24px);
@@ -257,7 +257,7 @@
   /* Compact, and kept off the marks: it sits at whichever edge of the photo is clear of them (see
      placeCalBar()), touches go straight through it to the photo, and it all but vanishes while a
      finger is down -- so no part of the photo is ever unmarkable. */
-  .calBar{position:absolute;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 56px);z-index:6;display:none;
+  .calBar{position:absolute;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 74px);z-index:6;display:none;
     align-items:center;gap:10px;padding:9px 10px 9px 13px;border-radius:14px;color:#fff;pointer-events:none;
     background:rgba(12,12,12,.88);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
     border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(0,0,0,.45);transition:opacity .15s}
@@ -303,6 +303,10 @@
     padding:10px 10px 10px 14px;border-radius:16px;color:#fff;font-size:13px;font-weight:600;line-height:1.35;
     background:rgba(12,12,12,.9);border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(0,0,0,.45)}
   .placeBar.on{display:flex}
+  .fpLabel{position:fixed;z-index:6;transform:translate(-50%,-100%);pointer-events:none;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#fff;background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.5);white-space:nowrap}
+  .fpLabel[hidden],.handHint[hidden]{display:none}
+  .handHint{position:absolute;left:34%;top:46%;z-index:6;font-size:44px;pointer-events:none;animation:handDrag 1.8s ease-in-out infinite;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))}
+  @keyframes handDrag{0%{transform:translate(0,0);opacity:0}15%{opacity:1}70%{transform:translate(110px,30px);opacity:1}100%{transform:translate(110px,30px);opacity:0}}
   .placeBar .pt{flex:1;min-width:0}
   .placeBar .pt small{display:block;color:var(--muted);font-weight:500;font-size:12px;margin-top:2px}
   /* the fit verdict: the photo and the machine stay visible above it */
@@ -343,6 +347,9 @@
   .cfVal small{font-size:13px;font-weight:600;color:var(--muted);margin-left:2px}
   .cfNote{width:100%;font-size:12.5px;line-height:1.4;padding:9px 12px;border-radius:12px;background:rgba(255,216,77,.12);color:#ffe9a3;margin-top:2px}
   .cfGo{width:100%;flex:none;margin-top:6px;min-height:54px;border-radius:16px;font-size:16px}
+  .maArt{flex:none;width:56px;height:40px;border-radius:8px;background:rgba(255,255,255,.06)}
+  .maOpt{flex-direction:row!important;align-items:center;gap:12px!important}
+  .maOpt > span{display:flex;flex-direction:column;gap:3px}
   .maOpt{appearance:none;width:100%;text-align:left;display:flex;flex-direction:column;gap:3px;padding:14px 16px;border-radius:18px;cursor:pointer;color:#fff;
     background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.16);font-size:16px;transition:transform .12s,border-color .15s}
   .maOpt:active{transform:scale(.98)}
@@ -351,14 +358,34 @@
   #calSheet.hideH .calGrid,#calSheet.hideW .calGrid{grid-template-columns:1fr}
   #calSheet.hideH .calField:nth-child(1),#calSheet.hideW .calField:nth-child(2),.calTogs{display:none}
   .cfStats.one{grid-template-columns:1fr}
+  .htArt{width:100%}
+  .htArt svg{width:100%;height:auto;border-radius:16px;background:rgba(255,255,255,.06)}
+  .htList{margin:0;padding:0 0 0 20px;width:100%;text-align:left;font-size:13.5px;line-height:1.5;display:flex;flex-direction:column;gap:4px}
+  .htTips{width:100%;text-align:left;font-size:12.5px;color:var(--muted);line-height:1.45;display:flex;flex-direction:column;gap:3px}
+  .htDot{animation:htPop 3.6s infinite both;transform-box:fill-box;transform-origin:center}
+  @keyframes htPop{0%,8%{opacity:0;transform:scale(.3)}16%,88%{opacity:1;transform:scale(1)}100%{opacity:0}}
   .cfBack{appearance:none;border:0;background:none;color:var(--muted);font-weight:700;font-size:14px;padding:8px 12px;cursor:pointer}
   .calUnit{display:inline-flex;align-self:flex-start;padding:3px;border-radius:999px;background:rgba(255,255,255,.1);gap:2px}
   .calUnit button{appearance:none;border:0;background:none;color:var(--muted);font-weight:700;font-size:13px;padding:6px 16px;border-radius:999px;cursor:pointer}
   .calUnit button.on{background:#fff;color:#111}
   .cfVal .alt{display:block;font-size:12px;font-weight:500;color:var(--muted);margin:2px 0 0;letter-spacing:0}
+  #journey{position:fixed;left:14px;right:14px;top:calc(env(safe-area-inset-top,0px) + 54px);z-index:19;display:flex;align-items:center;gap:10px;pointer-events:none}
+  #journey[hidden]{display:none}
+  .jSegs{flex:1;display:flex;gap:4px}
+  .jSegs i{flex:1;height:4px;border-radius:3px;background:rgba(255,255,255,.28)}
+  .jSegs i.on{background:#fff}
+  .jLbl{font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);white-space:nowrap}
+  body:has(#upload[style*="flex"]) .jSegs i{background:rgba(20,20,25,.18)}
+  body:has(#upload[style*="flex"]) .jSegs i.on{background:#e11d2a}
+  body:has(#upload[style*="flex"]) .jLbl{color:#17181c;text-shadow:none}
+  #helpBtn{font-weight:800;font-size:17px}
   .calGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .calField{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
   .calLbl{font-weight:600}
+  label[for="calCm"] .calLbl::before,label[for="calW"] .calLbl::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+  label[for="calCm"] .calLbl::before{background:#4aa3ff}
+  label[for="calW"] .calLbl::before{background:#ff8fb3}
+  .fitHelp{margin:0;font-size:12.5px;color:var(--muted);text-align:center}
   .calIn{display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:14px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08)}
   .calIn:focus-within{border-color:#fff}
   .calIn input[type=number]{-moz-appearance:textfield;appearance:textfield}
@@ -525,17 +552,19 @@
       <span class="mc" id="machineChipText">Front Loader</span><span class="chev" aria-hidden="true">▼</span>
     </button>
     <span class="grow"></span>
+    <button class="round" id="helpBtn" type="button" aria-label="Help">?</button>
     <button class="round" id="dimBtn" type="button" aria-pressed="true" aria-label="Hide dimensions" title="Dimensions" hidden>
       <svg viewBox="0 0 24 24"><path d="M3 12h18M3 7.5v9M21 7.5v9M7 9l-3 3 3 3M17 9l3 3-3 3"/></svg>
     </button>
   </div>
 
+  <div id="journey" hidden aria-hidden="true"><span class="jSegs"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="jLbl" id="jLbl"></span></div>
   <!-- ===== 1. Choose the machine ===== -->
   <section id="chooser">
     <img class="ch-brand" src="assets/IFB%20logo%201.png" alt="IFB" />
     <span class="sticker">✨ real size, real room</span>
     <h1>Which one's<br>your vibe? <span class="wave">😎</span></h1>
-    <p class="ch-sub">Pick a machine, snap your space, see it IRL before you buy.</p>
+    <p class="ch-sub">Pick a machine, snap your space, see it IRL before you buy.<br><b>Takes about 2 minutes. A tape measure helps.</b></p>
     <div class="choices" id="chooserList"></div>
     <div class="how" aria-hidden="true">
       <div><span class="hi">🧺</span>Pick your fave</div>
@@ -642,8 +671,10 @@
         <button class="iconBtn" id="calCancel" type="button" aria-label="Cancel measuring"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
     </div>
+    <div class="fpLabel" id="fpLabel" hidden></div>
+    <div class="handHint" id="handHint" hidden aria-hidden="true">👆</div>
     <div class="placeBar" id="placeBar" role="status" aria-live="polite">
-      <span class="pt">📍 Drag the box where the machine will stand.<small>Touch and drag anywhere. Two fingers turn it.</small></span>
+      <span class="pt">📍 Drag the green box to where the machine will stand.<small>White edge = door side · Orange = check the spot · Two fingers turn it</small></span>
       <button class="btn small dark" id="placeUndo" type="button">↩ Undo</button>
       <button class="btn small go" id="placeHere" type="button">Place here</button>
     </div>
@@ -715,6 +746,7 @@
         <button class="btn go" id="fitDone" type="button">Done</button>
       </div>
       <div class="sheetBtns" id="fitBad">
+        <p class="fitHelp">Try other numbers on this photo, or start again with a new photo.</p>
         <button class="btn go" id="fitRetry" type="button">🔁 Retry with different measurement</button>
         <button class="btn dark" id="fitNewPic" type="button">🖼️ Retry with a different picture</button>
       </div>
@@ -746,16 +778,31 @@
     <button class="linkBtn" id="calReset" type="button" hidden>Remove my measurements (go back to automatic)</button>
   </div>
 
-<!-- first question, after the photo: is anything limiting the spot? -->
+<!-- how to mark: a small picture, shown the first time and from the ? button -->
+  <div class="cfWrap" id="howTo" hidden role="dialog" aria-modal="true" aria-labelledby="htTitle">
+    <div class="cfCard">
+      <div class="cfTitle" id="htTitle">How to mark</div>
+      <div class="htArt" id="htArt"></div>
+      <ol class="htList" id="htList"></ol>
+      <div class="htTips">
+        <div>📏 Use a tape if you can. You can type cm or feet.</div>
+        <div>🟩 Green box = clear floor. 🟧 Orange = check the spot.</div>
+        <div>⚪ The white edge of the box is the door side.</div>
+      </div>
+      <button class="btn go cfGo" id="htGo" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- first question, after the photo: is anything limiting the spot? -->
   <div class="cfWrap" id="modeAsk" hidden role="dialog" aria-modal="true" aria-labelledby="maTitle">
     <div class="cfCard">
       <div class="cfIcon" aria-hidden="true">📍</div>
-      <div class="cfTitle" id="maTitle">What limits the machine?</div>
-      <div class="cfSub">Pick one.</div>
-      <button class="maOpt" id="maH" type="button"><b>⬆️ The height is limited</b><small>Something is above it, like a shelf or a sink.</small></button>
-      <button class="maOpt" id="maW" type="button"><b>↔️ The width is limited</b><small>Something is at its sides, like a wall or a cabinet.</small></button>
-      <button class="maOpt" id="maBoth" type="button"><b>🧱 Both are limited</b><small>Something above it and at its sides.</small></button>
-      <button class="maOpt" id="maOpen" type="button"><b>🌿 Nothing limits it</b><small>Open space. Free in height and in width.</small></button>
+      <div class="cfTitle" id="maTitle">What is around the spot?</div>
+      <div class="cfSub">Look at where the machine will stand.</div>
+      <button class="maOpt" id="maBoth" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="34" x2="54" y2="34" stroke="#9aa0ab" stroke-width="2"/><rect x="19" y="16" width="18" height="18" rx="2" fill="rgba(255,255,255,.16)" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 2"/><rect x="6" y="9" width="44" height="4" rx="1" fill="#ffd84d"/><rect x="3" y="9" width="8" height="25" fill="#ff8fb3"/><rect x="45" y="9" width="8" height="25" fill="#ff8fb3"/></svg><span><b>Above and beside it</b><small>A shelf or sink above, and a wall or cabinet at the sides.</small></span></button>
+      <button class="maOpt" id="maH" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="34" x2="54" y2="34" stroke="#9aa0ab" stroke-width="2"/><rect x="19" y="16" width="18" height="18" rx="2" fill="rgba(255,255,255,.16)" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 2"/><rect x="6" y="9" width="44" height="4" rx="1" fill="#ffd84d"/></svg><span><b>Only above it</b><small>A shelf or sink above. Open at the sides.</small></span></button>
+      <button class="maOpt" id="maW" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="34" x2="54" y2="34" stroke="#9aa0ab" stroke-width="2"/><rect x="19" y="16" width="18" height="18" rx="2" fill="rgba(255,255,255,.16)" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 2"/><rect x="3" y="9" width="8" height="25" fill="#ff8fb3"/><rect x="45" y="9" width="8" height="25" fill="#ff8fb3"/></svg><span><b>Only beside it</b><small>A wall or cabinet at the sides. Nothing above.</small></span></button>
+      <button class="maOpt" id="maOpen" type="button"><svg class="maArt" viewBox="0 0 56 40" aria-hidden="true"><line x1="2" y1="34" x2="54" y2="34" stroke="#9aa0ab" stroke-width="2"/><rect x="19" y="16" width="18" height="18" rx="2" fill="rgba(255,255,255,.16)" stroke="#fff" stroke-width="1.6" stroke-dasharray="3 2"/></svg><span><b>Nothing around it</b><small>Open space.</small></span></button>
       <button class="cfBack" id="maBack" type="button">Back</button>
     </div>
   </div>
@@ -1027,7 +1074,8 @@ fileInput.addEventListener('change', (e) => takePhotoFile(e.target.files && e.ta
 fileCam.addEventListener('change', (e) => takePhotoFile(e.target.files && e.target.files[0]));
 document.getElementById('retake').addEventListener('click', resetPicker);
 /* After the photo is picked, go straight to marking the start and end points -- before anything is scanned. */
-document.getElementById('usephoto').addEventListener('click', () => { document.getElementById('modeAsk').hidden = false; });
+document.getElementById('usephoto').addEventListener('click', () => {
+  setJourney(2); document.getElementById('modeAsk').hidden = false; });
 document.getElementById('maBack').addEventListener('click', () => { document.getElementById('modeAsk').hidden = true; });
 for (const [id, m] of [['maH', 'h'], ['maW', 'w'], ['maBoth', 'both'], ['maOpen', 'open']])
   document.getElementById(id).addEventListener('click', () => { document.getElementById('modeAsk').hidden = true; setSpaceMode(m); startComposer('known'); });
@@ -1052,7 +1100,7 @@ document.getElementById('save').addEventListener('click', confetti);
 document.getElementById('backBtn').addEventListener('click', () => {
   if (cal.on) { closeCalib(); return; }
   if (stageEl.style.display === 'block') { resetPicker(); showUpload(); }
-  else { resetPicker(); chooser.style.display = ''; }
+  else { resetPicker(); chooser.style.display = ''; setJourney(0); }
 });
 
 // ---------- in-app camera: live view, a level, and the phone's tilt saved with the photo ----------
@@ -1155,6 +1203,7 @@ shutter.addEventListener('click', async () => {
 });
 
 function showUpload(){
+  setJourney(1);
   stageEl.style.display = 'none';
   dockEl.style.display = 'none';
   hintEl.style.display = 'none';
@@ -2822,7 +2871,7 @@ function calUpdateStep(msg){
   const N = CAL_ORDER.length, txt = CAL_TXT[spaceMode];
   const i = CAL_ORDER.findIndex((k) => !cal[k]), idx = i < 0 ? N : i;
   calBar.dataset.step = idx < 2 ? String(idx + 1) : '3';
-  calStepNo.textContent = 'Step ' + (idx + 1) + ' of ' + (N + 1);
+  calStepNo.textContent = 'Tap ' + (idx + 1) + ' of ' + (N + 1);
   calStep.textContent = msg || txt[idx];
   if (idx === N) calNext.hidden = false;
   document.getElementById('calUndo').disabled = !CAL_ORDER.some((k) => cal[k]);
@@ -2833,7 +2882,7 @@ function calUpdateStep(msg){
 // unless that bottom point is down there itself, and after that wherever both dots can be seen.
 function placeCalBar(){
   const H = stageEl.clientHeight, bh = calBar.offsetHeight || 64;
-  const topBand = topBar.offsetHeight + bh + 14, botBand = H - bh - 24;   // stage px covered by the card, plus margin
+  const topBand = topBar.offsetHeight + bh + 32, botBand = H - bh - 24;   // stage px covered by the card, plus margin
   const ys = CAL_ORDER.map((k) => cal[k]).filter(Boolean).map((p) => calScreen(p).y);
   const clearTop = ys.every((y) => y > topBand), clearBot = ys.every((y) => y < botBand);
   const atBottom = calBar.classList.contains('bottom');
@@ -2849,6 +2898,8 @@ const topBar = document.querySelector('.top');
 function openCalib(){
   if (!photoBitmap || !machine || calBtn.disabled) return;
   Object.assign(cal, { on: true, base: null, top: null, wB: null, drag: null, preset: null });
+  setJourney(3);
+  if (!seenHowTo) { seenHowTo = true; showHowTo(); }
   machine.visible = false; needsRender = true;                   // out of the way of what's being marked
   clearTimeout(hintTimer); hintEl.style.display = 'none';
   closeSheets(); hideToast();
@@ -2909,12 +2960,16 @@ async function onMarksDone(){
 }
 function openCalSheet(keep){
   hideCalConfirm();
+  setJourney(4); scanEl.classList.remove('show');
   setUnit(calUnit, false);
   const open = spaceMode === 'open';
   calSheet.classList.toggle('hideH', !needH());
   calSheet.classList.toggle('hideW', !needW());
   document.getElementById('calSheetTitle').textContent = open ? 'How tall is it?' : spaceMode === 'h' ? 'Check the height' : spaceMode === 'w' ? 'Check the width' : 'Check the spot';
-  calSheetSub.textContent = 'Use a tape for the best result.';
+  calSheetSub.textContent = (open ? 'Measure the height of the thing you marked.'
+    : spaceMode === 'h' ? 'Measure from the floor up to what is above the spot (blue line).'
+    : spaceMode === 'w' ? 'Measure the gap between the two sides (pink line).'
+    : 'Measure from the floor up to what is above (blue), and the gap between the sides (pink).') + ' We use it to check the machine fits.';
   document.querySelector('label[for="calCm"] .calLbl').textContent = 'Height';
   document.querySelector('label[for="calW"] .calLbl').textContent = 'Width';
   if (open) {
@@ -3041,7 +3096,7 @@ calRemark.addEventListener('click', () => {
 function showCalConfirm(){
   const open = spaceMode === 'open';
   document.getElementById('cfTitle').textContent = open || spaceMode === 'h' ? 'Confirm the height' : spaceMode === 'w' ? 'Confirm the width' : 'Confirm the spot';
-  document.querySelector('#calConfirm .cfSub').textContent = open ? 'Is this the real height?' : 'We will check the machine against this size.';
+  document.querySelector('#calConfirm .cfSub').textContent = open ? 'Is this the real height?' : 'Next, you will place the machine on the floor.';
   document.querySelector('#cfH').parentNode.querySelector('.cfLbl').textContent = 'Height';
   document.querySelector('#cfH').parentNode.hidden = !needH();
   document.querySelector('#cfW').parentNode.hidden = !needW();
@@ -3162,6 +3217,7 @@ function tintFootprint(){
 function startPlacing(keep = false){
   if (!machine) return;
   placing = true;
+  setJourney(5); startPlacingExtras();
   if (!keep) anchorToSpace();
   showFootprint(true);
   dockEl.inert = true; topBar.inert = true;
@@ -3235,17 +3291,19 @@ function overheadThing(){
   }
   return best;
 }
+const sp = (cm) => calUnit === 'ft' ? (cm / FT_CM).toFixed(1) + ' ft (' + cm + ' cm)' : cm + ' cm';
 function showVerdict(){
+  setJourney(6);
   const d = curDims(), r = fitCheck(d), label = MODELS[modelKey].label;
   const spotOk = freePlaced || placementOk(machine.position.x, machine.position.z);
   const over = overheadThing();
   const rows = [];
   if (r.h) rows.push(r.h.ok
-    ? ['✅', `Height: the ${label} is ${d.H} cm, the space is ${r.h.have} cm. ${r.h.spare} cm to spare above.`]
-    : ['❌', `Height: too tall. It needs ${r.h.need} cm (with a ${GAP_TOP} cm gap) and the space is ${r.h.have} cm, ${r.h.short} cm short. It would hit ${over ? 'the ' + over : 'what is above it'}.`]);
+    ? ['✅', `Height: the ${label} is ${d.H} cm, you said the space is ${sp(r.h.have)}. ${r.h.spare} cm to spare above.`]
+    : ['❌', `Height: too tall. It needs ${r.h.need} cm (with a ${GAP_TOP} cm gap) and you said the space is ${sp(r.h.have)}, ${r.h.short} cm short. It would hit ${over ? 'the ' + over : 'what is above it'}.`]);
   else rows.push(['✅', 'Height: nothing above this spot.']);
   if (r.w) rows.push(!r.w.ok
-    ? ['❌', `Width: too wide. It needs ${r.w.need} cm (${GAP_SIDE} cm each side) and the space is ${r.w.have} cm, ${r.w.short} cm short.`]
+    ? ['❌', `Width: too wide. It needs ${r.w.need} cm (${GAP_SIDE} cm each side) and you said the space is ${sp(r.w.have)}, ${r.w.short} cm short.`]
     : r.w.tight ? ['👌', `Width: ${d.W} cm in a ${r.w.have} cm space. It fits, but only ${r.w.spare} cm to spare; ${GAP_SIDE_COMFY} cm a side is comfortable.`]
     : ['✅', `Width: ${d.W} cm in a ${r.w.have} cm space. ${r.w.spare} cm to spare.`]);
   else rows.push(['✅', 'Width: open at the sides.']);
@@ -3314,6 +3372,7 @@ document.getElementById('fitDone').addEventListener('click', () => {
   fitSheet.classList.remove('open');
   dockEl.inert = false; topBar.inert = false;
   showDragHint();
+  toast('Happy with it? Tap Save it to keep your picture.', '', null, 6000);
 });
 
 // ---------- machine chooser + switcher ----------
@@ -3371,6 +3430,56 @@ function selectModel(k){
 
 // First choice reveals the photo screen — the chooser is the true landing screen, so nobody
 // picks a photo before deciding what they're even placing in it.
+/* ---------- journey strip, how-to picture, help ---------- */
+const JSTEPS = [null, 'Photo', 'Spot', 'Mark', 'Size', 'Place', 'Result'];
+const journeyEl = document.getElementById('journey');
+function setJourney(n){
+  if (!n) { journeyEl.hidden = true; return; }
+  journeyEl.hidden = false;
+  [...journeyEl.querySelectorAll('.jSegs i')].forEach((e, i) => e.classList.toggle('on', i < n));
+  document.getElementById('jLbl').textContent = n + ' of 6 · ' + JSTEPS[n];
+}
+const MARK_LINES = {
+  both: ['Tap the floor corner of the spot (green).', 'Tap the top of the spot, under the shelf or sink (blue).', 'Tap the other side, at the wall or cabinet (pink).'],
+  h:    ['Tap the floor under the spot (green).', 'Tap the top of the spot, under the shelf or sink (blue).'],
+  w:    ['Tap the floor corner of the spot (green).', 'Tap the other side, at the wall or cabinet (pink).'],
+  open: ['Tap the bottom of something you know the height of, like a door (green).', 'Tap the top of it (blue).'],
+};
+function showHowTo(){
+  const m = spaceMode, pts = { g: [30, 112], b: [30, 36], p: [112, 112] };
+  const dot = (c, x, y, i, k) => '<g class="htDot" style="animation-delay:' + (i * 0.7) + 's"><circle cx="' + x + '" cy="' + y + '" r="8" fill="' + c + '" stroke="#fff" stroke-width="2.5"/><text x="' + x + '" y="' + (y + 4) + '" text-anchor="middle" font-size="10" font-weight="800" fill="#111">' + k + '</text></g>';
+  let svg = '<svg viewBox="0 0 140 130"><rect x="0" y="116" width="140" height="14" fill="rgba(255,255,255,.12)"/><line x1="0" y1="116" x2="140" y2="116" stroke="#9aa0ab" stroke-width="2"/>';
+  if (m === 'both' || m === 'h') svg += '<rect x="14" y="26" width="112" height="10" rx="2" fill="#ffd84d"/>';
+  if (m === 'both' || m === 'w') svg += '<rect x="6" y="26" width="24" height="90" fill="#ff8fb3"/><rect x="110" y="26" width="24" height="90" fill="#ff8fb3"/>';
+  if (m === 'open') svg += '<rect x="40" y="30" width="60" height="86" rx="3" fill="rgba(255,255,255,.14)" stroke="#fff" stroke-width="2"/>';
+  svg += '<rect x="48" y="62" width="44" height="54" rx="3" fill="rgba(255,255,255,.12)" stroke="#fff" stroke-width="1.6" stroke-dasharray="4 3"/>';
+  let k = 1;
+  svg += dot('#2ee67b', m === 'open' ? 40 : 30, 116, 0, k++);
+  if (m !== 'w') svg += dot('#4aa3ff', m === 'open' ? 40 : 30, m === 'open' ? 30 : 36, 1, k++);
+  if (m === 'both' || m === 'w') svg += dot('#ff8fb3', 112, 116, 2, k++);
+  svg += '</svg>';
+  document.getElementById('htArt').innerHTML = svg;
+  document.getElementById('htList').innerHTML = MARK_LINES[m].map((t) => '<li>' + t + '</li>').join('');
+  document.getElementById('howTo').hidden = false;
+}
+document.getElementById('htGo').addEventListener('click', () => { document.getElementById('howTo').hidden = true; try { localStorage.setItem('ifbSeenHowTo', '1'); } catch (e) {} });
+document.getElementById('helpBtn').addEventListener('click', showHowTo);
+let seenHowTo = false; try { seenHowTo = localStorage.getItem('ifbSeenHowTo') === '1'; } catch (e) {}
+// the placing box's label and the first-time hand
+const fpLabel = document.getElementById('fpLabel'), handHint = document.getElementById('handHint');
+let fpRaf = 0, handShown = false;
+function fpLoop(){
+  if (!placing || !machine) { fpLabel.hidden = true; return; }
+  const sc = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z)), d = curDims();
+  fpLabel.textContent = 'Machine: ' + d.W + ' × ' + d.D + ' cm';
+  fpLabel.style.left = sc.x + 'px'; fpLabel.style.top = (sc.y - 26) + 'px'; fpLabel.hidden = false;
+  fpRaf = requestAnimationFrame(fpLoop);
+}
+function startPlacingExtras(){
+  cancelAnimationFrame(fpRaf); fpLoop();
+  if (!handShown) { handShown = true; handHint.hidden = false; setTimeout(() => { handHint.hidden = true; }, 4500); }
+}
+glCanvas.addEventListener('pointerdown', () => { handHint.hidden = true; }, true);
 function startWith(k){
   modelKey = k;
   syncMenuChecks();
