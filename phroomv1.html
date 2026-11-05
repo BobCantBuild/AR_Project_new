@@ -378,7 +378,9 @@
   body:has(#upload[style*="flex"]) .jSegs i{background:rgba(20,20,25,.18)}
   body:has(#upload[style*="flex"]) .jSegs i.on{background:#e11d2a}
   body:has(#upload[style*="flex"]) .jLbl{color:#17181c;text-shadow:none}
-  #helpBtn{font-weight:800;font-size:17px}
+  #helpBtn{position:fixed;z-index:26;top:calc(env(safe-area-inset-top,0px) + 10px);right:64px;font-weight:800;font-size:17px}
+  #helpBtn[hidden]{display:none}
+  .htArt:empty,.htTips:empty{display:none}
   .calGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .calField{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted)}
   .calLbl{font-weight:600}
@@ -552,12 +554,12 @@
       <span class="mc" id="machineChipText">Front Loader</span><span class="chev" aria-hidden="true">▼</span>
     </button>
     <span class="grow"></span>
-    <button class="round" id="helpBtn" type="button" aria-label="Help">?</button>
     <button class="round" id="dimBtn" type="button" aria-pressed="true" aria-label="Hide dimensions" title="Dimensions" hidden>
       <svg viewBox="0 0 24 24"><path d="M3 12h18M3 7.5v9M21 7.5v9M7 9l-3 3 3 3M17 9l3 3-3 3"/></svg>
     </button>
   </div>
 
+  <button class="round" id="helpBtn" type="button" aria-label="Help for this step" hidden>?</button>
   <div id="journey" hidden aria-hidden="true"><span class="jSegs"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="jLbl" id="jLbl"></span></div>
   <!-- ===== 1. Choose the machine ===== -->
   <section id="chooser">
@@ -784,11 +786,7 @@
       <div class="cfTitle" id="htTitle">How to mark</div>
       <div class="htArt" id="htArt"></div>
       <ol class="htList" id="htList"></ol>
-      <div class="htTips">
-        <div>📏 Use a tape if you can. You can type cm or feet.</div>
-        <div>🟩 Green box = clear floor. 🟧 Orange = check the spot.</div>
-        <div>⚪ The white edge of the box is the door side.</div>
-      </div>
+      <div class="htTips" id="htTips"></div>
       <button class="btn go cfGo" id="htGo" type="button">Got it</button>
     </div>
   </div>
@@ -3090,6 +3088,7 @@ calNext.addEventListener('click', onMarksDone);
 calRemark.addEventListener('click', () => {
   calSheet.classList.remove('open');
   Object.assign(cal, { base: null, top: null, wB: null, preset: null });
+  setJourney(3);
   calBar.classList.add('on');
   calUpdateStep(); renderCalib();
 });
@@ -3433,7 +3432,10 @@ function selectModel(k){
 /* ---------- journey strip, how-to picture, help ---------- */
 const JSTEPS = [null, 'Photo', 'Spot', 'Mark', 'Size', 'Place', 'Result'];
 const journeyEl = document.getElementById('journey');
+let curJourney = 0;
 function setJourney(n){
+  curJourney = n || 0;
+  document.getElementById('helpBtn').hidden = !(n >= 3 && n <= 5);          // help only on the steps that need it: Mark, Size, Place
   if (!n) { journeyEl.hidden = true; return; }
   journeyEl.hidden = false;
   [...journeyEl.querySelectorAll('.jSegs i')].forEach((e, i) => e.classList.toggle('on', i < n));
@@ -3458,12 +3460,27 @@ function showHowTo(){
   if (m !== 'w') svg += dot('#4aa3ff', m === 'open' ? 40 : 30, m === 'open' ? 30 : 36, 1, k++);
   if (m === 'both' || m === 'w') svg += dot('#ff8fb3', 112, 116, 2, k++);
   svg += '</svg>';
+  document.getElementById('htTitle').textContent = 'How to mark';
+  document.getElementById('htTips').innerHTML = '<div>📏 Use a tape if you can. You can type cm or feet.</div>';
   document.getElementById('htArt').innerHTML = svg;
   document.getElementById('htList').innerHTML = MARK_LINES[m].map((t) => '<li>' + t + '</li>').join('');
   document.getElementById('howTo').hidden = false;
 }
 document.getElementById('htGo').addEventListener('click', () => { document.getElementById('howTo').hidden = true; try { localStorage.setItem('ifbSeenHowTo', '1'); } catch (e) {} });
-document.getElementById('helpBtn').addEventListener('click', showHowTo);
+const HELP = {
+  4: { title: 'How to measure', lines: ['Blue (Height): from the floor up to the shelf or sink.', 'Pink (Width): from one side of the spot to the other.', 'Use a tape if you can. Type cm or feet.', 'We use it to check that the machine fits.'], tips: '' },
+  5: { title: 'Placing the machine', lines: ['Touch and drag anywhere to move the green box.', 'Use two fingers to turn it. The white edge is the door side.', 'Green = clear floor. Orange = check the spot.', 'Tap Place here when it looks right. Undo takes you back to your numbers.'], tips: '' },
+};
+function showHelp(){
+  if (curJourney === 3) { showHowTo(); return; }
+  const h = HELP[curJourney]; if (!h) return;
+  document.getElementById('htTitle').textContent = h.title;
+  document.getElementById('htArt').innerHTML = '';
+  document.getElementById('htList').innerHTML = h.lines.map((t) => '<li>' + t + '</li>').join('');
+  document.getElementById('htTips').innerHTML = h.tips;
+  document.getElementById('howTo').hidden = false;
+}
+document.getElementById('helpBtn').addEventListener('click', showHelp);
 let seenHowTo = false; try { seenHowTo = localStorage.getItem('ifbSeenHowTo') === '1'; } catch (e) {}
 // the placing box's label and the first-time hand
 const fpLabel = document.getElementById('fpLabel'), handHint = document.getElementById('handHint');
