@@ -71,7 +71,7 @@
   .top{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:10px;
     padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 12px;background:linear-gradient(180deg,rgba(0,0,0,.4),rgba(0,0,0,0))}
   .brand{display:block;width:30px;height:30px;border-radius:7px;flex:none}
-  .machineChip{appearance:none;display:flex;align-items:center;gap:7px;min-width:0;padding:8px 13px;border-radius:999px;cursor:pointer;
+  .machineChip{max-width:calc(100vw - 250px);appearance:none;display:flex;align-items:center;gap:7px;min-width:0;padding:8px 13px;border-radius:999px;cursor:pointer;
     color:#fff;font-size:13px;font-weight:600;background:rgba(0,0,0,.55);border:1px solid rgba(255,255,255,.22);
     -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
   .machineChip .mc{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -279,6 +279,7 @@
     background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25)}
   /* sheets never take over the screen: capped in height; on wide screens they become a side panel so the photo stays clear */
   .calSheet,.sheet{max-height:52vh;overflow-y:auto}
+  #stage.fitted{border-radius:22px;overflow:hidden;box-shadow:0 14px 40px rgba(0,0,0,.55);background:#000}
   .calSheet{gap:9px!important;padding-top:14px!important}
   @media (min-width:700px) and (min-aspect-ratio:5/4){
     .calSheet{left:auto!important;right:14px!important;bottom:14px!important;width:min(440px,calc(100% - 28px));border-radius:24px!important;max-height:calc(100vh - 28px)}
@@ -306,7 +307,7 @@
   .calTog input{width:16px;height:16px;accent-color:#ffd84d;margin:0}
   .calTog:has(input:checked){border-color:#ffd84d;background:rgba(255,216,77,.14)}
   /* placing the machine: a bar over the photo while the footprint box is dragged into place */
-  .placeBar{position:absolute;left:10px;right:10px;bottom:10px;z-index:6;display:none;align-items:center;gap:10px;
+  .placeBar{position:fixed;left:10px;right:10px;bottom:calc(env(safe-area-inset-bottom,0px) + 8px);z-index:36;display:none;align-items:center;gap:10px;
     padding:10px 10px 10px 14px;border-radius:16px;color:#fff;font-size:13px;font-weight:600;line-height:1.35;
     background:rgba(12,12,12,.9);border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(0,0,0,.45)}
   .placeBar.on{display:flex}
@@ -325,7 +326,8 @@
   #fitSheet .sheet{pointer-events:auto;max-height:62vh}
   .fitTitle{font-weight:800;font-size:20px;letter-spacing:-.01em}
   .fitRows{display:flex;flex-direction:column;gap:8px}
-  .fitRow{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;line-height:1.45}
+  .fitRow{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.4}
+  #fitSheet .sheet{gap:9px}
   .fitRow .fi{flex:none;width:22px;text-align:center}
   .fitOthers{display:flex;flex-direction:column;gap:8px}
   .fitOthers:empty{display:none}
@@ -372,22 +374,26 @@
   .htDot{animation:htPop 3.6s infinite both;transform-box:fill-box;transform-origin:center}
   @keyframes htPop{0%,8%{opacity:0;transform:scale(.3)}16%,88%{opacity:1;transform:scale(1)}100%{opacity:0}}
   .cfBack{appearance:none;border:0;background:none;color:var(--muted);font-weight:700;font-size:14px;padding:8px 12px;cursor:pointer}
+  #calSheet .calUnit{position:absolute;top:12px;right:14px}
   .calUnit{display:inline-flex;align-self:flex-start;padding:3px;border-radius:999px;background:rgba(255,255,255,.1);gap:2px}
   .calUnit button{appearance:none;border:0;background:none;color:var(--muted);font-weight:700;font-size:13px;padding:6px 16px;border-radius:999px;cursor:pointer}
   .calUnit button.on{background:#fff;color:#111}
   .cfVal .alt{display:block;font-size:12px;font-weight:500;color:var(--muted);margin:2px 0 0;letter-spacing:0}
-  #journey{position:fixed;left:14px;right:14px;top:calc(env(safe-area-inset-top,0px) + 54px);z-index:19;display:flex;align-items:center;gap:10px;pointer-events:none}
+  #journey{position:fixed;left:14px;right:14px;padding:6px 12px;border-radius:999px;background:rgba(10,10,14,.5);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);top:calc(env(safe-area-inset-top,0px) + 54px);z-index:19;display:flex;align-items:center;gap:10px;pointer-events:none}
   #journey[hidden]{display:none}
   .jSegs{flex:1;display:flex;gap:4px}
   .jSegs i{flex:1;height:4px;border-radius:3px;background:rgba(255,255,255,.28)}
   .jSegs i.on{background:#fff}
   .jLbl{font-size:11px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.6);white-space:nowrap}
+  body:has(#upload[style*="flex"]) #journey{background:rgba(255,255,255,.7)}
   body:has(#upload[style*="flex"]) .jSegs i{background:rgba(20,20,25,.18)}
   body:has(#upload[style*="flex"]) .jSegs i.on{background:#e11d2a}
   body:has(#upload[style*="flex"]) .jLbl{color:#17181c;text-shadow:none}
-  #helpBtn{position:fixed;z-index:26;top:calc(env(safe-area-inset-top,0px) + 10px);right:64px;font-weight:800;font-size:17px}
+  #helpBtn{position:fixed;z-index:26;top:calc(env(safe-area-inset-top,0px) + 10px);right:58px;font-weight:800;font-size:17px}
   #helpBtn[hidden],#homeBtn[hidden]{display:none}
-  #homeBtn{position:fixed;z-index:26;top:calc(env(safe-area-inset-top,0px) + 10px);right:114px}
+  #homeBtn{position:fixed;z-index:26;top:calc(env(safe-area-inset-top,0px) + 10px);right:104px}
+  #helpBtn,#homeBtn{width:38px;height:38px}
+  .top .round{width:38px;height:38px}
   @media (max-width:430px){ .top .brand{display:none} }
   .htArt:empty,.htTips:empty{display:none}
   .calGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -686,7 +692,7 @@
     <div class="fpLabel" id="fpLabel" hidden></div>
     <div class="handHint" id="handHint" hidden aria-hidden="true">👆</div>
     <div class="placeBar" id="placeBar" role="status" aria-live="polite">
-      <span class="pt">📍 Drag the green box to where the machine will stand.<small>White edge = door side · Orange = check the spot · Two fingers turn it</small></span>
+      <span class="pt">📍 Drag the green box where the machine will stand.<small>Two fingers turn it · white edge = door side</small></span>
       <button class="btn small dark" id="placeUndo" type="button">↩ Undo</button>
       <button class="btn small go" id="placeHere" type="button">Place here</button>
     </div>
@@ -1213,23 +1219,24 @@ shutter.addEventListener('click', async () => {
 });
 
 /* keep the marks / the machine visible above a bottom sheet: slide the photo up just enough */
-function unliftPhoto(){ stageEl.style.transform = ''; }
-function liftPhoto(sheetEl, ys){
+function unliftPhoto(){ stageEl.style.transform = ''; stageEl.classList.remove('fitted'); }
+function fitPhoto(sheetEl){
   unliftPhoto();
   requestAnimationFrame(() => {
-    const r = sheetEl.getBoundingClientRect();     // (the sheet slides in, so use its final height, not where it is mid-slide)
-    if (!ys.length || r.width < innerWidth * 0.8) return;          // a side panel on wide screens: nothing to move
-    const limit = innerHeight - sheetEl.offsetHeight - 26, minTop = 96;
-    let shift = Math.max(0, Math.max(...ys) - limit);
-    shift = Math.min(shift, Math.max(0, Math.min(...ys) - minTop));   // never push the top point out of view
-    stageEl.style.transition = 'transform .25s ease';
-    stageEl.style.transform = shift ? 'translateY(' + (-shift) + 'px)' : '';
+    const r = sheetEl.getBoundingClientRect();
+    if (r.width < innerWidth * 0.8) return;                       // a side panel on wide screens: the photo is already clear
+    const topPad = 84, gap = 14;                                  // below the top bar and the step strip
+    const availH = innerHeight - sheetEl.offsetHeight - topPad - gap;   // (the sheet slides in: use its final height)
+    let k = availH / Math.max(1, stageEl.offsetHeight);
+    if (k >= 0.98) return;
+    k = Math.max(0.45, k);
+    stageEl.style.transformOrigin = '50% 0';
+    stageEl.style.transition = 'transform .28s cubic-bezier(.2,.9,.3,1)';
+    stageEl.style.transform = 'translateY(' + topPad + 'px) scale(' + k.toFixed(3) + ')';
+    stageEl.classList.add('fitted');
   });
 }
-function liftForSheet(){
-  const top = stageEl.getBoundingClientRect().top;
-  liftPhoto(calSheet, CAL_ORDER.map((k) => cal[k]).filter(Boolean).map((p) => top + calScreen(p).y));
-}
+function liftForSheet(){ fitPhoto(calSheet); }
 function showUpload(){
   unliftPhoto();
   setJourney(1);
@@ -1474,7 +1481,7 @@ const updateDimOcclusion = () => {
 // The machine's name and height in the top bar -- the height follows the Size setting
 function updateDimChip(){
   const d = curDims();
-  machineChipText.textContent = MODELS[modelKey].label + (d.H ? ' · ' + d.H + ' cm' : '');
+  machineChipText.textContent = MODELS[modelKey].label;
 }
 
 // How to move it, for a moment. Runs once the machine has actually been placed -- telling people
@@ -2998,9 +3005,9 @@ function openCalSheet(keep){
   calSheet.classList.toggle('hideW', !needW());
   document.getElementById('calSheetTitle').textContent = open ? 'How tall is it?' : spaceMode === 'h' ? 'Check the height' : spaceMode === 'w' ? 'Check the width' : 'Check the spot';
   calSheetSub.textContent = (open ? 'Measure the height of the thing you marked.'
-    : spaceMode === 'h' ? 'Measure straight up (vertical), from the floor to the top of the space (blue line).'
-    : spaceMode === 'w' ? 'Measure straight across (horizontal), side to side (pink line).'
-    : 'Measure straight up (blue) and straight across (pink).') + ' We use it to check the machine fits.';
+    : spaceMode === 'h' ? 'Measure straight up, floor to top (blue).'
+    : spaceMode === 'w' ? 'Measure straight across, side to side (pink).'
+    : 'Measure straight up (blue) and across (pink).');
   document.querySelector('label[for="calCm"] .calLbl').textContent = 'Height · vertical';
   document.querySelector('label[for="calW"] .calLbl').textContent = 'Width · horizontal';
   if (open) {
@@ -3340,9 +3347,9 @@ function showVerdict(){
     : r.w.tight ? ['👌', `Width: ${d.W} cm in a ${r.w.have} cm space. It fits, but only ${r.w.spare} cm to spare; ${GAP_SIDE_COMFY} cm a side is comfortable.`]
     : ['✅', `Width: ${d.W} cm in a ${r.w.have} cm space. ${r.w.spare} cm to spare.`]);
   else rows.push(['✅', 'Width: open at the sides.']);
-  rows.push(['ℹ️', `Depth: ${d.D} cm, plus about ${GAP_BACK} cm behind for the hoses. A photo can't measure depth, so check it with a tape.`]);
+  rows.push(['ℹ️', `Depth: ${d.D} cm, plus ${GAP_BACK} cm behind. A photo can't measure depth, so use a tape.`]);
   if (!spotOk) rows.push(['⚠️', 'The AI thinks part of this spot isn’t clear floor. Move it, or long-press to place it exactly.']);
-  if (over && (!r.h || r.h.ok)) rows.push(['⚠️', `The AI sees a ${over} where the top of the machine would be. Check that it clears it.`]);
+  if (over && (!r.h || r.h.ok)) rows.push(['⚠️', `The AI sees a ${over} above the spot. Check that it clears.`]);
   if (space && space.est && (space.H || space.W)) rows.push(['📏', 'These space sizes are the AI’s estimate from the photo. Measure the space with a tape and type it in for a sure answer.']);
   fitTitle.textContent = space && space.est && (space.H || space.W)
     ? (!r.ok ? '❌ Looks too small' : r.tight ? '👌 Looks like a tight fit' : '✅ Looks like it fits')
@@ -3355,9 +3362,7 @@ function showVerdict(){
   if (machine) { machine.visible = !bad; needsRender = true; }       // won't fit: don't show the machine at all
   fitSheet.classList.add('open');
   if (!bad && machine) {                              // keep the machine in view above the sheet
-    const topY = stageEl.getBoundingClientRect().top, d2 = curDims();
-    const base = worldToScreen(new THREE.Vector3(machine.position.x, 0, machine.position.z)), tp = worldToScreen(new THREE.Vector3(machine.position.x, d2.H / 100, machine.position.z));
-    liftPhoto(fitSheet.querySelector('.sheet'), [topY + base.y, topY + tp.y]);
+    fitPhoto(fitSheet.querySelector('.sheet'));
   } else unliftPhoto();
 }
 async function showOthers(){
