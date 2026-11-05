@@ -320,7 +320,7 @@
   /* the fit verdict: the photo and the machine stay visible above it */
   #fitSheet{background:transparent;pointer-events:none}
   #fitSheet:not(.bad) #fitBad{display:none}
-  #fitSheet.bad #fitGood,#fitSheet.bad #fitDepth{display:none}
+  #fitSheet.bad #fitGood,#fitSheet.bad #fitDepth,#fitSheet.bad #fitSave{display:none}
   #fitSheet.bad{background:rgba(0,0,0,.45);pointer-events:auto}
   #fitBad{flex-direction:column}
   #fitSheet .sheet{pointer-events:auto;max-height:62vh}
@@ -760,9 +760,10 @@
       <div class="fitOthers" id="fitOthers"></div>
       <button class="btn dark" id="fitOthersBtn" type="button">💡 What else fits here?</button>
       <div class="sheetBtns" id="fitGood">
-        <button class="btn dark" id="fitMove" type="button">Move it</button>
-        <button class="btn go" id="fitDone" type="button">Done</button>
+        <button class="btn go" id="fitRetry2" type="button">🔁 Retry</button>
+        <button class="btn dark" id="fitHome" type="button">🏠 Home</button>
       </div>
+      <button class="linkBtn" id="fitSave" type="button">💾 Save this picture</button>
       <div class="sheetBtns" id="fitBad">
         <p class="fitHelp">Try other numbers on this photo, or start again with a new photo.</p>
         <button class="btn go" id="fitRetry" type="button">🔁 Retry with different measurement</button>
@@ -3410,13 +3411,10 @@ document.getElementById('fitNewPic').addEventListener('click', () => {
   if (machine) { machine.visible = true; needsRender = true; }
   resetPicker(); showUpload();                      // back to choosing a photo
 });
-document.getElementById('fitMove').addEventListener('click', () => { fitSheet.classList.remove('open'); startPlacing(true); });
-document.getElementById('fitDone').addEventListener('click', () => {
-  fitSheet.classList.remove('open'); unliftPhoto();
-  dockEl.inert = false; topBar.inert = false;
-  showDragHint();
-  toast('Happy with it? Tap Save it to keep your picture.', '', null, 6000);
-});
+// the end of the journey: What else fits here? / Retry / Home
+document.getElementById('fitRetry2').addEventListener('click', () => document.getElementById('fitRetry').click());   // measure again on the same photo
+document.getElementById('fitHome').addEventListener('click', () => document.getElementById('homeBtn').click());
+document.getElementById('fitSave').addEventListener('click', () => document.getElementById('save').click());
 
 // ---------- machine chooser + switcher ----------
 const chooser     = document.getElementById('chooser');
