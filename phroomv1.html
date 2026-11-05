@@ -2811,12 +2811,12 @@ const CAL_ORDER = ['base', 'top', 'wB'];
 const CAL_COL = { base: '#2ee67b', top: '#4aa3ff', wB: '#ff8fb3' };
 let spaceMode = 'both';                 // 'h': height limited, 'w': width limited, 'both', 'open': nothing limits it
 const MODE_ORDER = { h: ['base', 'top'], w: ['base', 'wB'], both: ['base', 'top', 'wB'], open: ['base', 'top'] };
-const FIX = 'Drag a dot to fix it if needed, then tap Next.';
+const FIX = 'All set? Tap Next. You can drag a dot to move it.';
 const CAL_TXT = {
-  h:    ['Tap the floor under the spot.', 'Tap the top of the spot, like under the shelf or sink.', FIX],
-  w:    ['Tap the floor corner of the spot.', 'Tap the other side of the spot, like the wall or cabinet.', FIX],
-  both: ['Tap the floor corner of the spot.', 'Tap the top of the spot, like under the shelf or sink.', 'Tap the other side of the spot, like the wall or cabinet.', FIX],
-  open: ['Tap the bottom of something you know the height of, like a door.', 'Now tap the top of it.', FIX],
+  both: ['Tap the bottom corner of the spot, on the floor. (green dot)', 'Now tap the top of the spot, just under the shelf or sink. (blue dot)', 'Now tap the side of the spot, on the wall or cabinet. (pink dot)', FIX],
+  h:    ['Tap the floor, right under the shelf or sink. (green dot)', 'Now tap the underside of the shelf or sink. (blue dot)', FIX],
+  w:    ['Tap the floor, at one side of the spot. (green dot)', 'Now tap the floor at the other side, on the wall or cabinet. (pink dot)', FIX],
+  open: ['Tap the bottom of something you know the height of, like a door. (green dot)', 'Now tap the top of it. (blue dot)', FIX],
 };
 const needH = () => spaceMode !== 'w';
 const needW = () => spaceMode === 'w' || spaceMode === 'both';
@@ -3065,13 +3065,13 @@ const calRelease = () => {
   // the top has to be above the bottom -- anything else can't be a height
   if (cal.base && cal.top && cal.top.fy > cal.base.fy - 0.02) {
     cal.top = null; renderCalib();
-    calUpdateStep('The top has to be above the bottom. Tap the top again.');
+    calUpdateStep('The top should be higher than the bottom. Tap the top again.');
     return;
   }
   // the width line has to run sideways, not up and down
   if (cal.base && cal.wB && Math.abs(cal.base.fx - cal.wB.fx) < 0.03) {
     cal.wB = null; renderCalib();
-    calUpdateStep('The width line has to run sideways. Tap the other side again.');
+    calUpdateStep('Tap a point to the left or right of the green dot.');
     return;
   }
   calUpdateStep();
@@ -3448,9 +3448,9 @@ function setJourney(n){
   document.getElementById('jLbl').textContent = n + ' of 6 · ' + JSTEPS[n];
 }
 const MARK_LINES = {
-  both: ['Tap the floor corner of the spot (green).', 'Tap the top of the spot, under the shelf or sink (blue).', 'Tap the other side, at the wall or cabinet (pink).'],
-  h:    ['Tap the floor under the spot (green).', 'Tap the top of the spot, under the shelf or sink (blue).'],
-  w:    ['Tap the floor corner of the spot (green).', 'Tap the other side, at the wall or cabinet (pink).'],
+  both: ['Tap the bottom corner of the spot, on the floor (green).', 'Tap the top of the spot, just under the shelf or sink (blue).', 'Tap the side of the spot, on the wall or cabinet (pink).'],
+  h:    ['Tap the floor, right under the shelf or sink (green).', 'Tap the underside of the shelf or sink (blue).'],
+  w:    ['Tap the floor, at one side of the spot (green).', 'Tap the floor at the other side, on the wall or cabinet (pink).'],
   open: ['Tap the bottom of something you know the height of, like a door (green).', 'Tap the top of it (blue).'],
 };
 function showHowTo(){
