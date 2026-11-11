@@ -432,6 +432,28 @@
   .pickThumb img{width:100%;height:100%;object-fit:contain}
   .pickThumb.on{opacity:1;transform:translateY(-4px) scale(1.08);border-color:#17181c;box-shadow:3px 3px 0 #17181c}
   .pickGo{width:100%;max-width:380px;flex:none;border:2px solid #17181c!important;box-shadow:3px 3px 0 #17181c!important;font-weight:800;border-radius:18px}
+  .calGuide{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14)}
+  .calGuide svg{width:104px;flex:none;overflow:visible}
+  .calGuide .gf{fill:rgba(255,255,255,.07);stroke:rgba(255,255,255,.28);stroke-width:1.2}
+  .calGuide .gd{stroke:rgba(255,255,255,.28);stroke-width:1.2;stroke-dasharray:3 3}
+  .calGuide g line{stroke-width:4;stroke-linecap:round;transition:opacity .2s,stroke-width .2s}
+  .calGuide g text{font:800 12px Arial,sans-serif;paint-order:stroke;stroke:#17181c;stroke-width:3px;transition:opacity .2s}
+  .calGuide .gH line{stroke:#4aa3ff}.calGuide .gH text{fill:#4aa3ff}
+  .calGuide .gW line{stroke:#ff8fb3}.calGuide .gW text{fill:#ff8fb3}
+  .calGuide .gD line{stroke:#ffb02e}.calGuide .gD text{fill:#ffb02e}
+  .calGuide.f g{opacity:.28}
+  .calGuide.fH .gH,.calGuide.fW .gW,.calGuide.fD .gD{opacity:1}
+  .calGuide.fH .gH line,.calGuide.fW .gW line,.calGuide.fD .gD line{stroke-width:6.5;animation:calPulse 1.1s ease-in-out infinite}
+  @keyframes calPulse{50%{opacity:.55}}
+  .calKey{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+  .calKey button{display:flex;align-items:center;gap:7px;border:0;background:none;color:var(--muted);font:500 12.5px/1.25 inherit;font-family:inherit;text-align:left;padding:3px 4px;border-radius:8px;cursor:pointer}
+  .calKey b{color:#fff;font-weight:800}
+  .calKey i{width:10px;height:10px;border-radius:50%;flex:none}
+  .calGuide.fH .calKey [data-f=H],.calGuide.fW .calKey [data-f=W],.calGuide.fD .calKey [data-f=D]{background:rgba(255,255,255,.13);color:#fff}
+  #calSheet .calField:focus-within .calLbl{color:#fff}
+  .calField:has(#calCm):focus-within .calIn{border-color:#4aa3ff;box-shadow:0 0 0 3px rgba(74,163,255,.3)}
+  .calField:has(#calW):focus-within .calIn{border-color:#ff8fb3;box-shadow:0 0 0 3px rgba(255,143,179,.3)}
+  .calField:has(#calD):focus-within .calIn{border-color:#ffb02e;box-shadow:0 0 0 3px rgba(255,176,46,.3)}
   .calGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
   .calGrid .calIn{padding:0 9px;gap:4px}
   .calGrid .calIn input{font-size:19px;padding:11px 0}
@@ -839,6 +861,20 @@
     <span class="sheetSub" id="calSheetSub"></span>
     <div class="calUnit" role="group" aria-label="Unit">
       <button type="button" id="calUnitCm" class="on">cm</button><button type="button" id="calUnitFt">ft</button>
+    </div>
+    <div class="calGuide" id="calGuide">
+      <svg viewBox="0 0 120 96" aria-hidden="true">
+        <polygon class="gf" points="14,38 74,38 104,16 44,16"/><polygon class="gf" points="74,38 104,16 104,64 74,86"/><rect class="gf" x="14" y="38" width="60" height="48"/>
+        <line class="gd" x1="14" y1="86" x2="44" y2="64"/><line class="gd" x1="44" y1="64" x2="104" y2="64"/><line class="gd" x1="44" y1="64" x2="44" y2="16"/>
+        <g class="gH"><line x1="14" y1="86" x2="14" y2="38"/><text x="2" y="66">H</text></g>
+        <g class="gW"><line x1="14" y1="38" x2="74" y2="38"/><text x="44" y="32">W</text></g>
+        <g class="gD"><line x1="74" y1="38" x2="104" y2="16"/><text x="94" y="38">D</text></g>
+      </svg>
+      <div class="calKey">
+        <button type="button" data-f="H"><i style="background:#4aa3ff"></i><b>Height</b> floor to top</button>
+        <button type="button" data-f="W"><i style="background:#ff8fb3"></i><b>Width</b> left to right</button>
+        <button type="button" data-f="D"><i style="background:#ffb02e"></i><b>Depth</b> front to back</button>
+      </div>
     </div>
     <div class="calGrid">
       <label class="calField" for="calCm"><span class="calLbl">Height · vertical</span>
@@ -1425,7 +1461,7 @@ function loadModel(key){
 // ---- IKEA-style H×W×D dimension lines + labels wrapped around the machine (ported from
 // fit.html — same approach: real 3D line meshes + sprite labels parented to the machine, not
 // a screen-space overlay, so they naturally follow it as it turns and moves). ----
-const makeLabel = (text) => {
+const makeLabel = (text, bg) => {
   const fs = 44, padX = 24, padY = 14;
   const meas = document.createElement('canvas').getContext('2d');
   meas.font = 'bold ' + fs + 'px Arial';
@@ -1436,9 +1472,9 @@ const makeLabel = (text) => {
   ctx.font = 'bold ' + fs + 'px Arial';
   if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(2, 2, c.width - 4, c.height - 4, 20); }
   else { ctx.beginPath(); ctx.rect(2, 2, c.width - 4, c.height - 4); }
-  ctx.fillStyle = 'rgba(225,29,42,0.94)'; ctx.fill();
+  ctx.fillStyle = bg || 'rgba(225,29,42,0.94)'; ctx.fill();
   ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.stroke();
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = bg === '#ffb02e' || bg === '#ff8fb3' ? '#17181c' : '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(text, c.width / 2, c.height / 2);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
@@ -3030,7 +3066,7 @@ function closeCalib(){
   else showDepthStatus();                      // or is still running: say so again
 }
 /* ---- the chosen space drawn as a 3D box on the photo (front face = the rectangle the customer marked) ---- */
-let spaceBox = null, spaceGeom = null;
+let spaceBox = null, spaceGeom = null, calFocus = null;     // calFocus: 'h' | 'w' | 'd' while that field is being typed
 function clearSpaceBox(){
   spaceGeom = null;
   if (!spaceBox) return;
@@ -3045,9 +3081,9 @@ function buildSpaceBox(g, col, tx){
   const pt = (x, y, z) => new THREE.Vector3(g.P.x, 0, g.P.z).addScaledVector(right, g.x0 + x * g.W).addScaledVector(g.n, z * Dv).setY(y * g.H);
   const edgeMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.95, depthTest: false });
   const up = new THREE.Vector3(0, 1, 0), r = 0.007;
-  const edge = (a, b, dashed) => {
+  const edge = (a, b, dashed, ec, er, eo) => {
     const d = b.clone().sub(a), len = d.length(); if (len < 1e-4) return;
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 6), dashed ? new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.45, depthTest: false }) : edgeMat);
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(er || r, er || r, len, 6), ec !== undefined ? new THREE.MeshBasicMaterial({ color: ec, transparent: true, opacity: eo, depthTest: false }) : dashed ? new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.45, depthTest: false }) : edgeMat);
     m.position.copy(a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(up, d.normalize()); m.renderOrder = 998; grp.add(m);
   };
   const face = (pts, op) => {
@@ -3064,10 +3100,19 @@ function buildSpaceBox(g, col, tx){
   for (const [x, z] of [[0, 0], [1, 0], [0, 1], [1, 1]]) if (z === 0 || !open || true) edge(c(x, 0, z), c(x, 1, z), z === 1 && open);   // the four uprights
   for (const z of [0, 1]) { edge(c(0, 1, z), c(1, 1, z), z === 1 && open); edge(c(0, 0, z), c(1, 0, z), z === 1 && open); }   // top and bottom, front and back
   for (const x of [0, 1]) { edge(c(x, 1, 0), c(x, 1, 1), open); edge(c(x, 0, 0), c(x, 0, 1), open); }                       // top and bottom, left and right
-  const lab = (text, p, dir) => { const l = makeLabel(text); l.position.copy(p).addScaledVector(dir, 0.07); l.renderOrder = 999; grp.add(l); };
-  lab(tx.h, c(0, 0.5, 0), right.clone().multiplyScalar(-1));
-  lab(tx.w, c(0.5, 1, 0), up);
-  lab(tx.d, c(1, 1, 0.5), right);
+  // height, width and depth each have their own colour (same as the fields below); the one being typed is thick
+  const hl = calFocus;
+  const dim = (k) => ({ r: hl === k ? 0.0145 : 0.0095, o: !hl || hl === k ? 1 : 0.45 });
+  const mh = dim('h'), mw = dim('w'), md = dim('d');
+  if (tx.pv) {
+  edge(c(0, 0, 0), c(0, 1, 0), false, 0x4aa3ff, mh.r, mh.o);
+  edge(c(0, 1, 0), c(1, 1, 0), false, 0xff8fb3, mw.r, mw.o);
+  edge(c(1, 1, 0), c(1, 1, 1), open, 0xffb02e, md.r, open ? 0.6 : md.o);
+  }
+  const lab = (text, p, dir, bg) => { const l = makeLabel(text, bg); l.position.copy(p).addScaledVector(dir, 0.07); l.renderOrder = 999; grp.add(l); };
+  lab(tx.h, c(0, 0.5, 0), right.clone().multiplyScalar(-1), '#4aa3ff');
+  lab(tx.w, c(0.5, 1, 0), up, '#ff8fb3');
+  lab(tx.d, c(1, 1, 0.5), right, '#ffb02e');
   scene.add(grp); spaceBox = grp; spaceGeom = g; needsRender = true;
 }
 // while typing: the box follows the numbers. The marked rectangle sets height and width (what the photo shows);
@@ -3080,7 +3125,7 @@ function previewSpaceBox(){
   const w = calWcm();
   buildSpaceBox(g, 0x4aa3ff, {
     h: h && calValid(h) ? 'H ' + sp(h).split(' (')[0] : 'Height', w: w && calValidW(w) ? 'W ' + sp(w).split(' (')[0] : 'Width',
-    d: g.D ? 'D ' + sp(d).split(' (')[0] : 'Depth: open' });
+    d: g.D ? 'D ' + sp(d).split(' (')[0] : 'Depth: open', pv: true });
 }
 /* What the camera fit says the two marked lines measure in real life: the height line's start sits on the
    floor, so its world position is known. A vertical plane through it, facing the camera, is taken as the
@@ -3129,7 +3174,7 @@ function openCalSheet(keep){
   setUnit(calUnit, false);
   calSheet.classList.remove('hideH', 'hideW');
   document.getElementById('calSheetTitle').textContent = 'Size of the space';
-  calSheetSub.textContent = 'Measure the space you chose and type it in. Leave Depth empty if the back is open.';
+  calSheetSub.textContent = 'Measure the space you chose, then type it in. Leave Depth empty if the back is open.';
   document.querySelector('label[for="calCm"] .calLbl').textContent = 'Height';
   document.querySelector('label[for="calW"] .calLbl').textContent = 'Width';
   document.querySelector('label[for="calD"] .calLbl').textContent = 'Depth';
@@ -3141,8 +3186,20 @@ function openCalSheet(keep){
   if (keep && lastTyped) { setUnit(lastTyped.unit, false); calCm.value = lastTyped.h; calW.value = lastTyped.w; calD.value = lastTyped.d || ''; }
   calValidate(); calHint.textContent = '';
   previewSpaceBox();
+  setCalFocus(null);
   setTimeout(() => { try { calCm.focus(); } catch (e) {} }, 350);
 }
+const calGuide = document.getElementById('calGuide');
+function setCalFocus(k){
+  calFocus = k;
+  calGuide.className = 'calGuide' + (k ? ' f f' + k.toUpperCase() : '');
+  if (spaceGeom && calSheet.classList.contains('open')) previewSpaceBox();
+}
+for (const [el, k] of [[calCm, 'h'], [calW, 'w'], [calD, 'd']]) {
+  el.addEventListener('focus', () => setCalFocus(k));
+  el.addEventListener('blur', () => setTimeout(() => { if (![calCm, calW, calD].includes(document.activeElement)) setCalFocus(null); }, 60));
+}
+for (const b of calGuide.querySelectorAll('.calKey button')) b.addEventListener('click', () => { try { ({ H: calCm, W: calW, D: calD })[b.dataset.f].focus(); } catch (e) {} });
 const calValid = (v) => v >= 20 && v <= 400;
 const calValidW = (v) => v >= 10 && v <= 400;
 // ---- units: the customer can type centimetres or feet (e.g. 3.5 ft); everything inside works in cm ----
