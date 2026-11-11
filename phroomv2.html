@@ -2961,7 +2961,7 @@ let spaceMode = 'rect';                 // 'h': height limited, 'w': width limit
 const MODE_ORDER = { rect: ['base', 'top'], h: ['base', 'top'], w: ['base', 'wB'], both: ['base', 'top', 'wB'], open: ['base', 'top'] };
 const FIX = 'All set? Tap Next. You can drag a dot to move it.';
 const CAL_TXT = {
-  rect: ['Tap the floor, where the space starts on the left. (green dot)', 'Now tap where the space ends at the top, on the right. (blue dot)', 'Space chosen. To help with depth, tap the floor at the back, where the space ends (amber). Then tap Next.'],
+  rect: ['Tap the floor on the left side of the space. (green dot)', 'Now tap the top of the space, on the right side. (blue dot)', 'Good. Can you see the floor at the back? Tap it (amber dot). Then tap Next.'],
   both: ['Tap the starting point on the floor. (green dot)', 'Now tap straight up (vertical) to the top of the space. (blue dot)', 'Now tap sideways (horizontal) to where the space ends, level with the green dot. (pink dot)', FIX],
   h:    ['Tap the starting point on the floor. (green dot)', 'Now tap straight up (vertical) to the highest point the machine can reach. (blue dot)', FIX],
   w:    ['Tap the starting point on the floor. (green dot)', 'Now tap sideways (horizontal) to where the space ends, level with the green dot. (pink dot)', FIX],
@@ -3023,10 +3023,10 @@ function calUpdateStep(msg){
   const N = CAL_ORDER.length, txt = CAL_TXT[spaceMode];
   const i = CAL_ORDER.findIndex((k) => !cal[k]), idx = i < 0 ? N : i;
   calBar.dataset.step = idx < 2 ? String(idx + 1) : '3';
-  calStepNo.textContent = idx < N ? 'Tap ' + (idx + 1) + ' of ' + N : 'Space chosen';
+  calStepNo.textContent = idx < N ? 'Tap ' + (idx + 1) + ' of ' + N : 'Done';
   calStep.textContent = msg || txt[idx];
   if (idx === N) calNext.hidden = false;
-  if (idx === N && cal.dep && !msg) calStep.textContent = 'Depth marked too. All set? Tap Next. You can drag a dot to move it.';
+  if (idx === N && cal.dep && !msg) calStep.textContent = 'All marked. Tap Next. To fix a dot, drag it.';
   document.getElementById('calUndo').disabled = !CAL_ORDER.some((k) => cal[k]);
   placeCalBar();
 }
@@ -3183,7 +3183,7 @@ function openCalSheet(keep){
   setUnit(calUnit, false);
   calSheet.classList.remove('hideH', 'hideW');
   document.getElementById('calSheetTitle').textContent = 'Size of the space';
-  calSheetSub.textContent = 'Measure the space you chose, then type all three sizes.';
+  calSheetSub.textContent = 'Measure the space you marked. Then type all three sizes.';
   document.querySelector('label[for="calCm"] .calLbl').textContent = 'Height';
   document.querySelector('label[for="calW"] .calLbl').textContent = 'Width';
   document.querySelector('label[for="calD"] .calLbl').textContent = 'Depth';
@@ -3238,7 +3238,7 @@ function calValidate(){
   let autoNote = '';
   if (cal.dep && !calDTouched && h !== null && calValid(h)) {         // the depth point on the photo gives a starting number; the customer can change it
     const e = estimateMarked();
-    if (e && e.dep) { const sug = e.dep / (e.H / (h / 100)) * 100; if (sug >= 10 && sug <= 400) { calD.value = fromCm(sug); calD.parentNode.classList.add('auto'); autoNote = 'Depth filled in from your photo. Change it if you measured.'; } }
+    if (e && e.dep) { const sug = e.dep / (e.H / (h / 100)) * 100; if (sug >= 10 && sug <= 400) { calD.value = fromCm(sug); calD.parentNode.classList.add('auto'); autoNote = 'We guessed the depth from your photo. Change it if you measured.'; } }
   }
   const d = calDcm();
   const okH = h !== null && calValid(h), okW = w !== null && calValidW(w), okD = d !== null && calValidW(d);
@@ -3251,7 +3251,7 @@ function calValidate(){
   else if (okH && okW && d === null) msg = 'One more: type the depth, from the front to the back wall.';
   else if (okH && okW) {                                  // the photo and the typed numbers should roughly agree
     const est = estimateMarked();
-    if (est) { const seen = est.W / (est.H / (h / 100)) * 100; if (Math.abs(seen - w) / w > 0.25) { msg = 'On the photo, the space you chose looks about ' + fromCm(seen) + ' ' + calUnit + ' wide. Check the width.'; calHint.classList.remove('ok'); } }
+    if (est) { const seen = est.W / (est.H / (h / 100)) * 100; if (Math.abs(seen - w) / w > 0.25) { msg = 'Your photo shows a width of about ' + fromCm(seen) + ' ' + calUnit + '. Please check the width.'; calHint.classList.remove('ok'); } }
   }
   if (!msg && autoNote) msg = autoNote;
   calHint.textContent = msg;
@@ -3308,19 +3308,19 @@ const calRelease = () => {
   // the top has to be above the bottom -- anything else can't be a height
   if (cal.base && cal.top && cal.top.fy > cal.base.fy - 0.02) {
     cal.top = null; renderCalib();
-    calUpdateStep('Tap higher up, where the space ends at the top.');
+    calUpdateStep('Tap higher. The top must be above the floor.');
     return;
   }
   // the space has to have some width: the end can't sit straight above the start
   if (cal.base && cal.top && Math.abs(cal.base.fx - cal.top.fx) < 0.03) {
     cal.top = null; renderCalib();
-    calUpdateStep('Tap a bit more to the right, where the space ends.');
+    calUpdateStep('Tap more to the right. The top must be to the right of the green dot.');
     return;
   }
   // the depth point is on the floor at the back: further away than the start, so higher up in the photo
   if (cal.dep && cal.base && cal.dep.fy > cal.base.fy - 0.015) {
     cal.dep = null; renderCalib();
-    calUpdateStep('Tap the floor further back, where the space ends at the back.');
+    calUpdateStep('Tap the floor at the back. It must be higher on the screen than the green dot.');
     return;
   }
   calUpdateStep();
