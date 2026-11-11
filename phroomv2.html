@@ -2961,7 +2961,7 @@ let spaceMode = 'rect';                 // 'h': height limited, 'w': width limit
 const MODE_ORDER = { rect: ['base', 'top'], h: ['base', 'top'], w: ['base', 'wB'], both: ['base', 'top', 'wB'], open: ['base', 'top'] };
 const FIX = 'All set? Tap Next. You can drag a dot to move it.';
 const CAL_TXT = {
-  rect: ['Tap the floor on the left side of the space. (green dot)', 'Now tap the top of the space, on the right side. (blue dot)', 'Good. Can you see the floor at the back? Tap it (amber dot). Then tap Next.'],
+  rect: ['Tap the floor, on the left side of the space. (green dot) Height starts here.', 'Now tap the top, on the right side. (blue dot) This gives the Height and Width.', 'Last, tap the floor at the back. (amber dot) This gives the Depth. Then tap Next.'],
   both: ['Tap the starting point on the floor. (green dot)', 'Now tap straight up (vertical) to the top of the space. (blue dot)', 'Now tap sideways (horizontal) to where the space ends, level with the green dot. (pink dot)', FIX],
   h:    ['Tap the starting point on the floor. (green dot)', 'Now tap straight up (vertical) to the highest point the machine can reach. (blue dot)', FIX],
   w:    ['Tap the starting point on the floor. (green dot)', 'Now tap sideways (horizontal) to where the space ends, level with the green dot. (pink dot)', FIX],
@@ -2990,13 +2990,13 @@ function renderCalib(){
       + `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="rgba(0,0,0,.55)" stroke-width="6" stroke-linejoin="round"/>`
       + `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round"/>`;
   }
-  if (a) s += `<line x1="${a.x - 20}" y1="${a.y}" x2="${a.x + 20}" y2="${a.y}" stroke="#2ee67b" stroke-width="3" stroke-linecap="round"/>` + dot(a, CAL_COL.base) + label(a, 'floor · left', 28);
-  if (b) s += dot(b, CAL_COL.top) + label(b, 'top · right', -18);
+  if (a) s += `<line x1="${a.x - 20}" y1="${a.y}" x2="${a.x + 20}" y2="${a.y}" stroke="#2ee67b" stroke-width="3" stroke-linecap="round"/>` + dot(a, CAL_COL.base) + label(a, '1 · Floor', 28);
+  if (b) s += dot(b, CAL_COL.top) + label(b, '2 · Top', -18);
   if (a && b && cal.dep) {                              // optional depth point: where the floor ends at the back
     const d = calScreen(cal.dep);
     s += `<line x1="${a.x}" y1="${a.y}" x2="${d.x}" y2="${d.y}" stroke="rgba(0,0,0,.55)" stroke-width="6" stroke-linecap="round"/>`
       + `<line x1="${a.x}" y1="${a.y}" x2="${d.x}" y2="${d.y}" stroke="#ffb02e" stroke-width="2.5" stroke-dasharray="7 5" stroke-linecap="round"/>`
-      + dot(d, CAL_COL.dep) + label(d, 'back', 28);
+      + dot(d, CAL_COL.dep) + label(d, '3 · Depth', 28);
   }
   calibSvg.innerHTML = s;
 }
@@ -3023,10 +3023,10 @@ function calUpdateStep(msg){
   const N = CAL_ORDER.length, txt = CAL_TXT[spaceMode];
   const i = CAL_ORDER.findIndex((k) => !cal[k]), idx = i < 0 ? N : i;
   calBar.dataset.step = idx < 2 ? String(idx + 1) : '3';
-  calStepNo.textContent = idx < N ? 'Tap ' + (idx + 1) + ' of ' + N : 'Done';
+  calStepNo.textContent = idx < N ? 'Tap ' + (idx + 1) + ' of 3 · ' + ['Floor', 'Top'][idx] : cal.dep ? 'Done' : 'Tap 3 of 3 · Depth';
   calStep.textContent = msg || txt[idx];
   if (idx === N) calNext.hidden = false;
-  if (idx === N && cal.dep && !msg) calStep.textContent = 'All marked. Tap Next. To fix a dot, drag it.';
+  if (idx === N && cal.dep && !msg) calStep.textContent = 'Height, Width and Depth are marked. Tap Next. To fix a dot, drag it.';
   document.getElementById('calUndo').disabled = !CAL_ORDER.some((k) => cal[k]);
   placeCalBar();
 }
@@ -3740,7 +3740,7 @@ function hxIntro(){
     ['hxBox', 52, 94], ['hxH', 54, 94, 'scaleY(.2)'], ['hxW', 66, 94, 'scaleX(.2)'], ['hxDp', 78, 94, 'scale(.3)']];
   let css = items.map((a) => win(...a)).join('');
   for (const [nm] of items) css += '.' + nm + '{animation:' + nm + ' ' + T + 's infinite both}';
-  const caps = [[3, 19, '<b style="color:#2ee67b">1.</b> Tap the <b>floor</b> on the left side of the space'], [20, 35, '<b style="color:#4aa3ff">2.</b> Tap the <b>top</b> on the right side'], [36, 51, '<b style="color:#ffb02e">3.</b> Tap the <b>floor at the back</b> (helps with depth)'],
+  const caps = [[3, 19, '<b style="color:#2ee67b">1.</b> Tap the <b>floor</b>, on the left side of the space'], [20, 35, '<b style="color:#4aa3ff">2.</b> Tap the <b>top</b> on the right side'], [36, 51, '<b style="color:#ffb02e">3.</b> Tap the <b>floor at the back</b>: this is the <b>Depth</b>'],
     [54, 65, '<b style="color:#4aa3ff">Height</b>: floor to top'], [66, 77, '<b style="color:#ff8fb3">Width</b>: left to right'], [78, 93, '<b style="color:#ffb02e">Depth</b>: front to back']];
   caps.forEach(([a, b], i) => { css += '@keyframes hxC' + i + '{0%,' + (a - 1) + '%{opacity:0;transform:translateY(6px)}' + (a + 2) + '%,' + b + '%{opacity:1;transform:none}' + (b + 2) + '%,100%{opacity:0}}.hxCaps span:nth-child(' + (i + 1) + '){animation:hxC' + i + ' ' + T + 's infinite both}'; });
   const pill = (x, y, t, c, dark) => '<g><rect x="' + (x - 15) + '" y="' + (y - 8) + '" width="30" height="16" rx="8" fill="' + c + '" stroke="#fff" stroke-width="1.5"/><text x="' + x + '" y="' + (y + 4) + '" text-anchor="middle" font-size="10" font-weight="800" fill="' + (dark ? '#17181c' : '#fff') + '">' + t + '</text></g>';
