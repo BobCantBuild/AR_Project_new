@@ -2984,19 +2984,43 @@ function renderCalib(){
   let s = '';
   const dot = (p, col) => `<circle cx="${p.x}" cy="${p.y}" r="10" fill="${col}" stroke="#fff" stroke-width="3"/>`;
   const label = (p, text, dy) => `<text x="${p.x}" y="${p.y + dy}" text-anchor="middle" fill="#fff" stroke="rgba(0,0,0,.6)" stroke-width="3" paint-order="stroke" font-size="12" font-weight="700">${text}</text>`;
-  if (a && b) {                                         // the chosen space: a rectangle between the two dots
-    const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y), w = Math.abs(a.x - b.x), h = Math.abs(a.y - b.y);
-    s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="rgba(74,163,255,.14)"/>`
-      + `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="rgba(0,0,0,.55)" stroke-width="6" stroke-linejoin="round"/>`
-      + `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="7 5" stroke-linejoin="round"/>`;
+  const dragK = cal.drag;                               // the dot being dragged now: its lines get thick
+  if (a && b) {                                         // the chosen space as a box: front = the two dots, back = the depth dot
+    const d = cal.dep ? calScreen(cal.dep) : null;
+    const w = b.x - a.x, h = b.y - a.y;                 // h is negative: the top is above the floor
+    let vx, vy;
+    if (d) { vx = d.x - a.x; vy = d.y - a.y; } else { vx = (w >= 0 ? 1 : -1) * Math.abs(w) * 0.25; vy = -Math.abs(h) * 0.2; }
+    const sh = 0.86, ghost = d ? 1 : 0.45;
+    const P = (u, v) => ({ x: a.x + u * w, y: a.y + v * h });
+    const Q = (u, v) => ({ x: a.x + vx + sh * u * w, y: a.y + vy + sh * v * h });
+    const pt = (p) => p.x.toFixed(1) + ',' + p.y.toFixed(1);
+    const poly = (arr, fill) => '<polygon points="' + arr.map(pt).join(' ') + '" fill="' + fill + '"/>';
+    const seg = (p, q, col, wd, op, dash) => '<line x1="' + p.x.toFixed(1) + '" y1="' + p.y.toFixed(1) + '" x2="' + q.x.toFixed(1) + '" y2="' + q.y.toFixed(1) + '" stroke="' + col + '" stroke-width="' + wd + '" stroke-linecap="round"' + (dash ? ' stroke-dasharray="' + dash + '"' : '') + ' opacity="' + op + '"/>';
+    const thick = (p, q, col, wd, op) => seg(p, q, 'rgba(0,0,0,.55)', wd + 3, op) + seg(p, q, col, wd, op);
+    const tag = (p, text, col, dx, dy, anc) => '<text x="' + (p.x + dx).toFixed(1) + '" y="' + (p.y + dy).toFixed(1) + '" text-anchor="' + (anc || 'middle') + '" fill="' + col + '" stroke="rgba(0,0,0,.7)" stroke-width="3.5" paint-order="stroke" font-size="13" font-weight="800">' + text + '</text>';
+    const ghostOp = 0.9 * ghost;
+    // faces: floor, both sides, top and the back wall
+    s += poly([P(0, 0), P(1, 0), Q(1, 0), Q(0, 0)], 'rgba(255,176,46,' + (0.2 * ghost) + ')')
+      + poly([P(0, 0), P(0, 1), Q(0, 1), Q(0, 0)], 'rgba(74,163,255,' + (0.1 * ghost) + ')')
+      + poly([P(1, 0), P(1, 1), Q(1, 1), Q(1, 0)], 'rgba(74,163,255,' + (0.1 * ghost) + ')')
+      + poly([P(0, 1), P(1, 1), Q(1, 1), Q(0, 1)], 'rgba(255,255,255,' + (0.1 * ghost) + ')')
+      + poly([Q(0, 0), Q(1, 0), Q(1, 1), Q(0, 1)], 'rgba(74,163,255,' + (0.1 * ghost) + ')')
+      + poly([P(0, 0), P(1, 0), P(1, 1), P(0, 1)], 'rgba(74,163,255,.12)');
+    // everything that is not Height, Width or Depth is dotted
+    const dots = '3 6';
+    for (const [p, q] of [[P(0, 0), P(1, 0)], [P(1, 0), P(1, 1)], [P(0, 0), Q(0, 0)], [P(1, 0), Q(1, 0)], [P(0, 1), Q(0, 1)],
+      [Q(0, 0), Q(1, 0)], [Q(1, 0), Q(1, 1)], [Q(0, 1), Q(1, 1)], [Q(0, 0), Q(0, 1)]]) s += seg(p, q, '#fff', 2, ghostOp, dots);
+    // Height, Width and Depth: thick and in their own colour (thicker still while their dot is being dragged)
+    const hw = dragK === 'base' || dragK === 'top' ? 7 : 5, dw = dragK === 'dep' ? 7 : 5;
+    s += thick(P(0, 0), P(0, 1), '#4aa3ff', hw, 1) + thick(P(0, 1), P(1, 1), '#ff8fb3', hw, 1) + thick(P(1, 1), Q(1, 1), '#ffb02e', dw, d ? 1 : 0.5);
+    const hm = P(0, 0.5), wm = P(0.5, 1), dm = { x: (P(1, 1).x + Q(1, 1).x) / 2, y: (P(1, 1).y + Q(1, 1).y) / 2 };
+    s += tag(hm, 'Height', '#4aa3ff', w >= 0 ? -10 : 10, 4, w >= 0 ? 'end' : 'start') + tag(wm, 'Width', '#ff8fb3', 0, -10) + tag(dm, d ? 'Depth' : 'Depth?', '#ffb02e', 0, -9);
   }
-  if (a) s += `<line x1="${a.x - 20}" y1="${a.y}" x2="${a.x + 20}" y2="${a.y}" stroke="#2ee67b" stroke-width="3" stroke-linecap="round"/>` + dot(a, CAL_COL.base) + label(a, '1 · Floor', 28);
+  if (a) s += '<line x1="' + (a.x - 20) + '" y1="' + a.y + '" x2="' + (a.x + 20) + '" y2="' + a.y + '" stroke="#2ee67b" stroke-width="3" stroke-linecap="round"/>' + dot(a, CAL_COL.base) + label(a, '1 · Floor', 28);
   if (b) s += dot(b, CAL_COL.top) + label(b, '2 · Top', -18);
-  if (a && b && cal.dep) {                              // optional depth point: where the floor ends at the back
+  if (a && b && cal.dep) {                              // the depth point: where the floor ends at the back
     const d = calScreen(cal.dep);
-    s += `<line x1="${a.x}" y1="${a.y}" x2="${d.x}" y2="${d.y}" stroke="rgba(0,0,0,.55)" stroke-width="6" stroke-linecap="round"/>`
-      + `<line x1="${a.x}" y1="${a.y}" x2="${d.x}" y2="${d.y}" stroke="#ffb02e" stroke-width="2.5" stroke-dasharray="7 5" stroke-linecap="round"/>`
-      + dot(d, CAL_COL.dep) + label(d, '3 · Depth', 28);
+    s += dot(d, CAL_COL.dep) + label(d, '3 · Depth', 28);
   }
   calibSvg.innerHTML = s;
 }
@@ -3087,6 +3111,7 @@ function clearSpaceBox(){
 function buildSpaceBox(g, col, tx){
   if (spaceBox) { scene.remove(spaceBox); spaceBox.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); spaceBox = null; }
   const grp = new THREE.Group(), right = new THREE.Vector3(-g.n.z, 0, g.n.x), Dv = g.D || 0.5, open = !g.D;
+  const pvMode = !!tx.pv;
   const pt = (x, y, z) => new THREE.Vector3(g.P.x, 0, g.P.z).addScaledVector(right, g.x0 + x * g.W).addScaledVector(g.n, z * Dv).setY(y * g.H);
   const edgeMat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.95, depthTest: false });
   const up = new THREE.Vector3(0, 1, 0), r = 0.007;
@@ -3094,6 +3119,10 @@ function buildSpaceBox(g, col, tx){
     const d = b.clone().sub(a), len = d.length(); if (len < 1e-4) return;
     const m = new THREE.Mesh(new THREE.CylinderGeometry(er || r, er || r, len, 6), ec !== undefined ? new THREE.MeshBasicMaterial({ color: ec, transparent: true, opacity: eo, depthTest: false }) : dashed ? new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.45, depthTest: false }) : edgeMat);
     m.position.copy(a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(up, d.normalize()); m.renderOrder = 998; grp.add(m);
+  };
+  const dotted = (a, b) => {                                  // a row of small dots along an edge
+    const d = b.clone().sub(a), len = d.length(), k = Math.max(2, Math.round(len / 0.05)), dm = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthTest: false });
+    for (let i = 0; i <= k; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.0055, 6, 5), dm); m.position.copy(a).addScaledVector(d, i / k); m.renderOrder = 997; grp.add(m); }
   };
   const face = (pts, op) => {
     const geo = new THREE.BufferGeometry().setFromPoints([pts[0], pts[1], pts[2], pts[0], pts[2], pts[3]]);
@@ -3106,17 +3135,23 @@ function buildSpaceBox(g, col, tx){
   face([c(1, 0, 0), c(1, 1, 0), c(1, 1, 1), c(1, 0, 1)], 0.12);       // right side
   face([c(0, 1, 0), c(1, 1, 0), c(1, 1, 1), c(0, 1, 1)], 0.1);        // top
   if (!open) face([c(0, 0, 1), c(1, 0, 1), c(1, 1, 1), c(0, 1, 1)], 0.16);   // back wall
-  for (const [x, z] of [[0, 0], [1, 0], [0, 1], [1, 1]]) if (z === 0 || !open || true) edge(c(x, 0, z), c(x, 1, z), z === 1 && open);   // the four uprights
-  for (const z of [0, 1]) { edge(c(0, 1, z), c(1, 1, z), z === 1 && open); edge(c(0, 0, z), c(1, 0, z), z === 1 && open); }   // top and bottom, front and back
-  for (const x of [0, 1]) { edge(c(x, 1, 0), c(x, 1, 1), open); edge(c(x, 0, 0), c(x, 0, 1), open); }                       // top and bottom, left and right
+  if (pvMode) {                                             // while typing: only Height, Width and Depth are lines, the rest of the box is dotted
+    for (const [x, z] of [[1, 0], [0, 1], [1, 1]]) dotted(c(x, 0, z), c(x, 1, z));
+    dotted(c(0, 0, 0), c(1, 0, 0)); dotted(c(0, 0, 1), c(1, 0, 1)); dotted(c(0, 1, 1), c(1, 1, 1));
+    dotted(c(1, 0, 0), c(1, 0, 1)); dotted(c(0, 0, 0), c(0, 0, 1)); dotted(c(0, 1, 0), c(0, 1, 1));
+  } else {
+    for (const [x, z] of [[0, 0], [1, 0], [0, 1], [1, 1]]) edge(c(x, 0, z), c(x, 1, z), z === 1 && open);   // the four uprights
+    for (const z of [0, 1]) { edge(c(0, 1, z), c(1, 1, z), z === 1 && open); edge(c(0, 0, z), c(1, 0, z), z === 1 && open); }   // top and bottom, front and back
+    for (const x of [0, 1]) { edge(c(x, 1, 0), c(x, 1, 1), open); edge(c(x, 0, 0), c(x, 0, 1), open); }
+  }
   // height, width and depth each have their own colour (same as the fields below); the one being typed is thick
   const hl = calFocus;
-  const dim = (k) => ({ r: hl === k ? 0.0145 : 0.0095, o: !hl || hl === k ? 1 : 0.45 });
+  const dim = (k) => { const done = !!(tx.done && tx.done[k]); return { r: hl === k ? 0.0185 : done ? 0.0145 : 0.0115, o: done ? 1 : hl === k ? 0.85 : 0.38 }; };
   const mh = dim('h'), mw = dim('w'), md = dim('d');
   if (tx.pv) {
   edge(c(0, 0, 0), c(0, 1, 0), false, 0x4aa3ff, mh.r, mh.o);
   edge(c(0, 1, 0), c(1, 1, 0), false, 0xff8fb3, mw.r, mw.o);
-  edge(c(1, 1, 0), c(1, 1, 1), open, 0xffb02e, md.r, open ? 0.6 : md.o);
+  edge(c(1, 1, 0), c(1, 1, 1), false, 0xffb02e, md.r, md.o);
   }
   const lab = (text, p, dir, bg) => { const l = makeLabel(text, bg); l.position.copy(p).addScaledVector(dir, 0.07); l.renderOrder = 999; grp.add(l); };
   lab(tx.h, c(0, 0.5, 0), right.clone().multiplyScalar(-1), '#4aa3ff');
@@ -3134,7 +3169,7 @@ function previewSpaceBox(){
   const w = calWcm();
   buildSpaceBox(g, 0x4aa3ff, {
     h: h && calValid(h) ? 'H ' + sp(h).split(' (')[0] : 'Height', w: w && calValidW(w) ? 'W ' + sp(w).split(' (')[0] : 'Width',
-    d: g.D ? 'D ' + sp(d).split(' (')[0] : 'Depth', pv: true });
+    d: g.D ? 'D ' + sp(d).split(' (')[0] : 'Depth', pv: true, done: { h: !!(h && calValid(h)), w: !!(w && calValidW(w)), d: !!(d && calValidW(d)) } });
 }
 /* What the camera fit says the two marked lines measure in real life: the height line's start sits on the
    floor, so its world position is known. A vertical plane through it, facing the camera, is taken as the
