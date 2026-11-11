@@ -375,6 +375,15 @@
   .cfStats.one{grid-template-columns:1fr}
   .htArt{width:100%}
   .htArt svg{width:100%;height:auto;border-radius:16px;background:#ece9e4}
+  .htList:empty{display:none}
+  .hxArt{display:block;width:100%;height:auto;border-radius:18px;background:#20202a}
+  .hxArt *{transform-box:fill-box;transform-origin:center}
+  .hxCaps{display:grid;width:100%;min-height:50px;text-align:center}
+  .hxCaps span{grid-area:1/1;align-self:center;font-size:14.5px;line-height:1.35;font-weight:600;opacity:0}
+  .hxCaps b{font-weight:800}
+  .hxDots{display:flex;gap:6px;justify-content:center}
+  .hxDots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.25)}
+  @media (prefers-reduced-motion:reduce){ .hxArt *{animation:none!important;opacity:1!important} .hxCaps span{animation:none!important} .hxCaps span:last-child{opacity:1} }
   .htList{margin:0;padding:0 0 0 20px;width:100%;text-align:left;font-size:13.5px;line-height:1.5;display:flex;flex-direction:column;gap:4px}
   .htTips{width:100%;text-align:left;font-size:12.5px;color:var(--muted);line-height:1.45;display:flex;flex-direction:column;gap:3px}
   .htDot{animation:htPop 3.6s infinite both;transform-box:fill-box;transform-origin:center}
@@ -882,7 +891,7 @@
       <label class="calField" for="calW"><span class="calLbl">Width · horizontal</span>
         <span class="calIn"><input id="calW" type="number" inputmode="decimal" step="any" /><em>cm</em></span></label>
       <label class="calField" for="calD"><span class="calLbl">Depth · front to back</span>
-        <span class="calIn"><input id="calD" type="number" inputmode="decimal" step="any" placeholder="open" /><em>cm</em></span></label>
+        <span class="calIn"><input id="calD" type="number" inputmode="decimal" step="any" /><em>cm</em></span></label>
     </div>
     <div class="calTogs">
       <label class="calTog"><input type="checkbox" id="calNoTop" /> Nothing above</label>
@@ -2952,7 +2961,7 @@ let spaceMode = 'rect';                 // 'h': height limited, 'w': width limit
 const MODE_ORDER = { rect: ['base', 'top'], h: ['base', 'top'], w: ['base', 'wB'], both: ['base', 'top', 'wB'], open: ['base', 'top'] };
 const FIX = 'All set? Tap Next. You can drag a dot to move it.';
 const CAL_TXT = {
-  rect: ['Tap the floor, where the space starts on the left. (green dot)', 'Now tap where the space ends at the top, on the right. (blue dot)', 'Space chosen. Want the depth too? If you can see the floor at the back, tap where the space ends there (optional). Then tap Next.'],
+  rect: ['Tap the floor, where the space starts on the left. (green dot)', 'Now tap where the space ends at the top, on the right. (blue dot)', 'Space chosen. To help with depth, tap the floor at the back, where the space ends (amber). Then tap Next.'],
   both: ['Tap the starting point on the floor. (green dot)', 'Now tap straight up (vertical) to the top of the space. (blue dot)', 'Now tap sideways (horizontal) to where the space ends, level with the green dot. (pink dot)', FIX],
   h:    ['Tap the starting point on the floor. (green dot)', 'Now tap straight up (vertical) to the highest point the machine can reach. (blue dot)', FIX],
   w:    ['Tap the starting point on the floor. (green dot)', 'Now tap sideways (horizontal) to where the space ends, level with the green dot. (pink dot)', FIX],
@@ -3125,7 +3134,7 @@ function previewSpaceBox(){
   const w = calWcm();
   buildSpaceBox(g, 0x4aa3ff, {
     h: h && calValid(h) ? 'H ' + sp(h).split(' (')[0] : 'Height', w: w && calValidW(w) ? 'W ' + sp(w).split(' (')[0] : 'Width',
-    d: g.D ? 'D ' + sp(d).split(' (')[0] : 'Depth: open', pv: true });
+    d: g.D ? 'D ' + sp(d).split(' (')[0] : 'Depth', pv: true });
 }
 /* What the camera fit says the two marked lines measure in real life: the height line's start sits on the
    floor, so its world position is known. A vertical plane through it, facing the camera, is taken as the
@@ -3174,7 +3183,7 @@ function openCalSheet(keep){
   setUnit(calUnit, false);
   calSheet.classList.remove('hideH', 'hideW');
   document.getElementById('calSheetTitle').textContent = 'Size of the space';
-  calSheetSub.textContent = 'Measure the space you chose, then type it in. Leave Depth empty if the back is open.';
+  calSheetSub.textContent = 'Measure the space you chose, then type all three sizes.';
   document.querySelector('label[for="calCm"] .calLbl').textContent = 'Height';
   document.querySelector('label[for="calW"] .calLbl').textContent = 'Width';
   document.querySelector('label[for="calD"] .calLbl').textContent = 'Depth';
@@ -3232,13 +3241,14 @@ function calValidate(){
     if (e && e.dep) { const sug = e.dep / (e.H / (h / 100)) * 100; if (sug >= 10 && sug <= 400) { calD.value = fromCm(sug); calD.parentNode.classList.add('auto'); autoNote = 'Depth filled in from your photo. Change it if you measured.'; } }
   }
   const d = calDcm();
-  const okH = h !== null && calValid(h), okW = w !== null && calValidW(w), okD = d === null || calValidW(d);
+  const okH = h !== null && calValid(h), okW = w !== null && calValidW(w), okD = d !== null && calValidW(d);
   calApply.disabled = !(okH && okW && okD);
   calHint.classList.toggle('ok', okH && okW && okD);
   let msg = '';
   if (h !== null && !okH) msg = 'Height must be 20 to 400 cm (about 0.7 to 13 ft).';
   else if (w !== null && !okW) msg = 'Width must be 10 to 400 cm (about 0.3 to 13 ft).';
-  else if (d !== null && !okD) msg = 'Depth must be 10 to 400 cm (about 0.3 to 13 ft), or leave it empty.';
+  else if (d !== null && !okD) msg = 'Depth must be 10 to 400 cm (about 0.3 to 13 ft).';
+  else if (okH && okW && d === null) msg = 'One more: type the depth, from the front to the back wall.';
   else if (okH && okW) {                                  // the photo and the typed numbers should roughly agree
     const est = estimateMarked();
     if (est) { const seen = est.W / (est.H / (h / 100)) * 100; if (Math.abs(seen - w) / w > 0.25) { msg = 'On the photo, the space you chose looks about ' + fromCm(seen) + ' ' + calUnit + ' wide. Check the width.'; calHint.classList.remove('ok'); } }
@@ -3722,7 +3732,41 @@ function setJourney(n){
 const MARK_LINES = {
   rect: ['Tap the floor where the space starts, on the left (green).', 'Tap where the space ends at the top, on the right (blue).', 'Optional: if you can see the floor at the back, tap where the space ends there (amber). That gives the depth.', 'Then type the height, width and depth.'],
 };
+/* the animated intro: points are dropped on a room, the box appears, then Height, Width and Depth light up one by one */
+function hxIntro(){
+  const T = 15;                                                    // seconds for one loop
+  const win = (name, a, b, from) => '@keyframes ' + name + '{0%,' + (a - 1) + '%{opacity:0;transform:' + (from || 'scale(.6)') + '}' + (a + 3) + '%,' + b + '%{opacity:1;transform:none}' + (b + 3) + '%,100%{opacity:0;transform:none}}';
+  const items = [['hxD1', 3, 94, 'translateY(-16px) scale(.4)'], ['hxD2', 20, 94, 'translateY(-16px) scale(.4)'], ['hxRc', 20, 94], ['hxD3', 36, 94, 'translateY(-16px) scale(.4)'], ['hxDl', 36, 94],
+    ['hxBox', 52, 94], ['hxH', 54, 94, 'scaleY(.2)'], ['hxW', 66, 94, 'scaleX(.2)'], ['hxDp', 78, 94, 'scale(.3)']];
+  let css = items.map((a) => win(...a)).join('');
+  for (const [nm] of items) css += '.' + nm + '{animation:' + nm + ' ' + T + 's infinite both}';
+  const caps = [[3, 19, '<b style="color:#2ee67b">1.</b> Tap the <b>floor</b> on the left side of the space'], [20, 35, '<b style="color:#4aa3ff">2.</b> Tap the <b>top</b> on the right side'], [36, 51, '<b style="color:#ffb02e">3.</b> Tap the <b>floor at the back</b> (helps with depth)'],
+    [54, 65, '<b style="color:#4aa3ff">Height</b>: floor to top'], [66, 77, '<b style="color:#ff8fb3">Width</b>: left to right'], [78, 93, '<b style="color:#ffb02e">Depth</b>: front to back']];
+  caps.forEach(([a, b], i) => { css += '@keyframes hxC' + i + '{0%,' + (a - 1) + '%{opacity:0;transform:translateY(6px)}' + (a + 2) + '%,' + b + '%{opacity:1;transform:none}' + (b + 2) + '%,100%{opacity:0}}.hxCaps span:nth-child(' + (i + 1) + '){animation:hxC' + i + ' ' + T + 's infinite both}'; });
+  const pill = (x, y, t, c, dark) => '<g><rect x="' + (x - 15) + '" y="' + (y - 8) + '" width="30" height="16" rx="8" fill="' + c + '" stroke="#fff" stroke-width="1.5"/><text x="' + x + '" y="' + (y + 4) + '" text-anchor="middle" font-size="10" font-weight="800" fill="' + (dark ? '#17181c' : '#fff') + '">' + t + '</text></g>';
+  const dot = (cls, c, x, y, k) => '<g class="' + cls + '"><circle cx="' + x + '" cy="' + y + '" r="8" fill="' + c + '" stroke="#fff" stroke-width="2.5"/><text x="' + x + '" y="' + (y + 3.6) + '" text-anchor="middle" font-size="10" font-weight="800" fill="#111">' + k + '</text></g>';
+  const arrow = (cls, x1, y1, x2, y2, c) => '<g class="' + cls + '"><line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#17181c" stroke-width="7" stroke-linecap="round" opacity=".45"/><line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="' + c + '" stroke-width="4" stroke-linecap="round"/><circle cx="' + x1 + '" cy="' + y1 + '" r="3.5" fill="' + c + '"/><circle cx="' + x2 + '" cy="' + y2 + '" r="3.5" fill="' + c + '"/></g>';
+  const svg = '<svg class="hxArt" viewBox="0 0 200 150" aria-hidden="true"><style>' + css + '</style>'
+    + '<rect width="200" height="98" fill="#cfcac0"/><rect y="98" width="200" height="52" fill="#9b7653"/><line x1="0" y1="98" x2="200" y2="98" stroke="#7d6244" stroke-width="2"/>'
+    + '<g opacity=".28" stroke="#5b4630" stroke-width="1"><line x1="10" y1="150" x2="64" y2="98"/><line x1="70" y1="150" x2="92" y2="98"/><line x1="130" y1="150" x2="124" y2="98"/><line x1="190" y1="150" x2="156" y2="98"/></g>'
+    + '<g class="hxBox"><polygon points="34,46 120,46 160,22 74,22" fill="rgba(74,163,255,.12)" stroke="#fff" stroke-width="1.6"/><polygon points="120,46 160,22 160,104 120,128" fill="rgba(74,163,255,.2)" stroke="#fff" stroke-width="1.6"/><polygon points="74,22 160,22 160,104 74,104" fill="rgba(74,163,255,.1)" stroke="#fff" stroke-width="1.2" stroke-dasharray="4 3"/><polygon points="34,46 74,22 74,104 34,128" fill="rgba(74,163,255,.14)" stroke="#fff" stroke-width="1.2"/></g>'
+    + '<rect class="hxRc" x="34" y="46" width="86" height="82" fill="rgba(74,163,255,.18)" stroke="#fff" stroke-width="2" stroke-dasharray="6 4"/>'
+    + '<line class="hxDl" x1="34" y1="128" x2="74" y2="104" stroke="#ffb02e" stroke-width="2.5" stroke-dasharray="6 4"/>'
+    + arrow('hxH', 24, 128, 24, 46, '#4aa3ff') + arrow('hxW', 34, 138, 120, 138, '#ff8fb3') + arrow('hxDp', 126, 126, 166, 102, '#ffb02e')
+    + '<g class="hxH">' + pill(12, 87, 'H', '#4aa3ff') + '</g><g class="hxW">' + pill(77, 138, 'W', '#ff8fb3', true).replace('y="130"', 'y="130"') + '</g><g class="hxDp">' + pill(168, 114, 'D', '#ffb02e', true) + '</g>'
+    + dot('hxD1', '#2ee67b', 34, 128, 1) + dot('hxD2', '#4aa3ff', 120, 46, 2) + dot('hxD3', '#ffb02e', 74, 104, 3)
+    + '</svg>';
+  return svg + '<div class="hxCaps" aria-live="off">' + caps.map((c) => '<span>' + c[2] + '</span>').join('') + '</div>';
+}
 function showHowTo(){
+  document.getElementById('htTitle').textContent = 'Point the space: H × W × D';
+  document.getElementById('htTips').innerHTML = '<div>📏 Use a tape if you can. You can type cm or feet.</div><div>Tap the ? button any time to watch this again.</div>';
+  document.getElementById('htArt').innerHTML = hxIntro();
+  document.getElementById('htList').innerHTML = '';
+  document.getElementById('htGo').textContent = 'Start marking';
+  document.getElementById('howTo').hidden = false;
+}
+function showHowToOld(){
   const dot = (c, x, y, i, k) => '<g class="htDot" style="animation-delay:' + (i * 0.7) + 's"><circle cx="' + x + '" cy="' + y + '" r="8" fill="' + c + '" stroke="#fff" stroke-width="2.5"/><text x="' + x + '" y="' + (y + 4) + '" text-anchor="middle" font-size="10" font-weight="800" fill="#111">' + k + '</text></g>';
   let svg = '<svg viewBox="0 0 140 130"><rect x="0" y="116" width="140" height="14" fill="rgba(255,255,255,.12)"/><line x1="0" y1="116" x2="140" y2="116" stroke="#9aa0ab" stroke-width="2"/>';
   svg += '<rect x="4" y="22" width="132" height="94" fill="#c9c4bb"/><rect x="26" y="34" width="88" height="82" rx="2" fill="rgba(74,163,255,.16)" stroke="#fff" stroke-width="2" stroke-dasharray="6 4"/>';
@@ -3734,14 +3778,15 @@ function showHowTo(){
   document.getElementById('htList').innerHTML = MARK_LINES.rect.map((t) => '<li>' + t + '</li>').join('');
   document.getElementById('howTo').hidden = false;
 }
-document.getElementById('htGo').addEventListener('click', () => { document.getElementById('howTo').hidden = true; try { localStorage.setItem('ifbSeenHowTo', '1'); } catch (e) {} });
+document.getElementById('htGo').addEventListener('click', () => { document.getElementById('howTo').hidden = true; try { localStorage.setItem('ifbSeenHowTo2', '1'); } catch (e) {} });
 const HELP = {
-  3: { title: 'Size of the space', lines: ['Height: from the floor up to the top of the space.', 'Width: from one side to the other.', 'Depth: from the front to the back wall. Leave it empty if the back is open.', 'Use a tape if you can. Type cm or feet.'], tips: '' },
+  3: { title: 'Size of the space', lines: ['Height: from the floor up to the top of the space.', 'Width: from one side to the other.', 'Depth: from the front to the back wall.', 'Use a tape if you can. Type cm or feet.'], tips: '' },
 };
 function showHelp(){
   if (curJourney === 2) { showHowTo(); return; }
   const h = HELP[curJourney]; if (!h) return;
   document.getElementById('htTitle').textContent = h.title;
+  document.getElementById('htGo').textContent = 'Got it';
   document.getElementById('htArt').innerHTML = '';
   document.getElementById('htList').innerHTML = h.lines.map((t) => '<li>' + t + '</li>').join('');
   document.getElementById('htTips').innerHTML = h.tips;
@@ -3761,7 +3806,7 @@ document.getElementById('homeBtn').addEventListener('click', () => {
   if (machine) { machine.visible = true; needsRender = true; }
   resetPicker(); showUpload();
 });
-let seenHowTo = false; try { seenHowTo = localStorage.getItem('ifbSeenHowTo') === '1'; } catch (e) {}
+let seenHowTo = false; try { seenHowTo = localStorage.getItem('ifbSeenHowTo2') === '1'; } catch (e) {}
 // the placing box's label and the first-time hand
 const fpLabel = document.getElementById('fpLabel'), handHint = document.getElementById('handHint');
 let fpRaf = 0, handShown = false;
