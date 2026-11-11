@@ -3093,8 +3093,8 @@ function estimateMarked(){
   const sb = calScreen(cal.base);
   const P = groundHit(sb.x, sb.y); if (!P) return null;
   camera.updateMatrixWorld();
-  const cp = camera.position;
-  const n = new THREE.Vector3(P.x - cp.x, 0, P.z - cp.z); if (n.lengthSq() < 1e-6) return null; n.normalize();
+  // the front of the space faces the camera head-on (the way the camera looks, level), so its edges line up with the rectangle that was marked
+  const n = new THREE.Vector3(); camera.getWorldDirection(n); n.y = 0; if (n.lengthSq() < 1e-6) return null; n.normalize();
   // where the top dot's ray meets the vertical plane through the start point, facing the camera
   const sp = calScreen(cal.top);
   ndc.set((sp.x / window.innerWidth) * 2 - 1, -((sp.y / stageH()) * 2 - 1));
