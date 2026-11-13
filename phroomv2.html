@@ -155,7 +155,7 @@
   #camVideo{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
   .camHorizon{position:absolute;left:14%;right:14%;top:50%;height:0;border-top:2px solid rgba(255,255,255,.85);
     filter:drop-shadow(0 0 1px rgba(0,0,0,.8));pointer-events:none;display:none;transition:border-color .15s}
-  .camHorizon.on{display:block}
+  .camHorizon.on{display:none!important}
   .camHorizon.level{border-top-color:var(--go)}
   .camTop{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:12px;
     padding:calc(env(safe-area-inset-top,0px) + 12px) 14px 26px;background:linear-gradient(180deg,rgba(0,0,0,.65),transparent)}
@@ -746,7 +746,7 @@
     <div class="camHorizon" id="camHorizon" aria-hidden="true"></div>
     <div class="camTop">
       <button class="iconBtn" id="camClose" type="button" aria-label="Close the camera"><svg class="i"><use href="#i-x"/></svg></button>
-      <span class="camHint" id="camHint" role="status" aria-live="polite">Show the floor where the machine would go</span>
+      <span class="camHint" id="camHint" role="status" aria-live="polite"></span>
     </div>
     <div class="camBottom">
       <span class="camTilt" id="camTilt"></span>
@@ -1169,7 +1169,6 @@ async function takePhotoFile(f, pitch = null){
   await readPhotoLens(f);   // best-effort: the photo's real lens, if its EXIF still says
   readingEl.classList.remove('on');
   const notes = photoNotes(photoBitmap);
-  if (sensorPitch !== null) notes.push({ good: true, text: 'Your phone’s tilt (' + Math.round(sensorPitch) + '° down) was recorded with the photo — it helps get the size right.' });
   showNotes(notes);
   if (previewURL) URL.revokeObjectURL(previewURL);
   preview.src = previewURL = URL.createObjectURL(f);
@@ -1286,11 +1285,7 @@ function onOrient(e){
   const level = Math.abs(tilt.roll) < 2;
   camHorizon.classList.add('on'); camHorizon.classList.toggle('level', level);
   camHorizon.style.transform = 'rotate(' + tilt.roll.toFixed(1) + 'deg)';           // stays level with the room
-  camTilt.textContent = Math.round(tilt.pitch) + '°';
-  camHint.textContent = tilt.pitch < -3 ? 'Tilt the phone down a little — show the floor'
-    : tilt.pitch > 45 ? 'Tilt up a little — show some wall too, not just floor'
-    : Math.abs(tilt.roll) > 3 ? 'Hold the phone straight — line up the level'
-    : '✓ Good angle — take the photo';
+  camHint.textContent = '';                                                           // no angle tips or numbers on screen
 }
 async function openCamera(){
   // iPhones ask before sharing motion data, and only from a tap -- this is that tap
@@ -1305,8 +1300,7 @@ async function openCamera(){
     return;
   }
   Object.assign(tilt, { pitch: null, roll: null, hist: [] });
-  camHint.textContent = 'Show the floor where the machine would go';
-  camTilt.textContent = ''; camHorizon.classList.remove('on');
+  camHint.textContent = ''; camTilt.textContent = ''; camHorizon.classList.remove('on');
   shutter.disabled = false;
   camVideo.srcObject = camStream;
   camView.hidden = false;
