@@ -451,7 +451,9 @@
   .pickThumb img{width:100%;height:100%;object-fit:contain}
   .pickThumb.on{opacity:1;transform:translateY(-4px) scale(1.08);border-color:#17181c;box-shadow:3px 3px 0 #17181c}
   .pickGo{width:100%;max-width:380px;flex:none;border:2px solid #17181c!important;box-shadow:3px 3px 0 #17181c!important;font-weight:800;border-radius:18px}
-  .calGuide{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14)}
+  #calSheetSub:empty{display:none}
+  .calGuide{display:none!important}   /* the H x W x D picture and legend are not shown */
+  .calGuideOld{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:16px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14)}
   .calGuide svg{width:104px;flex:none;overflow:visible}
   .calGuide .gf{fill:rgba(255,255,255,.07);stroke:rgba(255,255,255,.28);stroke-width:1.2}
   .calGuide .gd{stroke:rgba(255,255,255,.28);stroke-width:1.2;stroke-dasharray:3 3}
@@ -3252,8 +3254,8 @@ function openCalSheet(keep){
   setJourney(3); scanEl.classList.remove('show');
   setUnit(calUnit, false);
   calSheet.classList.remove('hideH', 'hideW');
-  document.getElementById('calSheetTitle').textContent = 'Size of the space';
-  calSheetSub.textContent = 'Measure the space you marked. Then type all three sizes.';
+  document.getElementById('calSheetTitle').textContent = 'Fill the size';
+  calSheetSub.textContent = '';
   document.querySelector('label[for="calCm"] .calLbl').textContent = 'Height';
   document.querySelector('label[for="calW"] .calLbl').textContent = 'Width';
   document.querySelector('label[for="calD"] .calLbl').textContent = 'Depth';
@@ -3844,7 +3846,7 @@ function showHowToOld(){
 }
 document.getElementById('htGo').addEventListener('click', () => { document.getElementById('howTo').hidden = true; try { localStorage.setItem('ifbSeenHowTo2', '1'); } catch (e) {} });
 const HELP = {
-  3: { title: 'Size of the space', lines: ['Height: from the floor up to the top of the space.', 'Width: from one side to the other.', 'Depth: from the front to the back wall.', 'Use a tape if you can. Type cm or feet.'], tips: '' },
+  3: { title: 'Fill the size', lines: ['Height: from the floor up to the top of the space.', 'Width: from one side to the other.', 'Depth: from the front to the back wall.', 'Use a tape if you can. Type cm or feet.'], tips: '' },
 };
 function showHelp(){
   if (curJourney === 2) { showHowTo(); return; }
