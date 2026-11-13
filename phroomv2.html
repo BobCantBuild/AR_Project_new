@@ -3050,6 +3050,7 @@ function renderCalib(){
       s += fin(t.x, t.y, 0, 0);
     }
   }
+  if (calSheet.classList.contains('open')) s = s.replace(/<text[^>]*>[^<]*<\/text>/g, '');   // while typing the sizes: no words on the photo, so the H / W / D numbers stand out
   calibSvg.innerHTML = s;
 }
 // A 3× magnifier just above the finger, with a crosshair on the exact point being marked
@@ -3193,7 +3194,7 @@ function buildSpaceBox(g, col, tx){
   edge(c(0, 1, 0), c(1, 1, 0), false, 0xff8fb3, mw.r, mw.o);
   edge(c(1, 1, 0), c(1, 1, 1), false, 0xffb02e, md.r, md.o);
   }
-  const lab = (text, p, dir, bg) => { const l = makeLabel(text, bg); l.position.copy(p).addScaledVector(dir, 0.07); l.renderOrder = 999; grp.add(l); };
+  const lab = (text, p, dir, bg) => { const l = makeLabel(text, bg); if (pvMode) l.scale.multiplyScalar(1.4); l.position.copy(p).addScaledVector(dir, 0.07); l.renderOrder = 999; grp.add(l); };
   lab(tx.h, c(0, 0.5, 0), right.clone().multiplyScalar(-1), '#4aa3ff');
   lab(tx.w, c(0.5, 1, 0), up, '#ff8fb3');
   lab(tx.d, c(1, 1, 0.5), right, '#ffb02e');
@@ -3208,8 +3209,8 @@ function previewSpaceBox(){
   const g = { P: est.P, n: est.n, x0: Math.min(0, est.lat), W: est.W, H: est.H, D: d && calValidW(d) ? d / 100 * m : null };
   const w = calWcm();
   buildSpaceBox(g, 0x4aa3ff, {
-    h: h && calValid(h) ? 'H ' + sp(h).split(' (')[0] : 'Height', w: w && calValidW(w) ? 'W ' + sp(w).split(' (')[0] : 'Width',
-    d: g.D ? 'D ' + sp(d).split(' (')[0] : 'Depth', pv: true, done: { h: !!(h && calValid(h)), w: !!(w && calValidW(w)), d: !!(d && calValidW(d)) } });
+    h: h && calValid(h) ? 'H ' + sp(h).split(' (')[0] : 'H', w: w && calValidW(w) ? 'W ' + sp(w).split(' (')[0] : 'W',
+    d: g.D ? 'D ' + sp(d).split(' (')[0] : 'D', pv: true, done: { h: !!(h && calValid(h)), w: !!(w && calValidW(w)), d: !!(d && calValidW(d)) } });
 }
 /* What the camera fit says the two marked lines measure in real life: the height line's start sits on the
    floor, so its world position is known. A vertical plane through it, facing the camera, is taken as the
@@ -3266,7 +3267,7 @@ function openCalSheet(keep){
   calCm.value = ''; calW.value = ''; calD.value = ''; calDTouched = false;
   for (const el of [calCm, calW, calD]) el.parentNode.className = 'calIn';
   calReset.hidden = true;
-  calSheet.classList.add('open'); liftForSheet();
+  calSheet.classList.add('open'); liftForSheet(); renderCalib();
   if (keep && lastTyped) { setUnit(lastTyped.unit, false); calCm.value = lastTyped.h; calW.value = lastTyped.w; calD.value = lastTyped.d || ''; }
   calValidate(); calHint.textContent = '';
   previewSpaceBox();
