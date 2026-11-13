@@ -3310,11 +3310,6 @@ document.getElementById('calUnitCm').addEventListener('click', () => { setUnit('
 document.getElementById('calUnitFt').addEventListener('click', () => { setUnit('ft', true); calValidate(); });
 function calValidate(){
   const h = calHcm(), w = calWcm();
-  let autoNote = '';
-  if (cal.dep && !calDTouched && h !== null && calValid(h)) {         // the depth point on the photo gives a starting number; the customer can change it
-    const e = estimateMarked();
-    if (e && e.dep) { const sug = e.dep / (e.H / (h / 100)) * 100; if (sug >= 10 && sug <= 400) { calD.value = fromCm(sug); calD.parentNode.classList.add('auto'); autoNote = 'We guessed the depth from your photo. Change it if you measured.'; } }
-  }
   const d = calDcm();
   const okH = h !== null && calValid(h), okW = w !== null && calValidW(w), okD = d !== null && calValidW(d);
   calApply.disabled = !(okH && okW && okD);
@@ -3328,7 +3323,6 @@ function calValidate(){
     const est = estimateMarked();
     if (est) { const seen = est.W / (est.H / (h / 100)) * 100; if (Math.abs(seen - w) / w > 0.25) { msg = 'Your photo shows a width of about ' + fromCm(seen) + ' ' + calUnit + '. Please check the width.'; calHint.classList.remove('ok'); } }
   }
-  if (!msg && autoNote) msg = autoNote;
   calHint.textContent = msg;
   previewSpaceBox();
 }
