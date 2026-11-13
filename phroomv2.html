@@ -257,7 +257,7 @@
   /* Compact, and kept off the marks: it sits at whichever edge of the photo is clear of them (see
      placeCalBar()), touches go straight through it to the photo, and it all but vanishes while a
      finger is down -- so no part of the photo is ever unmarkable. */
-  .calBar{position:absolute;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 74px);z-index:6;display:none;
+  .calBar{position:absolute;left:10px;right:10px;top:calc(env(safe-area-inset-top,0px) + 56px);z-index:6;display:none;
     align-items:center;gap:10px;padding:9px 10px 9px 13px;border-radius:14px;color:#fff;pointer-events:none;
     background:rgba(12,12,12,.88);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
     border:1px solid rgba(255,255,255,.16);box-shadow:0 8px 22px rgba(0,0,0,.45);transition:opacity .15s}
@@ -405,7 +405,7 @@
   .calUnit button.on{background:#fff;color:#111}
   .cfVal .alt{display:block;font-size:12px;font-weight:500;color:var(--muted);margin:2px 0 0;letter-spacing:0}
   #journey{position:fixed;left:14px;right:14px;padding:6px 12px;border-radius:999px;background:rgba(10,10,14,.5);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);top:calc(env(safe-area-inset-top,0px) + 54px);z-index:19;display:flex;align-items:center;gap:10px;pointer-events:none}
-  #journey[hidden]{display:none}
+  #journey[hidden],#journey{display:none!important}                   /* the 1-4 step banner is not shown */
   .jSegs{flex:1;display:flex;gap:4px}
   .jSegs i{flex:1;height:4px;border-radius:3px;background:rgba(255,255,255,.28)}
   .jSegs i.on{background:#fff}
@@ -1343,7 +1343,7 @@ function fitPhoto(sheetEl, visibleH){
   requestAnimationFrame(() => {
     const r = sheetEl.getBoundingClientRect();
     if (r.width < innerWidth * 0.8) return;                       // a side panel on wide screens: the photo is already clear
-    const topPad = 84, gap = 14;                                  // below the top bar and the step strip
+    const topPad = 62, gap = 14;                                  // below the top bar and the step strip
     const availH = innerHeight - (visibleH || sheetEl.offsetHeight) - topPad - gap;   // (the sheet slides in: use its final height)
     let k = availH / Math.max(1, stageEl.offsetHeight);
     if (k >= 0.98) return;
