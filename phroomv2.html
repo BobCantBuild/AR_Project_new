@@ -3321,7 +3321,7 @@ function calValidate(){
     const est = estimateMarked();
     if (est) { const seen = est.W / (est.H / (h / 100)) * 100; if (Math.abs(seen - w) / w > 0.25) { msg = 'Your photo shows a width of about ' + fromCm(seen) + ' ' + calUnit + '. Please check the width.'; calHint.classList.remove('ok'); } }
   }
-  calHint.textContent = msg;
+  calHint.textContent = '';                           // no hints under the boxes; Apply simply stays off until the three sizes are valid
   previewSpaceBox();
 }
 // Refit the camera with everything known about this photo (the AI's view plus the customer's marks),
