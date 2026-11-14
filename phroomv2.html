@@ -3036,8 +3036,9 @@ function renderCalib(){
       + '<g class="' + (dx || dy ? 'calFingerDrag' : 'calFingerTap') + '" style="--dx:' + dx.toFixed(1) + 'px;--dy:' + dy.toFixed(1) + 'px"><circle r="9" class="calTouch"/><text x="-11" y="30" font-size="34">👆</text></g></g>';
     const clamp = (v) => Math.min(0.94, Math.max(0.06, v));
     if (!nextK && !cal.dep && cal.base) {               // third: drag further back on the floor
-      const t = imageToScreen(clamp(cal.base.fx + 0.12), clamp(cal.base.fy - 0.12));
-      s += fin(a.x, a.y, t.x - a.x, t.y - a.y);
+      const ww = b.x - a.x, hh = b.y - a.y, gx = a.x + (ww >= 0 ? 1 : -1) * Math.abs(ww) * 0.25, gy = a.y - Math.abs(hh) * 0.2;   // the pale depth point already shown on the box
+      s += '<circle cx="' + gx.toFixed(1) + '" cy="' + gy.toFixed(1) + '" r="10" fill="rgba(255,176,46,.35)" stroke="#ffb02e" stroke-width="2.5" stroke-dasharray="4 3"/>';
+      s += fin(gx, gy, (gx - a.x) * 0.4, (gy - a.y) * 0.4);
     } else if (nextK === 'top' && cal.base) {           // second: drag from the first dot up and to the right
       const t = imageToScreen(clamp(cal.base.fx + 0.55), clamp(cal.base.fy - 0.4));
       s += fin(a.x, a.y, t.x - a.x, t.y - a.y);
