@@ -3255,7 +3255,7 @@ function openCalSheet(keep){
   setJourney(3); scanEl.classList.remove('show');
   setUnit(calUnit, false);
   calSheet.classList.remove('hideH', 'hideW');
-  document.getElementById('calSheetTitle').textContent = 'Fill the size';
+  document.getElementById('calSheetTitle').textContent = 'Enter the measured size';
   calSheetSub.textContent = '';
   document.querySelector('label[for="calCm"] .calLbl').textContent = 'Height';
   document.querySelector('label[for="calW"] .calLbl').textContent = 'Width';
@@ -3847,7 +3847,7 @@ function showHowToOld(){
 }
 document.getElementById('htGo').addEventListener('click', () => { document.getElementById('howTo').hidden = true; try { localStorage.setItem('ifbSeenHowTo2', '1'); } catch (e) {} });
 const HELP = {
-  3: { title: 'Fill the size', lines: ['Height: from the floor up to the top of the space.', 'Width: from one side to the other.', 'Depth: from the front to the back wall.', 'Use a tape if you can. Type cm or feet.'], tips: '' },
+  3: { title: 'Enter the measured size', lines: ['Height: from the floor up to the top of the space.', 'Width: from one side to the other.', 'Depth: from the front to the back wall.', 'Use a tape if you can. Type cm or feet.'], tips: '' },
 };
 function showHelp(){
   if (curJourney === 2) { showHowTo(); return; }
