@@ -677,6 +677,75 @@
   #pickOverlay{background:var(--fy-bg)!important}
   .poTitle{font-size:20px;font-weight:800}
   .poClose{background:#fff!important;color:var(--fy-ink)!important;border:1px solid var(--fy-line)}
+
+  /* ---------- IFB brand skin, part 2: marking, size sheet, result and dialogs ---------- */
+  html,body{background:var(--fy-bg)}
+  .sheet,.calSheet,.cfCard,.placeBar,.calBar,#dock{--card:#f4f4f4;--line:var(--fy-line);--muted:#555;--ink:var(--fy-ink);color:var(--fy-ink)}
+  .cfIcon,.cfCard .cfIcon{display:none!important}
+  /* header over the photo */
+  .top{background:#fff;padding:calc(env(safe-area-inset-top,0px) + 11px) 22px 11px;gap:14px;box-shadow:0 1px 0 rgba(0,0,0,.05)}
+  .top[inert]{opacity:0}
+  .top .round,#helpBtn,#homeBtn{background:#fff;color:var(--fy-ink);border:1px solid var(--fy-line);-webkit-backdrop-filter:none;backdrop-filter:none;box-shadow:none}
+  .round[aria-pressed="true"]{background:var(--fy-ink)!important;color:#fff!important;border-color:var(--fy-ink)!important}
+  .machineChip{background:#fff;color:var(--fy-ink);border:1px solid var(--fy-line);-webkit-backdrop-filter:none;backdrop-filter:none}
+  #helpBtn,#homeBtn{top:calc(env(safe-area-inset-top,0px) + 11px)}
+  #helpBtn{right:22px}#homeBtn{right:70px}
+  /* bottom action bar */
+  #dock{background:#fff;border-top:0;padding:14px 22px calc(env(safe-area-inset-bottom,0px) + 16px);box-shadow:0 -1px 0 rgba(0,0,0,.05)}
+  #dock .btn,.cfWrap .btn,.sheet .btn,.calSheet .btn,.placeBar .btn{border-radius:16px;min-height:54px;font-size:15.5px;font-weight:700;box-shadow:none;animation:none!important}
+  #dock .btn:not(.go),.sheet .btn:not(.go),.calSheet .btn:not(.go),.cfWrap .btn:not(.go),.placeBar .btn:not(.go){background:#fff!important;color:var(--fy-ink)!important;border:1px solid var(--fy-line)!important}
+  #dock .btn.go,.sheet .btn.go,.calSheet .btn.go,.cfWrap .btn.go,.placeBar .btn.go{background:var(--primary)!important;color:#fff!important;border:0!important}
+  #dock #adjustBtn,#dock #calBtn{background:#fff!important;border:1px solid var(--fy-line)!important}
+  /* marking bar */
+  .calBar{background:#fff;border:0;border-radius:18px;box-shadow:0 8px 24px rgba(0,0,0,.14);-webkit-backdrop-filter:none;backdrop-filter:none}
+  .calStep{font-size:15px;font-weight:700;color:var(--fy-ink)}
+  .calStepNo{color:#555}
+  .iconBtn{background:#fff;color:var(--fy-ink);border:1px solid var(--fy-line)}
+  .placeBar{background:#fff;border:0;box-shadow:0 8px 24px rgba(0,0,0,.14)}
+  /* bottom sheets */
+  .sheet,.calSheet{background:#fff!important;border-top:0!important;border-radius:28px 28px 0 0;box-shadow:0 -10px 34px rgba(0,0,0,.14)}
+  .sheet::before{background:#cfcfcf}
+  .sheetWrap{background:rgba(26,26,26,.4)}
+  .sheetTitle,.fitTitle{font-weight:800;font-size:20px;color:var(--fy-ink)}
+  .option,.chip,.fitOther{background:#f4f4f4!important;color:var(--fy-ink)!important;border:0!important;border-radius:18px;box-shadow:none!important}
+  .option .oi{background:#fff!important;color:var(--fy-ink)!important;border:0!important}
+  #sizeChoice .sheet{background:#fff!important;color:var(--fy-ink);border:0}
+  #sizeChoice .option{background:#f4f4f4!important;border:0!important;box-shadow:none!important}
+  #sizeChoice .oi{background:#fff!important}
+  .chip[aria-pressed="true"]{background:#fff!important;box-shadow:inset 0 0 0 2px var(--fy-ink)!important}
+  .calTog{background:#f4f4f4;color:var(--fy-ink);border:0}
+  .calTog:has(input:checked){background:#fff;box-shadow:inset 0 0 0 2px var(--fy-ink)}
+  /* size sheet */
+  .calIn{background:#f4f4f4;border:1px solid transparent}
+  .calIn:focus-within{border-color:var(--fy-ink)}
+  .calIn input{color:var(--fy-ink)}
+  #calSheet .calField:focus-within .calLbl{color:var(--fy-ink)}
+  .calField{color:#555}
+  .calUnit{background:#f4f4f4}
+  .calUnit button{color:#555}
+  .calUnit button.on{background:var(--fy-ink);color:#fff}
+  .calHint{color:#c0242d}
+  #calSheetTitle{font-size:18px;line-height:1.2;padding-right:104px}
+  input[type=range]{accent-color:var(--primary)}
+  /* result and dialogs */
+  .cfWrap{background:rgba(26,26,26,.45);-webkit-backdrop-filter:none;backdrop-filter:none}
+  .cfCard{background:#fff;border:0;box-shadow:0 24px 60px rgba(0,0,0,.22);border-radius:28px}
+  .cfTitle{font-size:22px;font-weight:800;letter-spacing:-.02em;color:var(--fy-ink)}
+  .cfSub,.cfLbl,.cfVal small,.cfVal .alt,.maOpt small,.fitHelp,.fitHint,.fitWait,.htTips,.fitOther .fo small{color:#555}
+  .cfStat{background:#f4f4f4;border:0;border-radius:18px}
+  .cfNote{background:#f4f4f4;color:var(--fy-ink)}
+  .maOpt{background:#f4f4f4;color:var(--fy-ink);border:0;border-radius:18px}
+  .maOpt:hover,.maOpt:focus-visible{box-shadow:inset 0 0 0 2px var(--fy-ink)}
+  .maArt,.htArt svg{background:#fff}
+  .cfBack{color:#555}
+  .linkBtn{color:var(--fy-ink)}
+  .htList{color:var(--fy-ink)}
+  .qnote{color:#7a5200;background:#fff6dd;border-color:#f0d58a}
+  .toast{background:#1a1a1a;border:0;border-radius:14px}
+  .fitRow{align-items:center;font-size:14px}
+  .fitRow .fi,.fitOther .fi{flex:none;width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#fff}
+  .fi.ok{background:#1f9d55}.fi.no{background:var(--primary)}.fi.warn{background:#e59a00}.fi.info{background:#777}
+  .option .oi .em{display:none}
 </style>
 </head>
 <body>
@@ -814,7 +883,7 @@
     <canvas id="scan"></canvas>
     <canvas id="gl"></canvas>
     <span class="srOnly" id="aiStatus" role="status" aria-live="polite"></span>
-    <div class="hint" id="hint">Drag to move it 👆 · two fingers to spin 🌀</div>
+    <div class="hint" id="hint">Drag to move it · two fingers to spin </div>
     <!-- Measure: touch-and-slide markers for the bottom and top of something of known height -->
     <div id="calib" aria-hidden="true">
       <svg id="calibSvg"></svg>
@@ -844,7 +913,7 @@
     <div class="fpLabel" id="fpLabel" hidden></div>
     <div class="handHint" id="handHint" hidden aria-hidden="true">👆</div>
     <div class="placeBar" id="placeBar" role="status" aria-live="polite">
-      <span class="pt">📍 Drag the green box where the machine will stand.<small>Two fingers turn it · white edge = door side</small></span>
+      <span class="pt">Drag the green box where the machine will stand.<small>Two fingers turn it · white edge = door side</small></span>
       <button class="btn small dark" id="placeUndo" type="button">↩ Undo</button>
       <button class="btn small go" id="placeHere" type="button">Place here</button>
     </div>
@@ -876,7 +945,7 @@
   <div class="sheetWrap" id="adjust">
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="adjustTitle">
       <div class="sheetHead">
-        <span class="sheetTitle" id="adjustTitle">Spin it 🌀</span>
+        <span class="sheetTitle" id="adjustTitle">Spin it </span>
         <button class="btn small" id="adjustDone" type="button">Done</button>
       </div>
       <div class="slider"><label for="sRot">Angle</label><input id="sRot" type="range" min="0" max="360" value="20"><span class="val" id="vRot">20°</span></div>
@@ -895,7 +964,7 @@
   <!-- the exact size: offered when the photo gave nothing to size the machine from -->
   <div class="sheetWrap" id="improve">
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="improveTitle">
-      <div class="sheetHead"><span class="sheetTitle" id="improveTitle">📏 Want the exact size?</span></div>
+      <div class="sheetHead"><span class="sheetTitle" id="improveTitle">Want the exact size?</span></div>
       <span class="sheetSub">Nothing in this photo tells us its real size yet, so the machine's size is an estimate.</span>
       <button class="option" id="improveMeasure" type="button"><span class="oi"><span class="em">📏</span></span>
         <span><b>Measure something</b><small>Mark a door, table or counter in the photo — exact</small></span></button>
@@ -907,21 +976,21 @@
   <!-- After placing: will it fit in that space, and which other machines would -->
   <div class="sheetWrap" id="fitSheet">
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fitTitle">
-      <div id="fitHead"><span class="fitTitle" id="fitTitle"></span><span class="fitHint" id="fitHint">Swipe up for details ⌃</span></div>
+      <div id="fitHead"><span class="fitTitle" id="fitTitle"></span><span class="fitHint" id="fitHint">Swipe up for details</span></div>
       <div class="fitRows" id="fitRows"></div>
       <div class="fitOthers" id="fitOthers"></div>
-      <button class="btn dark" id="fitOthersBtn" type="button">💡 What else fits here?</button>
+      <button class="btn dark" id="fitOthersBtn" type="button">What else fits here?</button>
       <div class="sheetBtns" id="fitGood">
-        <button class="btn go" id="fitRetry2" type="button">🔁 Retry</button>
-        <button class="btn dark" id="fitHome" type="button">🏠 Home</button>
+        <button class="btn go" id="fitRetry2" type="button">Retry</button>
+        <button class="btn dark" id="fitHome" type="button">Home</button>
       </div>
-      <button class="linkBtn" id="fitSave" type="button">💾 Save this picture</button>
+      <button class="linkBtn" id="fitSave" type="button">Save this picture</button>
       <div class="sheetBtns" id="fitBad">
         <p class="fitHelp">Try other numbers on this photo, or start again with a new photo.</p>
-        <button class="btn go" id="fitRetry" type="button">🔁 Retry with different measurement</button>
+        <button class="btn go" id="fitRetry" type="button">Retry with different measurement</button>
         <div class="fitRow2">
-          <button class="btn dark" id="fitNewPic" type="button">🖼️ Retry with a different picture</button>
-          <button class="btn dark fitHomeBtn" id="fitHome2" type="button" aria-label="Home">🏠 Home</button>
+          <button class="btn dark" id="fitNewPic" type="button">Retry with a different picture</button>
+          <button class="btn dark fitHomeBtn" id="fitHome2" type="button" aria-label="Home">Home</button>
         </div>
       </div>
     </div>
@@ -929,7 +998,7 @@
 
   <!-- Measure, last step: what was marked, and how tall it is -->
   <div class="calSheet" id="calSheet" role="dialog" aria-modal="true" aria-labelledby="calSheetTitle">
-    <span class="sheetTitle" id="calSheetTitle">Check the space 📏</span>
+    <span class="sheetTitle" id="calSheetTitle">Check the space </span>
     <span class="sheetSub" id="calSheetSub"></span>
     <div class="calUnit" role="group" aria-label="Unit">
       <button type="button" id="calUnitCm" class="on">cm</button><button type="button" id="calUnitFt">ft</button>
@@ -1010,7 +1079,7 @@
         <div class="cfStat"><span class="cfLbl">Width</span><span class="cfVal" id="cfW">-</span></div>
         <div class="cfStat"><span class="cfLbl">Depth</span><span class="cfVal" id="cfD">-</span></div>
       </div>
-      <div class="cfNote">💡 Measured with a tape? Then this will be accurate.</div>
+      <div class="cfNote">Measured with a tape? Then this will be accurate.</div>
       <button class="btn go cfGo" id="calConfirmGo" type="button">Confirm</button>
       <button class="cfBack" id="calConfirmBack" type="button">Change it</button>
     </div>
@@ -1660,7 +1729,7 @@ function updateDimChip(){
 // to drag something they can't see yet just confuses.
 let hintTimer = null;
 function showDragHint(){
-  hintEl.textContent = 'Drag to move it 👆 · two fingers to spin 🌀';
+  hintEl.textContent = 'Drag to move it · two fingers to spin ';
   hintEl.style.display = 'block';
   clearTimeout(hintTimer);
   hintTimer = setTimeout(() => { hintEl.style.display = 'none'; }, 3500);
@@ -1864,7 +1933,7 @@ function initThree(){
       dragMode = 'free';
       placeRaw(downX, downY);
       if (navigator.vibrate) try { navigator.vibrate(15); } catch (err) {}
-      toast('📍 Placed exactly there. Drag it to snap back to the floor.');
+      toast('Placed exactly there. Drag it to snap back to the floor.');
     }, LONG_PRESS_MS);
   });
   glCanvas.addEventListener('pointermove', (e) => {
@@ -2054,7 +2123,7 @@ saveBtn.addEventListener('click', async () => {
     const a = document.createElement('a');
     a.href = url; a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    toast('Saved! Go flex it 🎉');
+    toast('Saved! Go flex it ');
   } catch (e) {
     console.warn('Save failed:', e);
     toast('Couldn’t save the picture — please try again.');
@@ -3610,7 +3679,7 @@ function placeHere(){
   if (spaceMode === 'open') {                   // nothing limits it: no fit check needed
     dockEl.inert = false; topBar.inert = false;
     showDragHint();
-    toast('✅ Open spot: no limit on height or width.');
+    toast('Open spot: no limit on height or width.');
     return;
   }
   showVerdict();
@@ -3696,10 +3765,12 @@ function showVerdict(){
   fitTitle.textContent = space && space.est && (space.H || space.W)
     ? (!r.ok ? '❌ Looks too small' : r.tight ? '👌 Looks like a tight fit' : '✅ Looks like it fits')
     : !r.ok ? '❌ Won’t fit here' : r.tight ? '👌 Tight fit' : (!spotOk || over) ? '⚠️ Fits the space, but check' : '✅ It fits!';
+  fitTitle.textContent = fitTitle.textContent.replace(/^[^A-Za-z0-9]+/, '');   // no emoji in the title
   const bad = !r.ok;
   fitSheet.classList.toggle('bad', bad);
   const shown = bad ? rows.filter((x) => x[0] === '❌') : rows;       // won't fit: only the reasons, nothing else
-  fitRows.innerHTML = shown.map(([i, t]) => `<div class="fitRow"><span class="fi">${i}</span><span>${t}</span></div>`).join('');
+  const MARK = { '✅': ['ok', '✓'], '👌': ['ok', '✓'], '❌': ['no', '✕'], '⚠️': ['warn', '!'], '📏': ['info', 'i'] };
+  fitRows.innerHTML = shown.map(([i, t]) => { const m = MARK[i] || ['info', i]; return `<div class="fitRow"><span class="fi ${m[0]}">${m[1]}</span><span>${t}</span></div>`; }).join('');
   fitOthers.replaceChildren();
   if (machine) { machine.visible = !bad; needsRender = true; }       // won't fit: don't show the machine at all
   clearSpaceBox();                                                   // the box is gone: only the machine stays on the photo
@@ -3735,7 +3806,7 @@ async function showOthers(){
     const r = fitCheck(d), cur = k === modelKey;
     const why = !r.ok ? [r.h && !r.h.ok ? `${r.h.short} cm too tall` : '', r.w && !r.w.ok ? `${r.w.short} cm too wide` : '', r.d && !r.d.ok ? `${r.d.short} cm too deep` : ''].filter(Boolean).join(', ')
       : r.tight ? 'Fits, but tight' : 'Fits';
-    items.push(`<div class="fitOther"><span>${r.ok ? (r.tight ? '👌' : '✅') : '❌'}</span><span class="fo"><b>${MODELS[k].label}</b><small>${d.W} × ${d.D} × ${d.H} cm (W × D × H) · ${why}</small></span>` +
+    items.push(`<div class="fitOther"><span class="fi ${r.ok ? 'ok' : 'no'}">${r.ok ? '✓' : '✕'}</span><span class="fo"><b>${MODELS[k].label}</b><small>${d.W} × ${d.D} × ${d.H} cm (W × D × H) · ${why}</small></span>` +
       (cur ? '<small>Showing</small>' : r.ok ? `<button class="btn small go" type="button" data-k="${k}">Try it</button>` : '') + '</div>');
   }
   fitOthers.innerHTML = items.join('') || '<span class="fitWait">Couldn’t check the other machines.</span>';
@@ -3879,7 +3950,7 @@ function hxIntro(){
 }
 function showHowTo(){
   document.getElementById('htTitle').textContent = 'Point the space: H × W × D';
-  document.getElementById('htTips').innerHTML = '<div>📏 Use a tape if you can. You can type cm or feet.</div><div>Tap the ? button any time to watch this again.</div>';
+  document.getElementById('htTips').innerHTML = '<div>Use a tape if you can. You can type cm or feet.</div><div>Tap the ? button any time to watch this again.</div>';
   document.getElementById('htArt').innerHTML = hxIntro();
   document.getElementById('htList').innerHTML = '';
   document.getElementById('htGo').textContent = 'Start marking';
@@ -3892,7 +3963,7 @@ function showHowToOld(){
   svg += '<image href="' + MODELS[modelKey].thumb + '" x="46" y="60" width="48" height="56" preserveAspectRatio="xMidYMax meet"/>';
   svg += dot('#2ee67b', 26, 116, 0, 1) + dot('#4aa3ff', 114, 34, 1, 2) + dot('#ffb02e', 70, 100, 2, 3) + '</svg>';
   document.getElementById('htTitle').textContent = 'Choose the space';
-  document.getElementById('htTips').innerHTML = '<div>📏 Use a tape if you can. You can type cm or feet.</div>';
+  document.getElementById('htTips').innerHTML = '<div>Use a tape if you can. You can type cm or feet.</div>';
   document.getElementById('htArt').innerHTML = svg;
   document.getElementById('htList').innerHTML = MARK_LINES.rect.map((t) => '<li>' + t + '</li>').join('');
   document.getElementById('howTo').hidden = false;
