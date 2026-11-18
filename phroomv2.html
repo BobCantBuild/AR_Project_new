@@ -626,6 +626,57 @@
     .sticker,.wave,#chooser .choice .thumb img,#chooser::before,#chooser::after,#upload::before,#upload::after,.upArt,.tip,
     #upload .btn.go,#dock .btn.go,.busyEmoji,#sizeChoice #scAI .oi .em,.how div{animation:none}
   }
+
+  /* ---------- IFB brand skin: white header, soft grey page, white rounded cards, bold black type ---------- */
+  :root{--fy-bg:#ebebeb;--fy-ink:#1a1a1a;--fy-line:#d6d6d6}
+  #chooser,#upload,#pickOverlay{--bg:var(--fy-bg);--ink:var(--fy-ink);--muted:#3d3d3d;--line:var(--fy-line);background:var(--fy-bg)!important;color:var(--fy-ink)}
+  #chooser::before,#chooser::after,#upload::before,#upload::after{display:none!important}
+  .sticker,.wave,.ch-brand,.how,.pickGlow,.pickHint,.upArt,.busyEmoji,.btn .ic,.tip .te{display:none!important}
+  #chooser *,#upload *{animation:none!important}
+  /* header */
+  .fyHead{position:fixed;top:0;left:0;right:0;z-index:5;height:calc(env(safe-area-inset-top,0px) + 68px);padding:env(safe-area-inset-top,0px) 22px 0;
+    display:flex;align-items:center;gap:18px;background:#fff;box-shadow:0 1px 0 rgba(0,0,0,.05)}
+  .fyBack,body:has(#upload[style*="flex"]) .top .round{appearance:none;flex:none;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    padding:0;background:#fff;color:var(--fy-ink);border:1px solid var(--fy-line);box-shadow:none;-webkit-backdrop-filter:none;backdrop-filter:none;cursor:pointer}
+  .fyBack svg,body:has(#upload[style*="flex"]) .top .round svg{width:24px;height:24px;stroke:currentColor;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+  .fyTitle{font-size:18px;font-weight:700;letter-spacing:-.01em;color:var(--fy-ink)}
+  /* chooser */
+  #chooser{align-items:stretch!important;justify-content:flex-start!important;gap:0!important;text-align:left;
+    padding:calc(env(safe-area-inset-top,0px) + 92px) 22px calc(env(safe-area-inset-bottom,0px) + 28px)!important}
+  #chooser h1{font-size:30px!important;font-weight:800;letter-spacing:-.03em;line-height:1.12;text-align:left;margin:0 0 14px;color:var(--fy-ink)}
+  .ch-sub{max-width:none!important;text-align:left!important;margin:0 0 22px!important;font-size:15.5px;font-weight:400!important;line-height:1.45;color:#2a2a2a!important}
+  .fyH2{margin:0 0 14px;font-size:26px;font-weight:800;letter-spacing:-.025em;color:var(--fy-ink)}
+  .pick{max-width:none!important;align-items:stretch!important;gap:0!important}
+  .pickStage{height:min(27vh,230px)!important;min-height:180px;background:#fff;border-radius:28px;box-shadow:0 8px 24px rgba(0,0,0,.06)}
+  .pickArrow{width:40px!important;height:40px!important;background:#fff!important;border:1px solid var(--fy-line)!important;box-shadow:none!important;color:var(--fy-ink)!important;font-size:22px!important;font-weight:600!important}
+  .pickArrow.l{left:10px}.pickArrow.r{right:10px}
+  .pickName{margin:14px 0 2px!important;font-size:21px!important;font-weight:800!important;letter-spacing:-.02em;color:var(--fy-ink)!important}
+  .pickSub{font-size:14.5px!important;font-weight:400!important;color:#3d3d3d!important}
+  .pickSpec{align-self:flex-start;margin-top:10px!important;padding:6px 12px!important;font-size:13px!important;font-weight:600!important;border:0!important;border-radius:999px!important;background:#fff!important;color:var(--fy-ink)!important}
+  .pickThumbs{gap:12px!important;margin:14px 0 16px!important}
+  .pickThumb{width:64px!important;height:64px!important;border-radius:18px!important;border:2px solid transparent!important;background:#fff!important;opacity:1!important;transform:none!important;box-shadow:none!important}
+  .pickThumb.on{border-color:var(--fy-ink)!important}
+  .pickGo{max-width:none!important;border:0!important;box-shadow:none!important;border-radius:16px!important;min-height:56px;font-size:16px;font-weight:700}
+  /* photo screen: same white header */
+  body:has(#upload[style*="flex"]) .top{background:#fff!important;padding:calc(env(safe-area-inset-top,0px) + 10px) 22px 10px;gap:18px;box-shadow:0 1px 0 rgba(0,0,0,.05)}
+  body:has(#upload[style*="flex"]) .top .machineChip{background:transparent!important;border:0!important;padding:0;font-size:18px;font-weight:700;color:var(--fy-ink)!important;max-width:calc(100vw - 150px)}
+  #upload .upMain{align-items:stretch!important;justify-content:flex-start!important;text-align:left;padding:calc(env(safe-area-inset-top,0px) + 92px) 22px 16px}
+  #upload.picked .upMain{padding:calc(env(safe-area-inset-top,0px) + 84px) 14px 12px}
+  #upload .intro{align-items:stretch;gap:12px}
+  #upload h1{font-size:30px!important;font-weight:800;letter-spacing:-.03em;line-height:1.12;color:var(--fy-ink)}
+  #upload .lead{max-width:none!important;font-size:15.5px!important;font-weight:400!important;color:#2a2a2a!important}
+  .tips{flex-direction:column;flex-wrap:nowrap;max-width:none;gap:10px;margin-top:10px}
+  .tip{background:#fff!important;border:0!important;box-shadow:none!important;border-radius:16px;padding:16px 18px;font-size:15px;font-weight:600;color:var(--fy-ink)}
+  #upload .bar{background:#fff!important;border-top:0!important;padding:14px 22px calc(env(safe-area-inset-bottom,0px) + 16px)!important}
+  #upload .btn{border-radius:16px!important;box-shadow:none!important;min-height:56px;font-size:16px;font-weight:700}
+  #upload .btn.go{background:var(--primary)!important;border:0!important;color:#fff}
+  #upload .btn:not(.go){background:#fff!important;color:var(--fy-ink)!important;border:1px solid var(--fy-line)!important}
+  .preview{border-radius:20px}
+  .reading{justify-content:center}
+  /* machine picker pop-up */
+  #pickOverlay{background:var(--fy-bg)!important}
+  .poTitle{font-size:20px;font-weight:800}
+  .poClose{background:#fff!important;color:var(--fy-ink)!important;border:1px solid var(--fy-line)}
 </style>
 </head>
 <body>
@@ -665,10 +716,10 @@
   <div id="journey" hidden aria-hidden="true"><span class="jSegs"><i></i><i></i><i></i><i></i></span><span class="jLbl" id="jLbl"></span></div>
   <!-- ===== 1. Choose the machine ===== -->
   <section id="chooser">
-    <img class="ch-brand" src="assets/IFB%20logo%201.png" alt="IFB" />
-    <span class="sticker">✨ real size, real room</span>
-    <h1>Which one's<br>your vibe? <span class="wave">😎</span></h1>
-    <p class="ch-sub">Pick a machine, snap your space, see it IRL before you buy.<br><b>Takes about 2 minutes. A tape measure helps.</b></p>
+    <header class="fyHead"><button class="fyBack" id="fyBack" type="button" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg></button><span class="fyTitle">Find your fit</span></header>
+    <h1>Find the perfect fit for your space</h1>
+    <p class="ch-sub">Avoid delivery surprises. Use our smart AR tools to accurately measure your space and find compatible appliances.</p>
+    <h2 class="fyH2">Choose your machine</h2>
     <div class="choices" id="chooserList" hidden></div>
     <div class="pick" id="pick" aria-label="Choose a machine">
       <div class="pickStage" id="pickStage">
@@ -677,7 +728,7 @@
         <img class="pickFallback" id="pickFallback" alt="" />
         <button class="pickArrow l" id="pickPrev" type="button" aria-label="Previous machine">‹</button>
         <button class="pickArrow r" id="pickNext" type="button" aria-label="Next machine">›</button>
-        <span class="pickHint" id="pickHint">↔ Swipe to switch</span>
+        <span class="pickHint" id="pickHint"></span>
       </div>
       <div class="pickName" id="pickName"></div>
       <div class="pickSub" id="pickSub"></div>
@@ -1238,6 +1289,7 @@ function confetti(){
 }
 document.getElementById('save').addEventListener('click', confetti);
 // Back: from the composer to a new photo, from the photo screen to the choice of machine
+document.getElementById('fyBack').addEventListener('click', () => { if (history.length > 1) history.back(); });
 document.getElementById('backBtn').addEventListener('click', () => {
   if (cal.on) { cancelMarking(); return; }
   if (stageEl.style.display === 'block') { resetPicker(); showUpload(); }
